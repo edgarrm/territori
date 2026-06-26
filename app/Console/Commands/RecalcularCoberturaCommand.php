@@ -2,8 +2,7 @@
 
 namespace App\Console\Commands;
 
-use App\Models\CoberturaSeccion;
-use App\Models\MetaSeccion;
+use App\Actions\Cobertura\RecalcularCoberturaSeccion;
 use App\Models\Tenant;
 use App\Support\Tenancy\TenantContext;
 use Illuminate\Console\Attributes\Description;
@@ -17,7 +16,7 @@ class RecalcularCoberturaCommand extends Command
     /**
      * Execute the console command.
      */
-    public function handle(): int
+    public function handle(RecalcularCoberturaSeccion $recalcular): int
     {
         $tenant = Tenant::find((int) $this->argument('tenant'));
 
@@ -30,20 +29,9 @@ class RecalcularCoberturaCommand extends Command
         TenantContext::set($tenant);
 
         $secciones = $tenant->municipio->secciones;
-        $metasPorSeccion = MetaSeccion::pluck('meta_capturas', 'seccion_id');
 
         foreach ($secciones as $seccion) {
-            $capturados = 0;
-            $meta = $metasPorSeccion[$seccion->id] ?? 0;
-            $listaNominal = $seccion->lista_nominal;
-
-            CoberturaSeccion::upsertParaSeccion($seccion->id, [
-                'capturados' => $capturados,
-                'meta' => $meta,
-                'cobertura' => $meta > 0 ? round($capturados / $meta, 4) : 0,
-                'penetracion' => $listaNominal > 0 ? round($capturados / $listaNominal, 4) : 0,
-                'actualizado_en' => now(),
-            ]);
+            $recalcular->handle($seccion);
         }
 
         $this->info("Cobertura recalculada para {$secciones->count()} secciones del tenant {$tenant->id}.");

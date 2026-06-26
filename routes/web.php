@@ -1,6 +1,10 @@
 <?php
 
+use App\Http\Controllers\AvisoPrivacidadController;
 use App\Http\Controllers\CampanaSelectorController;
+use App\Http\Controllers\CapturaController;
+use App\Http\Controllers\ElectorController;
+use App\Http\Controllers\LoteriaController;
 use App\Http\Controllers\MapaController;
 use Illuminate\Support\Facades\Route;
 
@@ -25,6 +29,18 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('metas', [MapaController::class, 'metas'])->name('metas');
         Route::put('api/secciones/{seccion}/meta', [MapaController::class, 'definirMeta'])->name('secciones.meta');
     });
+
+    // Captura de electores (cualquier rol con membership; el 403 lo aplica el FormRequest/acción).
+    Route::get('captura', [CapturaController::class, 'index'])->name('captura');
+    Route::get('api/avisos-privacidad/vigente', [AvisoPrivacidadController::class, 'vigente'])->name('avisos.vigente');
+
+    Route::post('api/loterias', [LoteriaController::class, 'store'])->name('loterias.store');
+    Route::post('api/loterias/{loteria}/cerrar', [LoteriaController::class, 'cerrar'])->name('loterias.cerrar');
+    Route::get('api/loterias/activa', [LoteriaController::class, 'activa'])->name('loterias.activa');
+
+    Route::post('api/electores', [ElectorController::class, 'store'])->name('electores.store');
+    Route::get('api/electores/{elector}', [ElectorController::class, 'show'])->name('electores.show');
+    Route::get('api/secciones/{seccion}/electores', [ElectorController::class, 'indexPorSeccion'])->name('secciones.electores');
 });
 
 require __DIR__.'/settings.php';

@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use Database\Factories\MembershipFactory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
@@ -22,6 +24,9 @@ use Illuminate\Support\Carbon;
  */
 class Membership extends Model
 {
+    /** @use HasFactory<MembershipFactory> */
+    use HasFactory;
+
     protected $fillable = [
         'tenant_id',
         'user_id',

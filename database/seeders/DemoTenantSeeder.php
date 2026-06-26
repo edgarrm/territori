@@ -2,10 +2,12 @@
 
 namespace Database\Seeders;
 
+use App\Models\AvisoPrivacidad;
 use App\Models\Membership;
 use App\Models\Municipio;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Support\Tenancy\TenantContext;
 use Illuminate\Database\Seeder;
 
 class DemoTenantSeeder extends Seeder
@@ -54,5 +56,15 @@ class DemoTenantSeeder extends Seeder
                 ['rol' => $rol, 'meta_diaria' => $rol === 'brigadista' ? 20 : null],
             );
         }
+
+        // Aviso de privacidad vigente: sin él no se puede capturar (consentimiento).
+        TenantContext::set($tenant);
+        AvisoPrivacidad::query()->firstOrCreate(
+            ['tenant_id' => $tenant->id, 'version' => '1.0'],
+            [
+                'texto' => 'Aviso de privacidad demo conforme a la LFPDPPP. Sus datos se usan únicamente para fines de la campaña.',
+                'vigente_desde' => now(),
+            ],
+        );
     }
 }
