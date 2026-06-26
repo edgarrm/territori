@@ -16,6 +16,8 @@ class Entidad extends Model
 
     use HasSpatial;
 
+    protected $table = 'entidades';
+
     protected $fillable = [
         'clave',
         'nombre',
