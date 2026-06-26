@@ -2,8 +2,11 @@
 
 namespace Tests\Feature\Auth;
 
+use App\Models\Membership;
+use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
 use Laravel\Fortify\Features;
 use Tests\TestCase;
@@ -22,6 +25,10 @@ class AuthenticationTest extends TestCase
     public function test_users_can_authenticate_using_the_login_screen()
     {
         $user = User::factory()->create();
+        $entidadId = DB::table('entidades')->insertGetId(['clave' => 25, 'nombre' => 'Sinaloa', 'created_at' => now(), 'updated_at' => now()]);
+        $municipioId = DB::table('municipios')->insertGetId(['entidad_id' => $entidadId, 'clave' => 12, 'nombre' => 'Mazatlán', 'created_at' => now(), 'updated_at' => now()]);
+        $tenant = Tenant::create(['nombre' => 'T', 'municipio_id' => $municipioId]);
+        Membership::create(['tenant_id' => $tenant->id, 'user_id' => $user->id, 'rol' => 'coordinador']);
 
         $response = $this->post(route('login.store'), [
             'email' => $user->email,
@@ -30,6 +37,19 @@ class AuthenticationTest extends TestCase
 
         $this->assertAuthenticated();
         $response->assertRedirect(route('dashboard', absolute: false));
+    }
+
+    public function test_users_sin_membership_son_redirigidos_a_pantalla_de_aviso()
+    {
+        $user = User::factory()->create();
+
+        $response = $this->post(route('login.store'), [
+            'email' => $user->email,
+            'password' => 'password',
+        ]);
+
+        $this->assertAuthenticated();
+        $response->assertRedirect(route('campanas.sin-membership'));
     }
 
     public function test_users_with_two_factor_enabled_are_redirected_to_two_factor_challenge()

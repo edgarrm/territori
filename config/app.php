@@ -56,6 +56,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Tenant Domain
+    |--------------------------------------------------------------------------
+    |
+    | Dominio base usado para resolver el subdominio de una campaña
+    | (ej. "campania.territori.app" con tenant_domain=territori.app).
+    |
+    */
+
+    'tenant_domain' => env('TENANT_DOMAIN'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
     |
