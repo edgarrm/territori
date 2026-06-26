@@ -1,0 +1,13 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "entidad": 99, "nombre": "ESTADO DE PRUEBA" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[0, 0], [11, 0], [11, 11], [0, 11], [0, 0]]]
+      }
+    }
+  ]
+}

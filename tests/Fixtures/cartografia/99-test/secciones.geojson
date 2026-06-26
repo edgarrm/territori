@@ -1,0 +1,37 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "entidad": 99, "municipio": 12, "seccion": 1, "tipo": 1, "distrito_f": 1, "distrito_l": 1 },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "entidad": 99, "municipio": 12, "seccion": 2, "tipo": 1, "distrito_f": 1, "distrito_l": 1 },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[1, 0], [2, 0], [2, 1], [1, 1], [1, 0]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "entidad": 99, "municipio": 12, "seccion": 3, "tipo": 2, "distrito_f": 2, "distrito_l": 2 },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[2, 0], [3, 0], [3, 1], [2, 1], [2, 0]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "entidad": 99, "municipio": 1, "seccion": 1, "tipo": 1, "distrito_f": 3, "distrito_l": 3 },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[10, 10], [11, 10], [11, 11], [10, 11], [10, 10]]]
+      }
+    }
+  ]
+}
