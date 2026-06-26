@@ -20,7 +20,9 @@ class DemoTenantSeeder extends Seeder
         $municipio = Municipio::query()->first();
 
         if (! $municipio) {
-            $this->command?->error('No hay municipios cargados. Corre CartografiaSeeder primero.');
+            if (isset($this->command)) {
+                $this->command->error('No hay municipios cargados. Corre CartografiaSeeder primero.');
+            }
 
             return;
         }

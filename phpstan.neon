@@ -10,4 +10,7 @@ parameters:
         - database/
         - routes/
 
+    stubFiles:
+        - stubs/Seeder.stub.php
+
     level: 7

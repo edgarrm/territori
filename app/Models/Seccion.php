@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Database\Factories\SeccionFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -10,7 +11,9 @@ use MatanYadaev\EloquentSpatial\Traits\HasSpatial;
 
 class Seccion extends Model
 {
+    /** @use HasFactory<SeccionFactory> */
     use HasFactory;
+
     use HasSpatial;
 
     protected $table = 'secciones';
@@ -35,6 +38,9 @@ class Seccion extends Model
         ];
     }
 
+    /**
+     * @return BelongsTo<Municipio, $this>
+     */
     public function municipio(): BelongsTo
     {
         return $this->belongsTo(Municipio::class);

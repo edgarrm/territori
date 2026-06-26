@@ -147,7 +147,13 @@ class CartografiaSeeder extends Seeder
      */
     private function leerFeatures(string $ruta): array
     {
-        $contenido = json_decode(file_get_contents($ruta), true);
+        $crudo = file_get_contents($ruta);
+
+        if ($crudo === false) {
+            throw new \RuntimeException("No se pudo leer el archivo: {$ruta}");
+        }
+
+        $contenido = json_decode($crudo, true);
 
         return $contenido['features'];
     }
