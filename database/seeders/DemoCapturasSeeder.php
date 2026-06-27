@@ -68,6 +68,7 @@ class DemoCapturasSeeder extends Seeder
         }
 
         // Reset de datos derivados/capturas del tenant.
+        DB::table('interacciones')->where('tenant_id', $tenant->id)->delete();
         DB::table('electores')->where('tenant_id', $tenant->id)->delete();
         DB::table('metas_seccion')->where('tenant_id', $tenant->id)->delete();
         DB::table('cobertura_seccion')->where('tenant_id', $tenant->id)->delete();
@@ -142,12 +143,64 @@ class DemoCapturasSeeder extends Seeder
         // Recálculo canónico e idempotente de cobertura_seccion (capturados/meta, penetración).
         Artisan::call('territori:recalcular-cobertura', ['tenant' => $tenant->id]);
 
+        $interacciones = $this->interacciones($tenant);
+
         $this->command?->info(sprintf(
-            'Demo: %d electores en %d secciones, %d brigadistas.',
+            'Demo: %d electores en %d secciones, %d brigadistas, %d interacciones.',
             count($electores),
             $secciones->count(),
             count($brigadistas),
+            $interacciones,
         ));
+    }
+
+    /**
+     * Siembra interacciones sobre una muestra de electores: algunas con
+     * seguimiento vencido (alimentan la agenda) y otras futuras/atendidas.
+     * Devuelve el total insertado.
+     */
+    private function interacciones(Tenant $tenant): int
+    {
+        $tipos = ['llamada', 'visita', 'whatsapp', 'sms', 'nota'];
+        $resultados = ['contesto', 'no_contesto', 'no_estaba', 'compromiso', 'rechazo'];
+
+        $muestra = DB::table('electores')
+            ->where('tenant_id', $tenant->id)
+            ->inRandomOrder()
+            ->limit(120)
+            ->get(['id', 'membership_id']);
+
+        $filas = [];
+
+        foreach ($muestra as $j => $elector) {
+            $tipo = $tipos[$j % count($tipos)];
+            $fecha = now()->copy()->subDays(random_int(0, 10))->format('Y-m-d H:i:sP');
+
+            // 1 de cada 3 deja un seguimiento vencido pendiente (agenda del día).
+            $vencido = $j % 3 === 0;
+            $seguimiento = $vencido
+                ? now()->copy()->subDays(random_int(0, 3))->toDateString()
+                : ($j % 3 === 1 ? now()->copy()->addDays(random_int(2, 7))->toDateString() : null);
+
+            $filas[] = [
+                'tenant_id' => $tenant->id,
+                'elector_id' => $elector->id,
+                'membership_id' => $elector->membership_id,
+                'tipo' => $tipo,
+                'resultado' => $tipo === 'nota' ? null : $resultados[$j % count($resultados)],
+                'nota' => $tipo === 'nota' ? 'Vive cerca de la plaza; visitar por la tarde.' : null,
+                'fecha' => $fecha,
+                'proximo_seguimiento' => $seguimiento,
+                'atendido_en' => null,
+                'created_at' => $fecha,
+            ];
+        }
+
+        foreach (array_chunk($filas, 500) as $bloque) {
+            DB::table('interacciones')->insert($bloque);
+        }
+
+        return count($filas);
     }
 
     /**

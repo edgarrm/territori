@@ -7,6 +7,7 @@ use Database\Factories\ElectorFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 use MatanYadaev\EloquentSpatial\Objects\Point;
 use MatanYadaev\EloquentSpatial\Traits\HasSpatial;
@@ -105,5 +106,15 @@ class Elector extends Model
     public function avisoPrivacidad(): BelongsTo
     {
         return $this->belongsTo(AvisoPrivacidad::class, 'aviso_privacidad_id');
+    }
+
+    /**
+     * Timeline de interacciones, más reciente primero.
+     *
+     * @return HasMany<Interaccion, $this>
+     */
+    public function interacciones(): HasMany
+    {
+        return $this->hasMany(Interaccion::class)->orderByDesc('fecha');
     }
 }

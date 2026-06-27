@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Link, usePage } from '@inertiajs/vue3';
-import { BookOpen, ClipboardList, FolderGit2, LayoutGrid, Map, Target, Users } from '@lucide/vue';
+import { BookOpen, CalendarCheck, ClipboardList, FolderGit2, LayoutGrid, Map, Target, Users } from '@lucide/vue';
 import { computed } from 'vue';
 import AppLogo from '@/components/AppLogo.vue';
 import NavFooter from '@/components/NavFooter.vue';
@@ -26,6 +26,7 @@ const mainNavItems = computed<NavItem[]>(() => {
         { title: 'Dashboard', href: dashboard(), icon: LayoutGrid },
         { title: 'Mapa', href: '/mapa', icon: Map },
         { title: 'Captura', href: '/captura', icon: ClipboardList },
+        { title: 'Agenda', href: '/agenda', icon: CalendarCheck },
     ];
 
     if (esGestion.value) {

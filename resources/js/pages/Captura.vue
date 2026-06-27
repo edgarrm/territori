@@ -162,10 +162,19 @@ async function guardar() {
                 tipo: 'error',
                 texto: 'Ese teléfono ya fue capturado en esta campaña.',
             };
+        } else if (resp.status === 422) {
+            const data = await resp.json().catch(() => null);
+            const primerError = data?.errors
+                ? (Object.values(data.errors)[0] as string[] | undefined)?.[0]
+                : data?.message;
+            mensaje.value = {
+                tipo: 'error',
+                texto: primerError ?? 'Revisa los datos del formulario.',
+            };
         } else {
             mensaje.value = {
                 tipo: 'error',
-                texto: 'Revisa los datos: teléfono válido y consentimiento son obligatorios.',
+                texto: 'No se pudo guardar. Intenta de nuevo.',
             };
         }
     } finally {

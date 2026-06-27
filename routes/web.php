@@ -5,6 +5,7 @@ use App\Http\Controllers\BrigadistaController;
 use App\Http\Controllers\CampanaSelectorController;
 use App\Http\Controllers\CapturaController;
 use App\Http\Controllers\ElectorController;
+use App\Http\Controllers\InteraccionController;
 use App\Http\Controllers\LoteriaController;
 use App\Http\Controllers\MapaController;
 use Illuminate\Support\Facades\Route;
@@ -47,7 +48,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::post('api/electores', [ElectorController::class, 'store'])->name('electores.store');
     Route::get('api/electores/{elector}', [ElectorController::class, 'show'])->name('electores.show');
+    Route::put('api/electores/{elector}', [ElectorController::class, 'update'])->name('electores.update');
+    Route::get('electores/{elector}', [ElectorController::class, 'page'])->name('electores.page');
     Route::get('api/secciones/{seccion}/electores', [ElectorController::class, 'indexPorSeccion'])->name('secciones.electores');
+
+    // Interacciones (timeline) + agenda de seguimientos.
+    Route::get('api/electores/{elector}/interacciones', [InteraccionController::class, 'indexPorElector'])->name('interacciones.index');
+    Route::post('api/electores/{elector}/interacciones', [InteraccionController::class, 'store'])->name('interacciones.store');
+    Route::put('api/interacciones/{interaccion}/atendido', [InteraccionController::class, 'atendido'])->name('interacciones.atendido');
+    Route::get('agenda', [InteraccionController::class, 'agenda'])->name('agenda');
+    Route::get('api/agenda', [InteraccionController::class, 'agendaData'])->name('agenda.data');
 });
 
 require __DIR__.'/settings.php';

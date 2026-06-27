@@ -177,7 +177,8 @@
 | nota | text NULL | texto libre del evento |
 | fecha | timestamptz | cuándo ocurrió (≠ created_at) |
 | proximo_seguimiento | date NULL | habilita agenda de pendientes |
-| created_at | timestamptz | auditoría |
+| atendido_en | timestamptz NULL | marca el seguimiento como atendido (lo saca de la agenda); Sprint 6 |
+| created_at | timestamptz | auditoría (sin updated_at) |
 
 Índices: `(tenant_id, elector_id)`, `(tenant_id, membership_id, proximo_seguimiento)` para la agenda diaria.
 

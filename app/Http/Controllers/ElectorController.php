@@ -2,13 +2,17 @@
 
 namespace App\Http\Controllers;
 
+use App\Actions\Electores\ActualizarElector;
 use App\Actions\Electores\CapturarElector;
 use App\Exceptions\ElectorDuplicado;
 use App\Http\Requests\StoreElectorRequest;
+use App\Http\Requests\UpdateElectorRequest;
 use App\Models\Elector;
 use App\Models\Seccion;
 use App\Support\Tenancy\TenantContext;
 use Illuminate\Http\JsonResponse;
+use Inertia\Inertia;
+use Inertia\Response;
 
 class ElectorController extends Controller
 {
@@ -38,6 +42,43 @@ class ElectorController extends Controller
         $modelo = Elector::query()->findOrFail($elector);
 
         return response()->json($this->presentar($modelo));
+    }
+
+    public function update(UpdateElectorRequest $request, string $elector, ActualizarElector $actualizar): JsonResponse
+    {
+        $modelo = Elector::query()->findOrFail($elector);
+
+        try {
+            $actualizar->handle($modelo, $request->validated());
+        } catch (ElectorDuplicado $e) {
+            return response()->json([
+                'message' => $e->getMessage(),
+                'id' => $e->existente->id,
+            ], 409);
+        }
+
+        return response()->json($this->presentar($modelo->fresh()));
+    }
+
+    /**
+     * Ficha del elector (Inertia): datos editables + timeline de interacciones.
+     */
+    public function page(string $elector): Response
+    {
+        $modelo = Elector::query()->with('interacciones')->findOrFail($elector);
+
+        return Inertia::render('Elector', [
+            'elector' => $this->presentar($modelo),
+            'interacciones' => $modelo->interacciones->map(fn ($i): array => [
+                'id' => $i->id,
+                'tipo' => $i->tipo,
+                'resultado' => $i->resultado,
+                'nota' => $i->nota,
+                'fecha' => $i->fecha->toIso8601String(),
+                'proximo_seguimiento' => $i->proximo_seguimiento?->toDateString(),
+                'atendido_en' => $i->atendido_en?->toIso8601String(),
+            ])->all(),
+        ]);
     }
 
     public function indexPorSeccion(Seccion $seccion): JsonResponse
