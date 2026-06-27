@@ -37,12 +37,15 @@ class HandleInertiaRequests extends Middleware
     public function share(Request $request): array
     {
         $tenant = TenantContext::get();
+        $membership = $tenant && $request->user() ? $request->user()->membershipEn($tenant) : null;
 
         return [
             ...parent::share($request),
             'name' => config('app.name'),
             'auth' => [
                 'user' => $request->user(),
+                'rol' => $membership?->rol,
+                'tenant' => $tenant?->nombre,
             ],
             'marca' => [
                 'nombre' => $tenant === null ? 'Territori' : ($tenant->marca_nombre ?? 'Territori'),

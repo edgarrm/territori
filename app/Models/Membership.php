@@ -6,6 +6,7 @@ use Database\Factories\MembershipFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Support\Carbon;
 
 /**
@@ -63,6 +64,23 @@ class Membership extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /**
+     * Zonas asignadas al brigadista. El pivote lleva tenant_id (memberships no
+     * usa global scope), así que las escrituras deben setearlo explícito.
+     *
+     * @return BelongsToMany<Seccion, $this>
+     */
+    public function secciones(): BelongsToMany
+    {
+        return $this->belongsToMany(Seccion::class, 'brigadista_seccion', 'membership_id', 'seccion_id')
+            ->withPivot('tenant_id');
+    }
+
+    public function esBrigadista(): bool
+    {
+        return $this->rol === 'brigadista';
     }
 
     public function activar(): void

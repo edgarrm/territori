@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AvisoPrivacidadController;
+use App\Http\Controllers\BrigadistaController;
 use App\Http\Controllers\CampanaSelectorController;
 use App\Http\Controllers\CapturaController;
 use App\Http\Controllers\ElectorController;
@@ -21,13 +22,19 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('campanas/crear', fn () => '')->name('campanas.crear');
     });
 
-    Route::inertia('mapa', 'Mapa')->name('mapa');
+    Route::get('mapa', [MapaController::class, 'index'])->name('mapa');
     Route::get('api/cobertura.geojson', [MapaController::class, 'cobertura'])->name('mapa.cobertura');
     Route::get('api/secciones/{seccion}/resumen', [MapaController::class, 'resumenSeccion'])->name('secciones.resumen');
 
     Route::middleware('rol:coordinador,admin')->group(function () {
         Route::get('metas', [MapaController::class, 'metas'])->name('metas');
         Route::put('api/secciones/{seccion}/meta', [MapaController::class, 'definirMeta'])->name('secciones.meta');
+
+        Route::get('brigadistas', [BrigadistaController::class, 'index'])->name('brigadistas');
+        Route::post('brigadistas', [BrigadistaController::class, 'store'])->name('brigadistas.store');
+        Route::put('api/brigadistas/{membership}/activo', [BrigadistaController::class, 'activo'])->name('brigadistas.activo');
+        Route::put('api/brigadistas/{membership}/zonas', [BrigadistaController::class, 'zonas'])->name('brigadistas.zonas');
+        Route::get('api/brigadistas/{membership}/ratios', [BrigadistaController::class, 'ratios'])->name('brigadistas.ratios');
     });
 
     // Captura de electores (cualquier rol con membership; el 403 lo aplica el FormRequest/acción).

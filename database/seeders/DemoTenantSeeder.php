@@ -2,9 +2,11 @@
 
 namespace Database\Seeders;
 
+use App\Actions\Brigadistas\AsignarZonas;
 use App\Models\AvisoPrivacidad;
 use App\Models\Membership;
 use App\Models\Municipio;
+use App\Models\Seccion;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Support\Tenancy\TenantContext;
@@ -19,7 +21,17 @@ class DemoTenantSeeder extends Seeder
      */
     public function run(): void
     {
-        $municipio = Municipio::query()->first();
+        // Elegir un municipio que tenga secciones cargadas (no el primero a ciegas):
+        // la cartografía puede traer municipios del estado pero secciones solo de uno.
+        $municipioId = Seccion::query()
+            ->select('municipio_id')
+            ->groupBy('municipio_id')
+            ->orderByRaw('COUNT(*) DESC')
+            ->value('municipio_id');
+
+        $municipio = $municipioId !== null
+            ? Municipio::query()->find((int) $municipioId)
+            : Municipio::query()->first();
 
         if (! $municipio) {
             if (isset($this->command)) {
@@ -66,5 +78,23 @@ class DemoTenantSeeder extends Seeder
                 'vigente_desde' => now(),
             ],
         );
+
+        // Asigna algunas secciones al brigadista demo para ver zonas y
+        // poblar brigadistas_activos en el resumen del mapa.
+        $brigadista = Membership::query()
+            ->where('tenant_id', $tenant->id)
+            ->where('rol', 'brigadista')
+            ->first();
+
+        $seccionIds = Seccion::query()
+            ->where('municipio_id', $municipio->id)
+            ->orderBy('numero')
+            ->limit(5)
+            ->pluck('id')
+            ->all();
+
+        if ($brigadista && $seccionIds !== []) {
+            (new AsignarZonas)->handle($brigadista, $seccionIds);
+        }
     }
 }

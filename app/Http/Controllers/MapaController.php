@@ -4,8 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Actions\Metas\DefinirMetaSeccion;
 use App\Models\CoberturaSeccion;
+use App\Models\Elector;
 use App\Models\MetaSeccion;
 use App\Models\Seccion;
+use App\Models\Tenant;
 use App\Support\Tenancy\TenantContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -16,6 +18,18 @@ use Inertia\Response;
 class MapaController extends Controller
 {
     private const TOLERANCIA_SIMPLIFICACION = 0.0001;
+
+    public function index(): Response
+    {
+        $tenant = TenantContext::get();
+        $municipio = $tenant?->municipio;
+
+        return Inertia::render('Mapa', [
+            'municipio' => $municipio?->nombre,
+            'estado' => $municipio?->entidad?->nombre,
+            'totalSecciones' => $municipio ? Seccion::where('municipio_id', $municipio->id)->count() : 0,
+        ]);
+    }
 
     public function cobertura(Request $request): JsonResponse
     {
@@ -73,15 +87,46 @@ class MapaController extends Controller
             ->where('seccion_id', $seccion->id)
             ->first();
 
+        $ultimoRegistro = Elector::query()
+            ->where('seccion_id', $seccion->id)
+            ->max('created_at');
+
         return response()->json([
             'numero' => $seccion->numero,
+            'tipo' => $seccion->tipo,
+            'lista_nominal' => $seccion->lista_nominal,
+            'distrito_local' => $seccion->distrito_local,
+            'distrito_federal' => $seccion->distrito_federal,
             'capturados' => $cobertura !== null ? $cobertura->capturados : 0,
             'meta' => $cobertura !== null ? $cobertura->meta : 0,
             'cobertura' => $cobertura !== null ? (float) $cobertura->cobertura : 0,
             'penetracion' => $cobertura !== null ? (float) $cobertura->penetracion : 0,
-            'brigadistas_activos' => [],
-            'ultimo_registro' => null,
+            'brigadistas_activos' => $this->brigadistasActivosEn($seccion, $tenant),
+            'ultimo_registro' => $ultimoRegistro,
         ]);
+    }
+
+    /**
+     * Brigadistas activos asignados (brigadista_seccion) a esta sección.
+     * Pivote tenant-scoped por columna (memberships no tiene global scope).
+     *
+     * @return array<int, array{membership_id: int, nombre: string|null}>
+     */
+    private function brigadistasActivosEn(Seccion $seccion, ?Tenant $tenant): array
+    {
+        return DB::table('brigadista_seccion')
+            ->join('memberships', 'memberships.id', '=', 'brigadista_seccion.membership_id')
+            ->join('users', 'users.id', '=', 'memberships.user_id')
+            ->where('brigadista_seccion.tenant_id', $tenant?->id)
+            ->where('brigadista_seccion.seccion_id', $seccion->id)
+            ->where('memberships.rol', 'brigadista')
+            ->where('memberships.activo', true)
+            ->get(['memberships.id as membership_id', 'users.name as nombre'])
+            ->map(fn (object $row): array => [
+                'membership_id' => (int) $row->membership_id,
+                'nombre' => $row->nombre,
+            ])
+            ->all();
     }
 
     public function metas(): Response

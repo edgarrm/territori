@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { Link } from '@inertiajs/vue3';
-import { BookOpen, FolderGit2, LayoutGrid } from '@lucide/vue';
+import { Link, usePage } from '@inertiajs/vue3';
+import { BookOpen, ClipboardList, FolderGit2, LayoutGrid, Map, Target, Users } from '@lucide/vue';
+import { computed } from 'vue';
 import AppLogo from '@/components/AppLogo.vue';
 import NavFooter from '@/components/NavFooter.vue';
 import NavMain from '@/components/NavMain.vue';
@@ -17,13 +18,25 @@ import {
 import { dashboard } from '@/routes';
 import type { NavItem } from '@/types';
 
-const mainNavItems: NavItem[] = [
-    {
-        title: 'Dashboard',
-        href: dashboard(),
-        icon: LayoutGrid,
-    },
-];
+const page = usePage<{ auth: { rol: string | null } }>();
+const esGestion = computed(() => ['coordinador', 'admin'].includes(page.props.auth?.rol ?? ''));
+
+const mainNavItems = computed<NavItem[]>(() => {
+    const items: NavItem[] = [
+        { title: 'Dashboard', href: dashboard(), icon: LayoutGrid },
+        { title: 'Mapa', href: '/mapa', icon: Map },
+        { title: 'Captura', href: '/captura', icon: ClipboardList },
+    ];
+
+    if (esGestion.value) {
+        items.push(
+            { title: 'Metas', href: '/metas', icon: Target },
+            { title: 'Brigadistas', href: '/brigadistas', icon: Users },
+        );
+    }
+
+    return items;
+});
 
 const footerNavItems: NavItem[] = [
     {
