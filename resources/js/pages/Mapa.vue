@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { Head, usePage } from '@inertiajs/vue3';
+import { Head, Link, usePage } from '@inertiajs/vue3';
 import L from 'leaflet';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import 'leaflet/dist/leaflet.css';
 import { dashboard } from '@/routes';
 import { cobertura as coberturaRoute } from '@/routes/mapa';
-import { resumen as resumenRoute } from '@/routes/secciones';
+import {
+    detalle as detalleRoute,
+    resumen as resumenRoute,
+} from '@/routes/secciones';
 
 defineOptions({
     layout: {
@@ -79,7 +82,8 @@ function colorFeature(p: FeatureProps): string {
         return TIPOS.find((t) => t.key === p.tipo)?.color ?? '#94a3b8';
     }
 
-    return bucket(modo.value === 'penetracion' ? p.penetracion : p.cobertura).color;
+    return bucket(modo.value === 'penetracion' ? p.penetracion : p.cobertura)
+        .color;
 }
 
 let mapa: L.Map | null = null;
@@ -92,7 +96,8 @@ const estadisticas = computed(() => {
     const conMeta = f.filter((x) => x.meta > 0);
     const deserticas = f.filter((x) => x.capturados === 0).length;
     const coberturaMedia = conMeta.length
-        ? conMeta.reduce((s, x) => s + Math.min(x.cobertura, 1), 0) / conMeta.length
+        ? conMeta.reduce((s, x) => s + Math.min(x.cobertura, 1), 0) /
+          conMeta.length
         : 0;
 
     return {
@@ -168,7 +173,9 @@ function estiloFeature(feature?: GeoJSON.Feature) {
 }
 
 async function cargarCobertura() {
-    const respuesta = await fetch(coberturaRoute.url({ query: { modo: modo.value } }));
+    const respuesta = await fetch(
+        coberturaRoute.url({ query: { modo: modo.value } }),
+    );
     const geojson = await respuesta.json();
 
     features.value = (geojson.features ?? []).map(
@@ -181,11 +188,16 @@ async function cargarCobertura() {
         onEachFeature: (feature, layer) => {
             const p = feature.properties as FeatureProps;
             layer.on('click', () => seleccionar(p));
-            layer.on('mouseover', (e) => (e.target as L.Path).setStyle({ fillOpacity: 0.9 }));
+            layer.on('mouseover', (e) =>
+                (e.target as L.Path).setStyle({ fillOpacity: 0.9 }),
+            );
             layer.on('mouseout', () => capa?.resetStyle());
-            (layer as L.Path).bindTooltip(`Sec. ${p.numero} · ${pct(p.cobertura)}`, {
-                sticky: true,
-            });
+            (layer as L.Path).bindTooltip(
+                `Sec. ${p.numero} · ${pct(p.cobertura)}`,
+                {
+                    sticky: true,
+                },
+            );
         },
     }).addTo(mapa as L.Map);
 
@@ -197,7 +209,12 @@ async function cargarCobertura() {
 }
 
 async function seleccionar(p: FeatureProps) {
-    seccionSel.value = { ...p, brigadistas_activos: [], ultimo_registro: null, cargando: true };
+    seccionSel.value = {
+        ...p,
+        brigadistas_activos: [],
+        ultimo_registro: null,
+        cargando: true,
+    };
     capa?.setStyle(estiloFeature);
 
     const respuesta = await fetch(resumenRoute.url(p.seccion_id));
@@ -229,11 +246,16 @@ function buscar() {
     seleccionar(objetivo);
 
     capa?.eachLayer((layer) => {
-        const feature = (layer as L.GeoJSON).feature as GeoJSON.Feature | undefined;
+        const feature = (layer as L.GeoJSON).feature as
+            | GeoJSON.Feature
+            | undefined;
         const p = feature?.properties as FeatureProps | undefined;
 
         if (p?.seccion_id === objetivo.seccion_id) {
-            mapa?.fitBounds((layer as L.Polygon).getBounds(), { maxZoom: 16, padding: [40, 40] });
+            mapa?.fitBounds((layer as L.Polygon).getBounds(), {
+                maxZoom: 16,
+                padding: [40, 40],
+            });
         }
     });
 }
@@ -244,14 +266,17 @@ function cambiarModo(nuevo: Modo) {
 }
 
 onMounted(() => {
-    mapa = L.map('mapa-cobertura', { zoomControl: true, attributionControl: true }).setView(
-        [23.6345, -106.42],
-        12,
-    );
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; OpenStreetMap, &copy; CARTO',
-        maxZoom: 19,
-    }).addTo(mapa);
+    mapa = L.map('mapa-cobertura', {
+        zoomControl: true,
+        attributionControl: true,
+    }).setView([23.6345, -106.42], 12);
+    L.tileLayer(
+        'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+        {
+            attribution: '&copy; OpenStreetMap, &copy; CARTO',
+            maxZoom: 19,
+        },
+    ).addTo(mapa);
     cargarCobertura();
 });
 
@@ -276,7 +301,9 @@ onBeforeUnmount(() => {
                 }"
             >
                 <div class="flex items-center gap-2">
-                    <span class="size-2.5 rounded-full bg-white/90 ring-4 ring-white/20" />
+                    <span
+                        class="size-2.5 rounded-full bg-white/90 ring-4 ring-white/20"
+                    />
                     <h1 class="text-lg font-semibold tracking-tight">
                         {{ page.props.marca?.nombre ?? 'Territori' }}
                     </h1>
@@ -288,7 +315,11 @@ onBeforeUnmount(() => {
                 <!-- Toggle de modo -->
                 <div class="flex gap-1 rounded-lg bg-muted p-1 text-sm">
                     <button
-                        v-for="opcion in (['cobertura', 'penetracion', 'tipo'] as Modo[])"
+                        v-for="opcion in [
+                            'cobertura',
+                            'penetracion',
+                            'tipo',
+                        ] as Modo[]"
                         :key="opcion"
                         type="button"
                         class="flex-1 rounded-md px-2 py-1.5 font-medium capitalize transition-colors"
@@ -306,26 +337,40 @@ onBeforeUnmount(() => {
                 <!-- Stats globales -->
                 <div class="grid grid-cols-2 gap-2">
                     <div class="rounded-xl border bg-background p-3">
-                        <div class="text-xl font-bold tabular-nums">{{ fmt(estadisticas.totalCap) }}</div>
-                        <div class="text-[0.7rem] font-medium tracking-wide text-muted-foreground uppercase">
+                        <div class="text-xl font-bold tabular-nums">
+                            {{ fmt(estadisticas.totalCap) }}
+                        </div>
+                        <div
+                            class="text-[0.7rem] font-medium tracking-wide text-muted-foreground uppercase"
+                        >
                             Capturados
                         </div>
                     </div>
                     <div class="rounded-xl border bg-background p-3">
-                        <div class="text-xl font-bold tabular-nums">{{ fmt(estadisticas.totalMeta) }}</div>
-                        <div class="text-[0.7rem] font-medium tracking-wide text-muted-foreground uppercase">
+                        <div class="text-xl font-bold tabular-nums">
+                            {{ fmt(estadisticas.totalMeta) }}
+                        </div>
+                        <div
+                            class="text-[0.7rem] font-medium tracking-wide text-muted-foreground uppercase"
+                        >
                             Meta total
                         </div>
                     </div>
 
                     <div class="col-span-2 rounded-xl border bg-background p-3">
                         <div class="flex items-baseline justify-between">
-                            <div class="text-xl font-bold tabular-nums">{{ pct(estadisticas.avanceGlobal) }}</div>
-                            <div class="text-[0.7rem] font-medium tracking-wide text-muted-foreground uppercase">
+                            <div class="text-xl font-bold tabular-nums">
+                                {{ pct(estadisticas.avanceGlobal) }}
+                            </div>
+                            <div
+                                class="text-[0.7rem] font-medium tracking-wide text-muted-foreground uppercase"
+                            >
                                 Avance global
                             </div>
                         </div>
-                        <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
+                        <div
+                            class="mt-2 h-1.5 overflow-hidden rounded-full bg-muted"
+                        >
                             <div
                                 class="h-full rounded-full transition-all"
                                 :style="{
@@ -337,14 +382,22 @@ onBeforeUnmount(() => {
                     </div>
 
                     <div class="rounded-xl border bg-background p-3">
-                        <div class="text-xl font-bold tabular-nums">{{ estadisticas.deserticas }}</div>
-                        <div class="text-[0.7rem] font-medium tracking-wide text-muted-foreground uppercase">
+                        <div class="text-xl font-bold tabular-nums">
+                            {{ estadisticas.deserticas }}
+                        </div>
+                        <div
+                            class="text-[0.7rem] font-medium tracking-wide text-muted-foreground uppercase"
+                        >
                             Secciones desérticas
                         </div>
                     </div>
                     <div class="rounded-xl border bg-background p-3">
-                        <div class="text-xl font-bold tabular-nums">{{ pct(estadisticas.coberturaMedia) }}</div>
-                        <div class="text-[0.7rem] font-medium tracking-wide text-muted-foreground uppercase">
+                        <div class="text-xl font-bold tabular-nums">
+                            {{ pct(estadisticas.coberturaMedia) }}
+                        </div>
+                        <div
+                            class="text-[0.7rem] font-medium tracking-wide text-muted-foreground uppercase"
+                        >
                             Cobertura media
                         </div>
                     </div>
@@ -361,13 +414,21 @@ onBeforeUnmount(() => {
                 />
 
                 <!-- Ficha de sección -->
-                <section v-if="seccionSel" class="rounded-xl border bg-background p-4">
+                <section
+                    v-if="seccionSel"
+                    class="rounded-xl border bg-background p-4"
+                >
                     <div class="flex items-center justify-between">
-                        <h2 class="text-base font-semibold">Sección {{ seccionSel.numero }}</h2>
+                        <h2 class="text-base font-semibold">
+                            Sección {{ seccionSel.numero }}
+                        </h2>
                         <span
                             v-if="modo !== 'tipo'"
                             class="rounded-full px-2.5 py-0.5 text-xs font-semibold text-white"
-                            :style="{ backgroundColor: bucket(seccionSel.cobertura).color }"
+                            :style="{
+                                backgroundColor: bucket(seccionSel.cobertura)
+                                    .color,
+                            }"
                         >
                             {{ bucket(seccionSel.cobertura).label }}
                         </span>
@@ -376,20 +437,26 @@ onBeforeUnmount(() => {
                     <div class="mt-3 flex items-end gap-2">
                         <div
                             class="text-4xl font-bold tabular-nums"
-                            :style="{ color: bucket(seccionSel.cobertura).color }"
+                            :style="{
+                                color: bucket(seccionSel.cobertura).color,
+                            }"
                         >
                             {{ pct(seccionSel.cobertura) }}
                         </div>
                         <div class="pb-1 text-xs text-muted-foreground">
-                            de la meta ({{ seccionSel.capturados }} / {{ seccionSel.meta }})
+                            de la meta ({{ seccionSel.capturados }} /
+                            {{ seccionSel.meta }})
                         </div>
                     </div>
-                    <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
+                    <div
+                        class="mt-2 h-1.5 overflow-hidden rounded-full bg-muted"
+                    >
                         <div
                             class="h-full rounded-full"
                             :style="{
                                 width: `${Math.min(seccionSel.cobertura * 100, 100)}%`,
-                                backgroundColor: bucket(seccionSel.cobertura).color,
+                                backgroundColor: bucket(seccionSel.cobertura)
+                                    .color,
                             }"
                         />
                     </div>
@@ -397,42 +464,70 @@ onBeforeUnmount(() => {
                     <dl class="mt-4 divide-y divide-border text-sm">
                         <div class="flex justify-between py-1.5">
                             <dt class="text-muted-foreground">Capturados</dt>
-                            <dd class="font-medium tabular-nums">{{ fmt(seccionSel.capturados) }}</dd>
+                            <dd class="font-medium tabular-nums">
+                                {{ fmt(seccionSel.capturados) }}
+                            </dd>
                         </div>
                         <div class="flex justify-between py-1.5">
                             <dt class="text-muted-foreground">Meta</dt>
-                            <dd class="font-medium tabular-nums">{{ fmt(seccionSel.meta) }}</dd>
+                            <dd class="font-medium tabular-nums">
+                                {{ fmt(seccionSel.meta) }}
+                            </dd>
                         </div>
                         <div class="flex justify-between py-1.5">
                             <dt class="text-muted-foreground">Lista nominal</dt>
                             <dd class="font-medium tabular-nums">
-                                {{ seccionSel.lista_nominal ? fmt(seccionSel.lista_nominal) : '—' }}
+                                {{
+                                    seccionSel.lista_nominal
+                                        ? fmt(seccionSel.lista_nominal)
+                                        : '—'
+                                }}
                             </dd>
                         </div>
                         <div class="flex justify-between py-1.5">
                             <dt class="text-muted-foreground">Penetración</dt>
-                            <dd class="font-medium tabular-nums">{{ pct(seccionSel.penetracion) }}</dd>
-                        </div>
-                        <div class="flex justify-between py-1.5">
-                            <dt class="text-muted-foreground">Distrito local / fed.</dt>
                             <dd class="font-medium tabular-nums">
-                                {{ seccionSel.distrito_local ?? '—' }} / {{ seccionSel.distrito_federal ?? '—' }}
+                                {{ pct(seccionSel.penetracion) }}
                             </dd>
                         </div>
                         <div class="flex justify-between py-1.5">
-                            <dt class="text-muted-foreground">Último registro</dt>
+                            <dt class="text-muted-foreground">
+                                Distrito local / fed.
+                            </dt>
+                            <dd class="font-medium tabular-nums">
+                                {{ seccionSel.distrito_local ?? '—' }} /
+                                {{ seccionSel.distrito_federal ?? '—' }}
+                            </dd>
+                        </div>
+                        <div class="flex justify-between py-1.5">
+                            <dt class="text-muted-foreground">
+                                Último registro
+                            </dt>
                             <dd class="font-medium">
-                                <span v-if="seccionSel.cargando" class="text-muted-foreground">…</span>
-                                <span v-else>{{ tiempoRelativo(seccionSel.ultimo_registro) }}</span>
+                                <span
+                                    v-if="seccionSel.cargando"
+                                    class="text-muted-foreground"
+                                    >…</span
+                                >
+                                <span v-else>{{
+                                    tiempoRelativo(seccionSel.ultimo_registro)
+                                }}</span>
                             </dd>
                         </div>
                         <div class="flex justify-between py-1.5">
-                            <dt class="text-muted-foreground">Brigadistas activos</dt>
-                            <dd class="font-medium tabular-nums">{{ seccionSel.brigadistas_activos.length }}</dd>
+                            <dt class="text-muted-foreground">
+                                Brigadistas activos
+                            </dt>
+                            <dd class="font-medium tabular-nums">
+                                {{ seccionSel.brigadistas_activos.length }}
+                            </dd>
                         </div>
                     </dl>
 
-                    <div v-if="seccionSel.brigadistas_activos.length" class="mt-1 flex flex-wrap gap-1">
+                    <div
+                        v-if="seccionSel.brigadistas_activos.length"
+                        class="mt-1 flex flex-wrap gap-1"
+                    >
                         <span
                             v-for="b in seccionSel.brigadistas_activos"
                             :key="b.membership_id"
@@ -441,15 +536,29 @@ onBeforeUnmount(() => {
                             {{ b.nombre }}
                         </span>
                     </div>
+
+                    <Link
+                        :href="detalleRoute(seccionSel.seccion_id).url"
+                        class="mt-4 flex w-full items-center justify-center gap-1 rounded-lg px-3 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+                        :style="{ backgroundColor: brandColor }"
+                    >
+                        Ver detalle de la sección →
+                    </Link>
                 </section>
 
-                <p v-else class="rounded-xl border border-dashed bg-background p-4 text-sm text-muted-foreground">
-                    Haz clic en una sección del mapa para ver su detalle, o búscala por número.
+                <p
+                    v-else
+                    class="rounded-xl border border-dashed bg-background p-4 text-sm text-muted-foreground"
+                >
+                    Haz clic en una sección del mapa para ver su detalle, o
+                    búscala por número.
                 </p>
 
-                <p class="px-1 text-[0.7rem] leading-relaxed text-muted-foreground">
-                    Cobertura calculada sobre capturas reales del tenant. Cartografía: INE, Marco
-                    Geográfico Seccional.
+                <p
+                    class="px-1 text-[0.7rem] leading-relaxed text-muted-foreground"
+                >
+                    Cobertura calculada sobre capturas reales del tenant.
+                    Cartografía: INE, Marco Geográfico Seccional.
                 </p>
             </div>
         </aside>
@@ -464,12 +573,21 @@ onBeforeUnmount(() => {
             <div
                 class="absolute right-3 bottom-3 z-[1000] rounded-xl border border-black/5 bg-background/95 p-3 shadow-lg backdrop-blur"
             >
-                <div class="mb-2 text-[0.7rem] font-semibold tracking-wide text-muted-foreground uppercase">
+                <div
+                    class="mb-2 text-[0.7rem] font-semibold tracking-wide text-muted-foreground uppercase"
+                >
                     {{ tituloLeyenda }}
                 </div>
                 <ul class="space-y-1">
-                    <li v-for="item in leyenda" :key="item.label" class="flex items-center gap-2 text-xs">
-                        <span class="size-3 rounded-sm" :style="{ backgroundColor: item.color }" />
+                    <li
+                        v-for="item in leyenda"
+                        :key="item.label"
+                        class="flex items-center gap-2 text-xs"
+                    >
+                        <span
+                            class="size-3 rounded-sm"
+                            :style="{ backgroundColor: item.color }"
+                        />
                         {{ item.label }}
                     </li>
                 </ul>

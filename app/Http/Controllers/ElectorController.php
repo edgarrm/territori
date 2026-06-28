@@ -100,7 +100,12 @@ class ElectorController extends Controller
         $electores = Elector::query()
             ->where('seccion_id', $seccion->id)
             ->latest()
-            ->paginate(50);
+            ->paginate(50)
+            ->through(fn (Elector $elector): array => [
+                'id' => $elector->id,
+                'nombre' => $elector->nombre,
+                'telefono' => $elector->telefono,
+            ]);
 
         return response()->json($electores);
     }

@@ -79,6 +79,20 @@ class MapaController extends Controller
         ]);
     }
 
+    /**
+     * Detalle de sección (Inertia): estadísticas + lista de electores + alta
+     * directa. El front pide resumen/electores/aviso a los endpoints JSON.
+     */
+    public function detalle(Seccion $seccion): Response
+    {
+        return Inertia::render('Seccion', [
+            'seccion' => [
+                'id' => $seccion->id,
+                'numero' => $seccion->numero,
+            ],
+        ]);
+    }
+
     public function resumenSeccion(Seccion $seccion): JsonResponse
     {
         $tenant = TenantContext::get();
