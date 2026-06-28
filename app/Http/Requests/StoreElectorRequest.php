@@ -29,7 +29,8 @@ class StoreElectorRequest extends FormRequest
         $tenantId = TenantContext::get()?->id;
 
         return [
-            'modo_captura' => ['required', 'in:individual,loteria'],
+            'modo_captura' => ['required', 'in:individual,loteria,evento'],
+            'evento_id' => ['nullable', 'integer'],
             'nombre' => ['required', 'string', 'max:160'],
             'telefono' => [
                 'required',

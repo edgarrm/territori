@@ -162,6 +162,7 @@
 | consentimiento | boolean | obligatorio true para guardar |
 | aviso_privacidad_id | bigint FK→avisos_privacidad | versión aceptada |
 | created_at / updated_at | timestamptz | |
+| deleted_at | timestamptz NULL | baja lógica (SoftDeletes); Cancelación ARCO la fija y scrubbea la PII; Sprint 7 |
 
 Índices: `(tenant_id, seccion_id)`, `(tenant_id, membership_id)`, `(tenant_id, telefono_hash)`.
 

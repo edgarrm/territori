@@ -1,9 +1,14 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3';
-import { reactive, ref } from 'vue';
+import { Head, router, usePage } from '@inertiajs/vue3';
+import { computed, reactive, ref } from 'vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { dashboard } from '@/routes';
+
+const page = usePage<{ auth: { rol: string | null } }>();
+const esGestion = computed(() =>
+    ['coordinador', 'admin'].includes(page.props.auth?.rol ?? ''),
+);
 
 defineOptions({
     layout: {
@@ -130,6 +135,55 @@ async function registrarInteraccion() {
         registrando.value = false;
     }
 }
+
+// --- Derechos ARCO (ADR-004) ---
+const arcoTipo = ref<'acceso' | 'rectificacion' | 'cancelacion' | 'oposicion'>(
+    'acceso',
+);
+const arcoMensaje = ref<string | null>(null);
+const procesandoArco = ref(false);
+
+async function registrarSolicitudArco() {
+    procesandoArco.value = true;
+    arcoMensaje.value = null;
+    try {
+        const res = await fetch('/api/solicitudes-arco', {
+            method: 'POST',
+            headers: headers(),
+            body: JSON.stringify({
+                tipo: arcoTipo.value,
+                elector_id: props.elector.id,
+            }),
+        });
+        arcoMensaje.value = res.ok
+            ? 'Solicitud ARCO registrada (pendiente).'
+            : 'No se pudo registrar la solicitud.';
+    } finally {
+        procesandoArco.value = false;
+    }
+}
+
+function cancelarElector() {
+    if (
+        !window.confirm(
+            'Cancelación ARCO: se dará de baja al elector y se borrarán sus datos personales. Esta acción no se puede deshacer. ¿Continuar?',
+        )
+    ) {
+        return;
+    }
+    procesandoArco.value = true;
+    fetch(`/api/electores/${props.elector.id}`, {
+        method: 'DELETE',
+        headers: headers(),
+    }).then((res) => {
+        procesandoArco.value = false;
+        if (res.ok) {
+            router.visit('/agenda');
+        } else {
+            arcoMensaje.value = 'No se pudo cancelar el elector.';
+        }
+    });
+}
 </script>
 
 <template>
@@ -166,6 +220,46 @@ async function registrarInteraccion() {
             <Button :disabled="guardando" @click="guardarElector">
                 Guardar cambios
             </Button>
+
+            <!-- Derechos ARCO (ADR-004) -->
+            <div
+                class="mt-2 flex flex-col gap-2 rounded-xl border border-sidebar-border/70 p-3 dark:border-sidebar-border"
+            >
+                <h2 class="text-sm font-semibold">Derechos ARCO</h2>
+                <div class="flex gap-2">
+                    <select
+                        v-model="arcoTipo"
+                        class="flex-1 rounded border bg-background p-1 text-sm"
+                    >
+                        <option value="acceso">Acceso</option>
+                        <option value="rectificacion">Rectificación</option>
+                        <option value="cancelacion">Cancelación</option>
+                        <option value="oposicion">Oposición</option>
+                    </select>
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        :disabled="procesandoArco"
+                        @click="registrarSolicitudArco"
+                    >
+                        Registrar solicitud
+                    </Button>
+                </div>
+
+                <Button
+                    v-if="esGestion"
+                    size="sm"
+                    variant="destructive"
+                    :disabled="procesandoArco"
+                    @click="cancelarElector"
+                >
+                    Cancelar elector (baja ARCO)
+                </Button>
+
+                <p v-if="arcoMensaje" class="text-xs text-muted-foreground">
+                    {{ arcoMensaje }}
+                </p>
+            </div>
         </section>
 
         <!-- Timeline + nueva interacción -->

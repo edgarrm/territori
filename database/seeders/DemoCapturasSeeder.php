@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Support\Telefono;
 use App\Support\Tenancy\TenantContext;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
@@ -68,8 +69,10 @@ class DemoCapturasSeeder extends Seeder
         }
 
         // Reset de datos derivados/capturas del tenant.
+        DB::table('solicitudes_arco')->where('tenant_id', $tenant->id)->delete();
         DB::table('interacciones')->where('tenant_id', $tenant->id)->delete();
         DB::table('electores')->where('tenant_id', $tenant->id)->delete();
+        DB::table('eventos')->where('tenant_id', $tenant->id)->delete();
         DB::table('metas_seccion')->where('tenant_id', $tenant->id)->delete();
         DB::table('cobertura_seccion')->where('tenant_id', $tenant->id)->delete();
         DB::table('brigadista_seccion')->where('tenant_id', $tenant->id)->delete();
@@ -144,14 +147,75 @@ class DemoCapturasSeeder extends Seeder
         Artisan::call('territori:recalcular-cobertura', ['tenant' => $tenant->id]);
 
         $interacciones = $this->interacciones($tenant);
+        $eventos = $this->eventosYArco($tenant, $secciones);
 
         $this->command?->info(sprintf(
-            'Demo: %d electores en %d secciones, %d brigadistas, %d interacciones.',
+            'Demo: %d electores en %d secciones, %d brigadistas, %d interacciones, %d eventos.',
             count($electores),
             $secciones->count(),
             count($brigadistas),
             $interacciones,
+            $eventos,
         ));
+    }
+
+    /**
+     * Siembra eventos demo (marcando electores existentes como asistentes para no
+     * alterar la cobertura) y una solicitud ARCO pendiente. Devuelve # de eventos.
+     *
+     * @param  Collection<int, Seccion>  $secciones
+     */
+    private function eventosYArco(Tenant $tenant, $secciones): int
+    {
+        // Sedes con electores reales (las primeras secciones son desérticas).
+        $sedes = DB::table('electores')
+            ->where('tenant_id', $tenant->id)
+            ->select('seccion_id')
+            ->groupBy('seccion_id')
+            ->orderByRaw('COUNT(*) DESC')
+            ->limit(2)
+            ->pluck('seccion_id');
+
+        $total = 0;
+
+        foreach ($sedes as $i => $seccionId) {
+            $eventoId = DB::table('eventos')->insertGetId([
+                'tenant_id' => $tenant->id,
+                'nombre' => $i === 0 ? 'Mitin de arranque' : 'Reunión vecinal',
+                'tipo' => $i === 0 ? 'mitin' : 'reunion',
+                'fecha' => now()->subDays($i + 1),
+                'lugar' => $i === 0 ? 'Plaza principal' : 'Casa de campaña',
+                'seccion_id' => $seccionId,
+                'ubicacion' => null,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            // Marca hasta 15 electores de esa sección como asistentes del evento.
+            $ids = DB::table('electores')
+                ->where('tenant_id', $tenant->id)
+                ->where('seccion_id', $seccionId)
+                ->limit(15)
+                ->pluck('id');
+
+            DB::table('electores')->whereIn('id', $ids)
+                ->update(['evento_id' => $eventoId, 'modo_captura' => 'evento']);
+
+            $total++;
+        }
+
+        // Una solicitud ARCO pendiente (acceso) sobre un elector cualquiera.
+        $electorId = DB::table('electores')->where('tenant_id', $tenant->id)->value('id');
+        DB::table('solicitudes_arco')->insert([
+            'tenant_id' => $tenant->id,
+            'elector_id' => $electorId,
+            'tipo' => 'acceso',
+            'estado' => 'pendiente',
+            'solicitado_en' => now(),
+            'atendido_en' => null,
+        ]);
+
+        return $total;
     }
 
     /**

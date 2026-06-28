@@ -22,12 +22,14 @@ defineOptions({
 });
 
 type Seccion = { id: number; numero: number };
+type Evento = { id: number; nombre: string; fecha: string; seccion_id: number | null };
 type Aviso = { id: number; version: string; texto: string } | null;
-type Modo = 'loteria' | 'individual';
+type Modo = 'loteria' | 'individual' | 'evento';
 
-const props = defineProps<{ secciones: Seccion[] }>();
+const props = defineProps<{ secciones: Seccion[]; eventos: Evento[] }>();
 
 const modo = ref<Modo>('loteria');
+const eventoId = ref<number | null>(props.eventos[0]?.id ?? null);
 const aviso = ref<Aviso>(null);
 const mensaje = ref<{ tipo: 'ok' | 'error'; texto: string } | null>(null);
 const guardando = ref(false);
@@ -148,6 +150,10 @@ async function guardar() {
         payload.ubicacion = form.value.ubicacion;
     }
 
+    if (modo.value === 'evento') {
+        payload.evento_id = eventoId.value;
+    }
+
     try {
         const resp = await postJson(electoresStore.url(), payload);
 
@@ -213,6 +219,12 @@ function ubicarme() {
                 @click="modo = 'individual'"
             >
                 Individual
+            </Button>
+            <Button
+                :variant="modo === 'evento' ? 'default' : 'outline'"
+                @click="modo = 'evento'"
+            >
+                Evento
             </Button>
         </div>
 
@@ -284,7 +296,7 @@ function ubicarme() {
 
         <!-- INDIVIDUAL -->
         <section
-            v-else
+            v-else-if="modo === 'individual'"
             class="flex flex-col gap-3 rounded-xl border border-sidebar-border/70 p-4 dark:border-sidebar-border"
         >
             <label class="text-sm font-medium">Sección</label>
@@ -332,6 +344,53 @@ function ubicarme() {
             >
                 Guardar elector
             </Button>
+        </section>
+
+        <!-- EVENTO -->
+        <section
+            v-else
+            class="flex flex-col gap-3 rounded-xl border border-sidebar-border/70 p-4 dark:border-sidebar-border"
+        >
+            <p
+                v-if="eventos.length === 0"
+                class="text-sm text-muted-foreground"
+            >
+                No hay eventos. Crea uno en la sección
+                <a href="/eventos" class="underline">Eventos</a>.
+            </p>
+            <template v-else>
+                <label class="text-sm font-medium">Evento</label>
+                <select
+                    v-model.number="eventoId"
+                    class="rounded border bg-background p-2"
+                >
+                    <option
+                        v-for="evento in eventos"
+                        :key="evento.id"
+                        :value="evento.id"
+                    >
+                        {{ evento.nombre }} · {{ evento.fecha }}
+                    </option>
+                </select>
+
+                <Input v-model="form.nombre" placeholder="Nombre" />
+                <Input
+                    v-model="form.telefono"
+                    placeholder="Teléfono (10 dígitos)"
+                    inputmode="tel"
+                />
+
+                <label class="flex items-center gap-2 text-sm">
+                    <input v-model="form.consentimiento" type="checkbox" />
+                    Acepta el aviso de privacidad
+                </label>
+                <Button
+                    :disabled="guardando || !form.consentimiento || !eventoId"
+                    @click="guardar"
+                >
+                    Guardar asistente
+                </Button>
+            </template>
         </section>
 
         <details

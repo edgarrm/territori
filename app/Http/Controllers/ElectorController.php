@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Actions\Electores\ActualizarElector;
 use App\Actions\Electores\CapturarElector;
+use App\Actions\Privacidad\CancelarElector;
 use App\Exceptions\ElectorDuplicado;
 use App\Http\Requests\StoreElectorRequest;
 use App\Http\Requests\UpdateElectorRequest;
@@ -58,6 +59,19 @@ class ElectorController extends Controller
         }
 
         return response()->json($this->presentar($modelo->fresh()));
+    }
+
+    /**
+     * Cancelación ARCO (ADR-004): baja lógica + scrub de PII. La ruta restringe
+     * a coordinador/admin (rol:). Resolución manual del modelo tenant-scoped.
+     */
+    public function destroy(string $elector, CancelarElector $cancelar): JsonResponse
+    {
+        $modelo = Elector::query()->findOrFail($elector);
+
+        $cancelar->handle($modelo);
+
+        return response()->json(['message' => 'Elector cancelado (ARCO).']);
     }
 
     /**

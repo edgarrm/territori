@@ -5,9 +5,12 @@ use App\Http\Controllers\BrigadistaController;
 use App\Http\Controllers\CampanaSelectorController;
 use App\Http\Controllers\CapturaController;
 use App\Http\Controllers\ElectorController;
+use App\Http\Controllers\EventoController;
+use App\Http\Controllers\ExportController;
 use App\Http\Controllers\InteraccionController;
 use App\Http\Controllers\LoteriaController;
 use App\Http\Controllers\MapaController;
+use App\Http\Controllers\SolicitudArcoController;
 use Illuminate\Support\Facades\Route;
 
 Route::inertia('/', 'Welcome')->name('home');
@@ -36,6 +39,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::put('api/brigadistas/{membership}/activo', [BrigadistaController::class, 'activo'])->name('brigadistas.activo');
         Route::put('api/brigadistas/{membership}/zonas', [BrigadistaController::class, 'zonas'])->name('brigadistas.zonas');
         Route::get('api/brigadistas/{membership}/ratios', [BrigadistaController::class, 'ratios'])->name('brigadistas.ratios');
+
+        // Cancelación ARCO (baja lógica) y export: acciones de gestión.
+        Route::delete('api/electores/{elector}', [ElectorController::class, 'destroy'])->name('electores.destroy');
+        Route::get('api/export/electores.csv', [ExportController::class, 'electores'])->name('export.electores');
     });
 
     // Captura de electores (cualquier rol con membership; el 403 lo aplica el FormRequest/acción).
@@ -58,6 +65,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('api/interacciones/{interaccion}/atendido', [InteraccionController::class, 'atendido'])->name('interacciones.atendido');
     Route::get('agenda', [InteraccionController::class, 'agenda'])->name('agenda');
     Route::get('api/agenda', [InteraccionController::class, 'agendaData'])->name('agenda.data');
+
+    // Eventos (cualquier miembro) + solicitudes ARCO.
+    Route::get('eventos', [EventoController::class, 'index'])->name('eventos');
+    Route::post('eventos', [EventoController::class, 'store'])->name('eventos.store');
+    Route::get('api/eventos/{evento}/asistentes', [EventoController::class, 'asistentes'])->name('eventos.asistentes');
+    Route::post('api/solicitudes-arco', [SolicitudArcoController::class, 'store'])->name('solicitudes-arco.store');
 });
 
 require __DIR__.'/settings.php';

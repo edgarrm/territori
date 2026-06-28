@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
 use MatanYadaev\EloquentSpatial\Objects\Point;
 use MatanYadaev\EloquentSpatial\Traits\HasSpatial;
@@ -34,6 +35,7 @@ use MatanYadaev\EloquentSpatial\Traits\HasSpatial;
  * @property int $aviso_privacidad_id
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
+ * @property Carbon|null $deleted_at
  */
 class Elector extends Model
 {
@@ -43,6 +45,7 @@ class Elector extends Model
     use HasFactory;
 
     use HasSpatial;
+    use SoftDeletes;
 
     protected $table = 'electores';
 
@@ -98,6 +101,14 @@ class Elector extends Model
     public function loteria(): BelongsTo
     {
         return $this->belongsTo(Loteria::class);
+    }
+
+    /**
+     * @return BelongsTo<Evento, $this>
+     */
+    public function evento(): BelongsTo
+    {
+        return $this->belongsTo(Evento::class);
     }
 
     /**
