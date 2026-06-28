@@ -10,8 +10,18 @@ export type User = {
     [key: string]: unknown;
 };
 
+export type Campana = {
+    tenant_id: number;
+    nombre: string;
+    rol: string;
+};
+
 export type Auth = {
     user: User;
+    rol: string | null;
+    tenant: string | null;
+    tenant_id: number | null;
+    campanas: Campana[];
 };
 
 /* @chisel-passkeys */

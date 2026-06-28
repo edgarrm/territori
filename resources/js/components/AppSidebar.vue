@@ -1,8 +1,18 @@
 <script setup lang="ts">
-import { Link, usePage } from '@inertiajs/vue3';
-import { BookOpen, CalendarCheck, CalendarDays, ClipboardList, FolderGit2, LayoutGrid, Map, Target, Users } from '@lucide/vue';
+import { usePage } from '@inertiajs/vue3';
+import {
+    BookOpen,
+    CalendarCheck,
+    CalendarDays,
+    ClipboardList,
+    FolderGit2,
+    LayoutGrid,
+    Map,
+    Target,
+    Users,
+} from '@lucide/vue';
 import { computed } from 'vue';
-import AppLogo from '@/components/AppLogo.vue';
+import CampanaSwitcher from '@/components/CampanaSwitcher.vue';
 import NavFooter from '@/components/NavFooter.vue';
 import NavMain from '@/components/NavMain.vue';
 import NavUser from '@/components/NavUser.vue';
@@ -11,15 +21,14 @@ import {
     SidebarContent,
     SidebarFooter,
     SidebarHeader,
-    SidebarMenu,
-    SidebarMenuButton,
-    SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { dashboard } from '@/routes';
 import type { NavItem } from '@/types';
 
 const page = usePage<{ auth: { rol: string | null } }>();
-const esGestion = computed(() => ['coordinador', 'admin'].includes(page.props.auth?.rol ?? ''));
+const esGestion = computed(() =>
+    ['coordinador', 'admin'].includes(page.props.auth?.rol ?? ''),
+);
 
 const mainNavItems = computed<NavItem[]>(() => {
     const items: NavItem[] = [
@@ -57,15 +66,7 @@ const footerNavItems: NavItem[] = [
 <template>
     <Sidebar collapsible="icon" variant="inset">
         <SidebarHeader>
-            <SidebarMenu>
-                <SidebarMenuItem>
-                    <SidebarMenuButton size="lg" as-child>
-                        <Link :href="dashboard()">
-                            <AppLogo />
-                        </Link>
-                    </SidebarMenuButton>
-                </SidebarMenuItem>
-            </SidebarMenu>
+            <CampanaSwitcher />
         </SidebarHeader>
 
         <SidebarContent>

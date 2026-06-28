@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsureRol;
+use App\Http\Middleware\EnsureTenantSeleccionado;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\ResolveTenant;
@@ -28,6 +29,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->alias([
             'rol' => EnsureRol::class,
+            'tenant' => EnsureTenantSeleccionado::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

@@ -2,6 +2,8 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Membership;
+use App\Models\User;
 use App\Support\Tenancy\TenantContext;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -36,8 +38,9 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
+        $user = $request->user();
         $tenant = TenantContext::get();
-        $membership = $tenant && $request->user() ? $request->user()->membershipEn($tenant) : null;
+        $membership = $tenant && $user instanceof User ? $user->membershipEn($tenant) : null;
 
         return [
             ...parent::share($request),
@@ -46,6 +49,15 @@ class HandleInertiaRequests extends Middleware
                 'user' => $request->user(),
                 'rol' => $membership?->rol,
                 'tenant' => $tenant?->nombre,
+                'tenant_id' => $tenant?->id,
+                'campanas' => $user instanceof User
+                    ? $user->memberships()->where('activo', true)->with('tenant')->get()
+                        ->map(fn (Membership $m): array => [
+                            'tenant_id' => $m->tenant_id,
+                            'nombre' => $m->tenant->marca_nombre ?? $m->tenant->nombre,
+                            'rol' => $m->rol,
+                        ])->values()
+                    : [],
             ],
             'marca' => [
                 'nombre' => $tenant === null ? 'Territori' : ($tenant->marca_nombre ?? 'Territori'),
