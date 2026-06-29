@@ -32,7 +32,8 @@ class CampanaController extends Controller
                         'id' => $municipio->id,
                         'nombre' => $municipio->nombre,
                     ])
-                    ->values(),
+                    ->values()
+                    ->all(),
             ]);
 
         return Inertia::render('campanas/Crear', [
@@ -45,7 +46,7 @@ class CampanaController extends Controller
         $user = $request->user();
         abort_unless($user instanceof User, 403);
 
-        $tenant = $registrar->handle($user, $request->validated());
+        $tenant = $registrar->handle($user, $request->datosCampana());
 
         $request->session()->put('tenant_id', $tenant->id);
 

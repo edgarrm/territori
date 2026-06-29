@@ -136,7 +136,15 @@ class CapturarElector
         }
 
         if (! empty($datos['seccion_id'])) {
-            return Seccion::findOrFail((int) $datos['seccion_id']);
+            $seccion = Seccion::findOrFail((int) $datos['seccion_id']);
+
+            if ($seccion->municipio_id !== TenantContext::get()?->municipio_id) {
+                throw ValidationException::withMessages([
+                    'seccion_id' => 'La sección no pertenece al municipio de la campaña.',
+                ]);
+            }
+
+            return $seccion;
         }
 
         if (isset($datos['ubicacion'])) {

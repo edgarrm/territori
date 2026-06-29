@@ -6,14 +6,23 @@ use App\Models\CoberturaSeccion;
 use App\Models\MetaSeccion;
 use App\Models\Seccion;
 use App\Support\Tenancy\TenantContext;
+use Illuminate\Validation\ValidationException;
 
 class DefinirMetaSeccion
 {
     /**
      * Fija la meta de una sección para el tenant activo y refresca cobertura_seccion.
+     *
+     * @throws ValidationException si la sección no pertenece al municipio de la campaña.
      */
     public function handle(Seccion $seccion, string $fuenteMeta, ?int $metaCapturas = null, ?float $pct = null): MetaSeccion
     {
+        if ($seccion->municipio_id !== TenantContext::get()?->municipio_id) {
+            throw ValidationException::withMessages([
+                'seccion_id' => 'La sección no pertenece al municipio de la campaña.',
+            ]);
+        }
+
         $metaCapturas = $fuenteMeta === 'lista_nominal_pct'
             ? (int) round(($seccion->lista_nominal ?? 0) * ($pct ?? 0) / 100)
             : ($metaCapturas ?? 0);

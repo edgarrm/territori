@@ -46,7 +46,8 @@ class SeccionDetalleTest extends TestCase
 
     public function test_electores_por_seccion_solo_devuelve_los_de_esa_seccion(): void
     {
-        [$tenant, $user, $municipio] = $this->tenantConMiembro();
+        // Coordinador: ve la PII completa (el masking de brigadista se cubre en VisibilidadPiiTest).
+        [$tenant, $user, $municipio] = $this->tenantConMiembro('coordinador');
         $seccion = Seccion::factory()->create(['municipio_id' => $municipio->id]);
         $otra = Seccion::factory()->create(['municipio_id' => $municipio->id]);
 

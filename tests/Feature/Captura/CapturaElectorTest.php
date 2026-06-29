@@ -126,7 +126,7 @@ class CapturaElectorTest extends TestCase
         $this->assertSame(0, Elector::query()->count());
     }
 
-    public function test_dedup_por_telefono_devuelve_409_con_id_existente(): void
+    public function test_dedup_por_telefono_devuelve_409_sin_filtrar_id(): void
     {
         [$tenant, $user, $municipio, $aviso] = $this->setupCampana();
         $seccion = Seccion::query()->where('municipio_id', $municipio->id)->where('numero', 1)->first();
@@ -143,13 +143,13 @@ class CapturaElectorTest extends TestCase
         $primero = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
             ->postJson('/api/electores', $payload);
         $primero->assertCreated();
-        $idExistente = $primero->json('id');
 
         $segundo = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
             ->postJson('/api/electores', array_merge($payload, ['nombre' => 'Duplicado', 'telefono' => '(55) 1234-5678']));
 
+        // 409, pero NO debe revelar el id del elector existente (oráculo de enumeración).
         $segundo->assertStatus(409);
-        $segundo->assertJsonPath('id', $idExistente);
+        $segundo->assertJsonMissingPath('id');
 
         TenantContext::set($tenant);
         $this->assertSame(1, Elector::query()->count());
@@ -202,6 +202,29 @@ class CapturaElectorTest extends TestCase
             ]);
 
         $response->assertForbidden();
+    }
+
+    public function test_no_captura_en_seccion_de_otro_municipio(): void
+    {
+        [$tenant, $user, , $aviso] = $this->setupCampana();
+        $otroMunicipio = Municipio::query()->where('clave', 1)->first();
+        $seccionAjena = Seccion::query()->where('municipio_id', $otroMunicipio->id)->first();
+
+        $response = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->postJson('/api/electores', [
+                'modo_captura' => 'individual',
+                'seccion_id' => $seccionAjena->id,
+                'nombre' => 'Fuera de municipio',
+                'telefono' => '5512345678',
+                'consentimiento' => true,
+                'aviso_privacidad_id' => $aviso->id,
+            ]);
+
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors('seccion_id');
+
+        TenantContext::set($tenant);
+        $this->assertSame(0, Elector::query()->count());
     }
 
     public function test_no_puede_ver_elector_de_otro_tenant(): void

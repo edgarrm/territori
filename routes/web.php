@@ -23,7 +23,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('campanas/sin-membership', [CampanaSelectorController::class, 'sinMembership'])->name('campanas.sin-membership');
 
     // Rutas de dominio: exigen una campaña activa (o enrutan al selector).
-    Route::middleware('tenant')->group(function () {
+    // throttle limita el scraping del catálogo de contactos (PII) por usuario/IP.
+    Route::middleware(['tenant', 'throttle:120,1'])->group(function () {
         Route::inertia('dashboard', 'Dashboard')->name('dashboard');
 
         // Crear campaña: solo un admin de la campaña activa.

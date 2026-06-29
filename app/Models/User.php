@@ -57,8 +57,16 @@ class User extends Authenticatable implements PasskeyUser
         return $this->hasMany(Membership::class);
     }
 
+    /**
+     * Membresía ACTIVA del usuario en el tenant. Solo activas: una membresía
+     * desactivada no concede acceso ni rol (defensa en profundidad junto a
+     * ResolveTenant). El rol vive aquí, nunca en el propio user.
+     */
     public function membershipEn(Tenant $tenant): ?Membership
     {
-        return $this->memberships()->where('tenant_id', $tenant->id)->first();
+        return $this->memberships()
+            ->where('tenant_id', $tenant->id)
+            ->where('activo', true)
+            ->first();
     }
 }

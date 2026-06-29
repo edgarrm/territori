@@ -26,7 +26,8 @@ class StoreElectorRequest extends FormRequest
      */
     public function rules(): array
     {
-        $tenantId = TenantContext::get()?->id;
+        $tenant = TenantContext::get();
+        $tenantId = $tenant?->id;
 
         return [
             'modo_captura' => ['required', 'in:individual,loteria,evento'],
@@ -46,7 +47,11 @@ class StoreElectorRequest extends FormRequest
                 'required',
                 Rule::exists('avisos_privacidad', 'id')->where('tenant_id', $tenantId),
             ],
-            'seccion_id' => ['nullable', 'integer', 'exists:secciones,id'],
+            'seccion_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('secciones', 'id')->where('municipio_id', $tenant?->municipio_id),
+            ],
             'domicilio' => ['nullable', 'string', 'max:255'],
             'observaciones' => ['nullable', 'string'],
             'ubicacion' => ['nullable', 'array'],

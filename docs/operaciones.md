@@ -80,6 +80,31 @@ El job fija el `TenantContext` desde su `tenant_id` (los jobs no heredan el tena
 - Migrar (`php artisan migrate --force`) y cargar cartografía del/los municipio(s) de cada campaña.
 - Caches de framework: `php artisan config:cache route:cache view:cache` según entorno.
 
+## ⚠️ Checklist de hardening de producción
+
+`.env.example` viene orientado a desarrollo (`APP_DEBUG=true`, `APP_ENV=local`, `SESSION_ENCRYPT=false`, `DB_CONNECTION=sqlite`). **Copiarlo tal cual a producción filtra stack traces con datos sensibles.** En el `.env` de producción, verifica:
+
+```dotenv
+APP_ENV=production
+APP_DEBUG=false                 # crítico: evita exponer stack traces / PII en errores
+APP_KEY=base64:...              # generada (php artisan key:generate); NUNCA vacía ni en el repo
+APP_URL=https://...             # dominio real con HTTPS
+
+DB_CONNECTION=pgsql             # nunca sqlite en prod
+
+SESSION_SECURE_COOKIE=true      # cookies solo por HTTPS
+SESSION_ENCRYPT=true            # opcional pero recomendado (sesión en DB)
+SESSION_SAME_SITE=lax
+
+LOG_LEVEL=warning               # no 'debug' en prod
+```
+
+- Forzar **HTTPS** (redirección + HSTS) a nivel de plataforma/servidor.
+- `composer install --no-dev --optimize-autoloader` (excluye Boost y herramientas de dev).
+- Cola persistente real (`QUEUE_CONNECTION=redis|database`) + worker (`queue:work`) para los jobs de cobertura.
+- Rotación de `APP_KEY` solo con plan de migración: re-cifra `telefono`/`domicilio` (cast `encrypted`) **y** invalida los `telefono_hash` (HMAC con APP_KEY) → habría que recalcularlos.
+- Mantener `min-release-age`/`ignore-scripts` del `.npmrc` y los lockfiles commiteados (ver §Seguridad de cadena de suministro).
+
 ## Seguridad de cadena de suministro
 
 - Versiones **exactas** (sin `^`/`~`). Commitear `package-lock.json` y `composer.lock`.

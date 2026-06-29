@@ -10,6 +10,7 @@ use App\Models\Seccion;
 use App\Models\Tenant;
 use App\Support\Tenancy\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
 class DefinirMetaSeccionTest extends TestCase
@@ -136,6 +137,18 @@ class DefinirMetaSeccionTest extends TestCase
         TenantContext::set($tenantA);
         $coberturaA = CoberturaSeccion::where('seccion_id', $seccionA->id)->first();
         $this->assertSame(100, $coberturaA->meta);
+    }
+
+    public function test_no_define_meta_en_seccion_de_otro_municipio(): void
+    {
+        [$tenant] = $this->tenantConSeccion();
+        $otroMunicipio = Municipio::factory()->create();
+        $seccionAjena = Seccion::factory()->create(['municipio_id' => $otroMunicipio->id]);
+
+        TenantContext::set($tenant);
+
+        $this->expectException(ValidationException::class);
+        (new DefinirMetaSeccion)->handle($seccionAjena, 'manual', metaCapturas: 100);
     }
 
     public function test_coberturaseccion_save_de_instancia_existente_lanza_excepcion(): void

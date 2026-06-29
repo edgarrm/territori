@@ -178,13 +178,14 @@ class DemoCapturasSeeder extends Seeder
 
         $total = 0;
 
-        foreach ($sedes as $i => $seccionId) {
+        foreach ($sedes as $seccionId) {
+            $esPrimero = $total === 0;
             $eventoId = DB::table('eventos')->insertGetId([
                 'tenant_id' => $tenant->id,
-                'nombre' => $i === 0 ? 'Mitin de arranque' : 'Reunión vecinal',
-                'tipo' => $i === 0 ? 'mitin' : 'reunion',
-                'fecha' => now()->subDays($i + 1),
-                'lugar' => $i === 0 ? 'Plaza principal' : 'Casa de campaña',
+                'nombre' => $esPrimero ? 'Mitin de arranque' : 'Reunión vecinal',
+                'tipo' => $esPrimero ? 'mitin' : 'reunion',
+                'fecha' => now()->subDays($total + 1),
+                'lugar' => $esPrimero ? 'Plaza principal' : 'Casa de campaña',
                 'seccion_id' => $seccionId,
                 'ubicacion' => null,
                 'created_at' => now(),

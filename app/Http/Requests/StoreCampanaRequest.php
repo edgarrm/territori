@@ -21,7 +21,24 @@ class StoreCampanaRequest extends FormRequest
             'municipio_id' => ['required', 'integer', 'exists:municipios,id'],
             'subdominio' => ['nullable', 'string', 'max:63', 'unique:tenants,subdominio'],
             'marca_nombre' => ['nullable', 'string', 'max:120'],
-            'marca_color' => ['nullable', 'string', 'max:7'],
+            'marca_color' => ['nullable', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
+        ];
+    }
+
+    /**
+     * Datos de la campaña ya validados, con el tipo concreto que espera
+     * RegistrarCampana::handle() (los campos opcionales nulos se omiten via null).
+     *
+     * @return array{nombre: string, municipio_id: int, subdominio: string|null, marca_nombre: string|null, marca_color: string|null}
+     */
+    public function datosCampana(): array
+    {
+        return [
+            'nombre' => $this->string('nombre')->toString(),
+            'municipio_id' => $this->integer('municipio_id'),
+            'subdominio' => $this->filled('subdominio') ? $this->string('subdominio')->toString() : null,
+            'marca_nombre' => $this->filled('marca_nombre') ? $this->string('marca_nombre')->toString() : null,
+            'marca_color' => $this->filled('marca_color') ? $this->string('marca_color')->toString() : null,
         ];
     }
 }

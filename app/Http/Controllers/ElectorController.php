@@ -9,7 +9,9 @@ use App\Exceptions\ElectorDuplicado;
 use App\Http\Requests\StoreElectorRequest;
 use App\Http\Requests\UpdateElectorRequest;
 use App\Models\Elector;
+use App\Models\Membership;
 use App\Models\Seccion;
+use App\Support\Pii;
 use App\Support\Tenancy\TenantContext;
 use Illuminate\Http\JsonResponse;
 use Inertia\Inertia;
@@ -25,12 +27,11 @@ class ElectorController extends Controller
             $elector = $capturar->handle($membership, $request->validated());
         } catch (ElectorDuplicado $e) {
             return response()->json([
-                'message' => $e->getMessage(),
-                'id' => $e->existente->id,
+                'message' => 'Ya existe un contacto con ese teléfono en esta campaña.',
             ], 409);
         }
 
-        return response()->json($this->presentar($elector), 201);
+        return response()->json($this->presentar($elector, $membership), 201);
     }
 
     /**
@@ -42,7 +43,7 @@ class ElectorController extends Controller
     {
         $modelo = Elector::query()->findOrFail($elector);
 
-        return response()->json($this->presentar($modelo));
+        return response()->json($this->presentar($modelo, $this->miMembership()));
     }
 
     public function update(UpdateElectorRequest $request, string $elector, ActualizarElector $actualizar): JsonResponse
@@ -53,12 +54,11 @@ class ElectorController extends Controller
             $actualizar->handle($modelo, $request->validated());
         } catch (ElectorDuplicado $e) {
             return response()->json([
-                'message' => $e->getMessage(),
-                'id' => $e->existente->id,
+                'message' => 'Ya existe un contacto con ese teléfono en esta campaña.',
             ], 409);
         }
 
-        return response()->json($this->presentar($modelo->fresh()));
+        return response()->json($this->presentar($modelo->fresh(), $this->miMembership()));
     }
 
     /**
@@ -82,7 +82,7 @@ class ElectorController extends Controller
         $modelo = Elector::query()->with('interacciones')->findOrFail($elector);
 
         return Inertia::render('Elector', [
-            'elector' => $this->presentar($modelo),
+            'elector' => $this->presentar($modelo, $this->miMembership()),
             'interacciones' => $modelo->interacciones->map(fn ($i): array => [
                 'id' => $i->id,
                 'tipo' => $i->tipo,
@@ -97,6 +97,8 @@ class ElectorController extends Controller
 
     public function indexPorSeccion(Seccion $seccion): JsonResponse
     {
+        $viewer = $this->miMembership();
+
         $electores = Elector::query()
             ->where('seccion_id', $seccion->id)
             ->latest()
@@ -104,24 +106,57 @@ class ElectorController extends Controller
             ->through(fn (Elector $elector): array => [
                 'id' => $elector->id,
                 'nombre' => $elector->nombre,
-                'telefono' => $elector->telefono,
+                'telefono' => $this->puedeVerPii($elector, $viewer)
+                    ? $elector->telefono
+                    : Pii::enmascararTelefono($elector->telefono),
             ]);
 
         return response()->json($electores);
     }
 
     /**
+     * Membresía activa del usuario en el tenant actual (para decidir visibilidad
+     * de PII). El rol vive en la membership, nunca en el user.
+     */
+    private function miMembership(): ?Membership
+    {
+        $user = request()->user();
+        $tenant = TenantContext::get();
+
+        return ($user !== null && $tenant !== null) ? $user->membershipEn($tenant) : null;
+    }
+
+    /**
+     * Gestión (coordinador/admin) ve la PII completa de todos; un brigadista
+     * solo la de los electores que él capturó. Cualquier otro caso → enmascarada.
+     */
+    private function puedeVerPii(Elector $elector, ?Membership $viewer): bool
+    {
+        if ($viewer === null) {
+            return false;
+        }
+
+        if (in_array($viewer->rol, ['coordinador', 'admin'], true)) {
+            return true;
+        }
+
+        return $elector->membership_id === $viewer->id;
+    }
+
+    /**
      * @return array<string, mixed>
      */
-    private function presentar(Elector $elector): array
+    private function presentar(Elector $elector, ?Membership $viewer): array
     {
+        $verPii = $this->puedeVerPii($elector, $viewer);
+
         return [
             'id' => $elector->id,
             'seccion_id' => $elector->seccion_id,
             'modo_captura' => $elector->modo_captura,
             'nombre' => $elector->nombre,
-            'telefono' => $elector->telefono,
-            'domicilio' => $elector->domicilio,
+            'telefono' => $verPii ? $elector->telefono : Pii::enmascararTelefono($elector->telefono),
+            'domicilio' => $verPii ? $elector->domicilio : Pii::enmascararDomicilio($elector->domicilio),
             'observaciones' => $elector->observaciones,
             'consentimiento' => $elector->consentimiento,
         ];
