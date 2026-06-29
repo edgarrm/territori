@@ -5,6 +5,7 @@ use App\Http\Controllers\BrigadistaController;
 use App\Http\Controllers\CampanaController;
 use App\Http\Controllers\CampanaSelectorController;
 use App\Http\Controllers\CapturaController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ElectorController;
 use App\Http\Controllers\EventoController;
 use App\Http\Controllers\ExportController;
@@ -25,7 +26,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Rutas de dominio: exigen una campaña activa (o enrutan al selector).
     // throttle limita el scraping del catálogo de contactos (PII) por usuario/IP.
     Route::middleware(['tenant', 'throttle:120,1'])->group(function () {
-        Route::inertia('dashboard', 'Dashboard')->name('dashboard');
+        Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
         // Crear campaña: solo un admin de la campaña activa.
         Route::middleware('rol:admin')->group(function () {
