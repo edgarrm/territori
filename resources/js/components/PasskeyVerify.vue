@@ -3,6 +3,7 @@ import type { UrlMethodPair } from '@inertiajs/core';
 import { router } from '@inertiajs/vue3';
 import { usePasskeyVerify } from '@laravel/passkeys/vue';
 import { KeyRound } from '@lucide/vue';
+import { onMounted, ref } from 'vue';
 import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -33,10 +34,17 @@ const { verify, isLoading, error, isSupported } = usePasskeyVerify({
         router.visit(response.redirect ?? '/dashboard');
     },
 });
+
+// Evita el desajuste de hidratación SSR: `isSupported` depende de APIs del
+// navegador y solo es fiable tras montar en el cliente.
+const mounted = ref(false);
+onMounted(() => {
+    mounted.value = true;
+});
 </script>
 
 <template>
-    <div v-if="isSupported">
+    <div v-if="mounted && isSupported">
         <div class="grid gap-2">
             <Button
                 type="button"
@@ -49,8 +57,8 @@ const { verify, isLoading, error, isSupported } = usePasskeyVerify({
                 <KeyRound v-else class="h-4 w-4" />
                 {{
                     isLoading
-                        ? (props.loadingLabel ?? 'Authenticating...')
-                        : (props.label ?? 'Sign in with a passkey')
+                        ? (props.loadingLabel ?? 'Autenticando...')
+                        : (props.label ?? 'Entrar con passkey')
                 }}
             </Button>
 
@@ -65,7 +73,7 @@ const { verify, isLoading, error, isSupported } = usePasskeyVerify({
             </div>
             <div class="relative flex justify-center text-xs uppercase">
                 <span class="bg-background px-2 text-muted-foreground">
-                    {{ props.separator ?? 'Or continue with email' }}
+                    {{ props.separator ?? 'O continúa con tu correo' }}
                 </span>
             </div>
         </div>
