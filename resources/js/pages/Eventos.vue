@@ -69,13 +69,14 @@ async function verAsistentes(id: number) {
         >
             <div class="flex flex-1 flex-col gap-1">
                 <label class="text-sm font-medium">Nombre</label>
-                <Input v-model="form.nombre" placeholder="Mitin centro" />
+                <Input v-model="form.nombre" placeholder="Mitin centro" dusk="evento-nombre" />
             </div>
             <div class="flex flex-col gap-1">
                 <label class="text-sm font-medium">Tipo</label>
                 <select
                     v-model="form.tipo"
                     class="rounded border bg-background p-2"
+                    dusk="evento-tipo"
                 >
                     <option value="mitin">Mitin</option>
                     <option value="reunion">Reunión</option>
@@ -89,13 +90,14 @@ async function verAsistentes(id: number) {
                     v-model="form.fecha"
                     type="date"
                     class="rounded border bg-background p-2"
+                    dusk="evento-fecha"
                 />
             </div>
             <div class="flex flex-1 flex-col gap-1">
                 <label class="text-sm font-medium">Lugar</label>
-                <Input v-model="form.lugar" placeholder="Plaza principal" />
+                <Input v-model="form.lugar" placeholder="Plaza principal" dusk="evento-lugar" />
             </div>
-            <Button :disabled="form.processing" @click="crear">Crear</Button>
+            <Button :disabled="form.processing" @click="crear" dusk="evento-crear">Crear</Button>
         </div>
 
         <p v-if="form.errors.seccion_id" class="text-sm text-destructive">

@@ -303,6 +303,7 @@ function ubicarme() {
             <select
                 v-model.number="form.seccionId"
                 class="rounded border bg-background p-2"
+                dusk="captura-seccion"
             >
                 <option :value="null">Detectar por GPS</option>
                 <option
@@ -314,11 +315,12 @@ function ubicarme() {
                 </option>
             </select>
 
-            <Input v-model="form.nombre" placeholder="Nombre" />
+            <Input v-model="form.nombre" placeholder="Nombre" dusk="captura-nombre" />
             <Input
                 v-model="form.telefono"
                 placeholder="Teléfono (10 dígitos)"
                 inputmode="tel"
+                dusk="captura-telefono"
             />
             <Input v-model="form.domicilio" placeholder="Domicilio (opcional)" />
             <Input
@@ -335,12 +337,17 @@ function ubicarme() {
             </Button>
 
             <label class="flex items-center gap-2 text-sm">
-                <input v-model="form.consentimiento" type="checkbox" />
+                <input
+                    v-model="form.consentimiento"
+                    type="checkbox"
+                    dusk="captura-consentimiento"
+                />
                 Acepta el aviso de privacidad
             </label>
             <Button
                 :disabled="guardando || !form.consentimiento"
                 @click="guardar"
+                dusk="captura-guardar"
             >
                 Guardar elector
             </Button>

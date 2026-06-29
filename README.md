@@ -58,12 +58,35 @@ Con Herd la app queda servida en `https://territori.test`.
 ~/Library/Application\ Support/Herd/bin/php85 artisan test --compact
 ```
 
-Los tests **deben** correr en PostgreSQL (PostGIS no existe en SQLite). Suite actual: **166 tests verdes**, Larastan y Pint limpios.
+Los tests **deben** correr en PostgreSQL (PostGIS no existe en SQLite). Suite actual: **194 tests verdes**, Larastan y Pint limpios.
 
 ```bash
 vendor/bin/pint            # formato
 vendor/bin/phpstan analyse # análisis estático
 ```
+
+### Pruebas E2E en navegador (Laravel Dusk)
+
+Suite de extremo a extremo que maneja Chrome real (login, selección de campaña, dashboard, captura, eventos, mapa). Corre contra una **BD aislada** (`territori_dusk`) y un servidor dedicado, sin tocar los datos de desarrollo.
+
+```bash
+# 1. Base de datos aislada (una sola vez) + migrar
+createdb territori_dusk
+APP_ENV=dusk.local php artisan migrate --force
+
+# 2. Driver de Chrome acorde a tu versión instalada
+php artisan dusk:chrome-driver --detect
+
+# 3. Servidor dedicado en otra terminal (usa .env.dusk.local → territori_dusk)
+APP_ENV=dusk.local php artisan serve --port=8123
+
+# 4. Assets: deja corriendo `composer dev` (Vite) o ejecuta `npm run build`
+
+# 5. Correr la suite
+composer test:e2e      # equivale a: php artisan dusk
+```
+
+La configuración vive en `.env.dusk.local` (gitignored; `APP_URL=http://127.0.0.1:8123`). `DuskTestCase` usa `DatabaseTruncation` (excluyendo `spatial_ref_sys` de PostGIS) y expone `crearCampana()` / `sembrarCartografia()` para preparar datos por test.
 
 ## Documentación
 

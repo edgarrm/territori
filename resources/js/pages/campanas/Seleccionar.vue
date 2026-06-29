@@ -23,6 +23,7 @@ function seleccionar(tenantId: number) {
             :key="campana.tenant_id"
             type="button"
             class="rounded-lg border p-4 text-left hover:bg-muted"
+            :dusk="`campana-${campana.tenant_id}`"
             @click="seleccionar(campana.tenant_id)"
         >
             <div class="font-medium">{{ campana.nombre }}</div>
