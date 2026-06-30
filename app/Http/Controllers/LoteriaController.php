@@ -3,9 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Actions\Loterias\AbrirLoteria;
+use App\Models\Elector;
 use App\Models\Loteria;
 use App\Models\Membership;
 use App\Models\Seccion;
+use App\Support\Pii;
 use App\Support\Tenancy\TenantContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -38,6 +40,46 @@ class LoteriaController extends Controller
         $modelo->cerrar();
 
         return response()->json(['cerrada_en' => $modelo->cerrada_en]);
+    }
+
+    /**
+     * Electores capturados en una lotería (resolución manual tenant-scoped).
+     */
+    public function electores(Request $request, string $loteria): JsonResponse
+    {
+        $modelo = Loteria::query()->findOrFail($loteria);
+        $viewer = $this->membership($request);
+
+        $electores = Elector::query()
+            ->where('loteria_id', $modelo->id)
+            ->latest()
+            ->get()
+            ->map(fn (Elector $elector): array => [
+                'id' => $elector->id,
+                'nombre' => $elector->nombre,
+                'telefono' => $this->puedeVerPii($elector, $viewer)
+                    ? $elector->telefono
+                    : Pii::enmascararTelefono($elector->telefono),
+                'capturado_en' => $elector->created_at?->toIso8601String(),
+            ]);
+
+        return response()->json([
+            'electores' => $electores,
+            'total' => $electores->count(),
+        ]);
+    }
+
+    /**
+     * Gestión (coordinador/admin) ve la PII completa; un brigadista solo la de
+     * los electores que él capturó. Espejo de ElectorController::puedeVerPii.
+     */
+    private function puedeVerPii(Elector $elector, Membership $viewer): bool
+    {
+        if (in_array($viewer->rol, ['coordinador', 'admin'], true)) {
+            return true;
+        }
+
+        return $elector->membership_id === $viewer->id;
     }
 
     public function activa(Request $request): JsonResponse

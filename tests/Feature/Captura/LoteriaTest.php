@@ -108,6 +108,83 @@ class LoteriaTest extends TestCase
         $this->assertNotNull(Loteria::query()->find($abierta->json('loteria_id'))->cerrada_en);
     }
 
+    public function test_electores_lista_los_capturados_de_la_loteria(): void
+    {
+        [$tenant, $user, $municipio, $aviso] = $this->setupCampana();
+        $seccion = Seccion::query()->where('municipio_id', $municipio->id)->where('numero', 1)->first();
+
+        $abierta = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->postJson('/api/loterias', ['seccion_id' => $seccion->id]);
+        $loteriaId = $abierta->json('loteria_id');
+
+        foreach (['Ana Capturada', 'Beto Capturado'] as $i => $nombre) {
+            $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+                ->postJson('/api/electores', [
+                    'modo_captura' => 'loteria',
+                    'nombre' => $nombre,
+                    'telefono' => '551234567'.$i,
+                    'consentimiento' => true,
+                    'aviso_privacidad_id' => $aviso->id,
+                ])->assertCreated();
+        }
+
+        $response = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->getJson("/api/loterias/{$loteriaId}/electores");
+
+        $response->assertOk();
+        $response->assertJsonPath('total', 2);
+        $response->assertJsonCount(2, 'electores');
+        $response->assertJsonFragment(['nombre' => 'Ana Capturada']);
+        $response->assertJsonFragment(['nombre' => 'Beto Capturado']);
+        // El brigadista que capturó ve el teléfono completo.
+        $response->assertJsonFragment(['telefono' => '5512345670']);
+    }
+
+    public function test_electores_enmascara_telefono_para_quien_no_capturo(): void
+    {
+        [$tenant, $user, $municipio, $aviso] = $this->setupCampana();
+        $seccion = Seccion::query()->where('municipio_id', $municipio->id)->where('numero', 1)->first();
+
+        $abierta = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->postJson('/api/loterias', ['seccion_id' => $seccion->id]);
+
+        $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->postJson('/api/electores', [
+                'modo_captura' => 'loteria',
+                'nombre' => 'Carmen Capturada',
+                'telefono' => '5512345670',
+                'consentimiento' => true,
+                'aviso_privacidad_id' => $aviso->id,
+            ])->assertCreated();
+
+        // Otro brigadista del mismo tenant que no capturó a estos electores.
+        $otro = User::factory()->create();
+        Membership::create(['tenant_id' => $tenant->id, 'user_id' => $otro->id, 'rol' => 'brigadista']);
+
+        $response = $this->actingAs($otro)->withSession(['tenant_id' => $tenant->id])
+            ->getJson("/api/loterias/{$abierta->json('loteria_id')}/electores");
+
+        $response->assertOk();
+        $response->assertJsonFragment(['telefono' => '••••••5670']);
+        $response->assertJsonMissing(['telefono' => '5512345670']);
+    }
+
+    public function test_electores_solo_devuelve_los_de_su_loteria(): void
+    {
+        [$tenant, $user, $municipio, $aviso] = $this->setupCampana();
+        $seccion = Seccion::query()->where('municipio_id', $municipio->id)->where('numero', 1)->first();
+
+        $abierta = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->postJson('/api/loterias', ['seccion_id' => $seccion->id]);
+
+        $response = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->getJson("/api/loterias/{$abierta->json('loteria_id')}/electores");
+
+        $response->assertOk();
+        $response->assertJsonPath('total', 0);
+        $response->assertJsonCount(0, 'electores');
+    }
+
     public function test_captura_modo_loteria_hereda_seccion_y_loteria(): void
     {
         [$tenant, $user, $municipio, $aviso] = $this->setupCampana();

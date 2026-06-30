@@ -73,4 +73,43 @@ class CapturaModosTest extends DuskTestCase
             'evento_id' => $evento->id,
         ]);
     }
+
+    /**
+     * Modo Evento sin sede: el evento no tiene sección, así que el formulario
+     * debe pedirla y usarla al capturar.
+     */
+    public function test_captura_en_modo_evento_sin_seccion_pide_la_seccion(): void
+    {
+        [$tenant, $user, , $municipio] = $this->crearCampana('admin');
+        $seccion = Seccion::query()->where('municipio_id', $municipio->id)->orderBy('numero')->firstOrFail();
+        $evento = Evento::factory()->create([
+            'tenant_id' => $tenant->id,
+            'seccion_id' => null,
+            'nombre' => 'Evento Sin Sede',
+        ]);
+
+        $this->browse(function (Browser $browser) use ($user, $evento, $seccion) {
+            $browser->loginAs($user)
+                ->visit('/captura')
+                ->waitForText('Captura de electores')
+                ->press('Evento')
+                ->waitFor('@captura-evento-select')
+                ->select('@captura-evento-select', (string) $evento->id)
+                ->waitFor('@captura-evento-seccion')
+                ->select('@captura-evento-seccion', (string) $seccion->id)
+                ->type('input[placeholder="Nombre"]', 'Asistente Sin Sede')
+                ->type('input[placeholder="Teléfono (10 dígitos)"]', '5515556666')
+                ->check('input[type=checkbox]')
+                ->press('Guardar asistente')
+                ->waitForText('Elector capturado.');
+        });
+
+        $this->assertDatabaseHas('electores', [
+            'nombre' => 'Asistente Sin Sede',
+            'tenant_id' => $tenant->id,
+            'modo_captura' => 'evento',
+            'evento_id' => $evento->id,
+            'seccion_id' => $seccion->id,
+        ]);
+    }
 }

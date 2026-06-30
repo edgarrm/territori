@@ -6,6 +6,8 @@ use App\Actions\Eventos\CrearEvento;
 use App\Http\Requests\StoreEventoRequest;
 use App\Models\Elector;
 use App\Models\Evento;
+use App\Models\Seccion;
+use App\Support\Tenancy\TenantContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;
@@ -22,7 +24,20 @@ class EventoController extends Controller
             ->map(fn (Evento $e): array => $this->presentar($e))
             ->all();
 
-        return Inertia::render('Eventos', ['eventos' => $eventos]);
+        $secciones = Seccion::query()
+            ->where('municipio_id', TenantContext::get()?->municipio_id)
+            ->orderBy('numero')
+            ->get(['id', 'numero'])
+            ->map(fn (Seccion $seccion): array => [
+                'id' => $seccion->id,
+                'numero' => $seccion->numero,
+            ])
+            ->all();
+
+        return Inertia::render('Eventos', [
+            'eventos' => $eventos,
+            'secciones' => $secciones,
+        ]);
     }
 
     public function store(StoreEventoRequest $request, CrearEvento $crear): RedirectResponse

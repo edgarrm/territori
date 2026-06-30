@@ -24,13 +24,24 @@ type Evento = {
     asistentes_count: number | null;
 };
 
-defineProps<{ eventos: Evento[] }>();
+type Seccion = { id: number; numero: number };
+
+const props = defineProps<{ eventos: Evento[]; secciones: Seccion[] }>();
+
+function seccionLabel(seccionId: number | null): string {
+    if (seccionId === null) {
+        return 'Multisección';
+    }
+    const numero = props.secciones.find((s) => s.id === seccionId)?.numero;
+    return numero !== undefined ? `Sección ${numero}` : 'Multisección';
+}
 
 const form = useForm({
     nombre: '',
     tipo: 'mitin',
     fecha: '',
     lugar: '',
+    seccion_id: null as number | null,
 });
 
 function crear() {
@@ -97,6 +108,23 @@ async function verAsistentes(id: number) {
                 <label class="text-sm font-medium">Lugar</label>
                 <Input v-model="form.lugar" placeholder="Plaza principal" dusk="evento-lugar" />
             </div>
+            <div class="flex flex-col gap-1">
+                <label class="text-sm font-medium">Sección (opcional)</label>
+                <select
+                    v-model.number="form.seccion_id"
+                    class="rounded border bg-background p-2"
+                    dusk="evento-seccion"
+                >
+                    <option :value="null">Sin sección (varias secciones)</option>
+                    <option
+                        v-for="seccion in secciones"
+                        :key="seccion.id"
+                        :value="seccion.id"
+                    >
+                        Sección {{ seccion.numero }}
+                    </option>
+                </select>
+            </div>
             <Button :disabled="form.processing" @click="crear" dusk="evento-crear">Crear</Button>
         </div>
 
@@ -118,8 +146,18 @@ async function verAsistentes(id: number) {
                 class="rounded-xl border border-sidebar-border/70 p-3 dark:border-sidebar-border"
             >
                 <div class="flex items-center justify-between gap-3">
-                    <div>
+                    <div class="flex flex-wrap items-center gap-2">
                         <span class="font-medium">{{ evento.nombre }}</span>
+                        <span
+                            class="rounded-full px-2 py-0.5 text-xs font-medium"
+                            :class="
+                                evento.seccion_id === null
+                                    ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200'
+                                    : 'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200'
+                            "
+                        >
+                            {{ seccionLabel(evento.seccion_id) }}
+                        </span>
                         <span class="text-xs text-muted-foreground">
                             · {{ evento.tipo }} ·
                             {{ new Date(evento.fecha).toLocaleDateString() }}

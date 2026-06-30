@@ -119,6 +119,53 @@ class EventosTest extends TestCase
         $this->assertSame(0, Evento::query()->count());
     }
 
+    public function test_index_envia_las_secciones_del_municipio(): void
+    {
+        [$tenant, $user, , $municipio] = $this->setupCampana('coordinador');
+        $totalSecciones = Seccion::query()->where('municipio_id', $municipio->id)->count();
+
+        $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->get('/eventos')
+            ->assertInertia(fn ($page) => $page
+                ->component('Eventos')
+                ->has('secciones', $totalSecciones)
+                ->has('secciones.0', fn ($s) => $s->has('id')->has('numero'))
+            );
+    }
+
+    public function test_crear_evento_con_seccion_persiste_la_sede(): void
+    {
+        [$tenant, $user, , $municipio] = $this->setupCampana('coordinador');
+        $seccion = Seccion::query()->where('municipio_id', $municipio->id)->where('numero', 1)->first();
+
+        $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->post('/eventos', [
+                'nombre' => 'Mitin con Sede',
+                'tipo' => 'mitin',
+                'fecha' => now()->toDateTimeString(),
+                'seccion_id' => $seccion->id,
+            ])->assertSessionHasNoErrors();
+
+        TenantContext::set($tenant);
+        $this->assertSame($seccion->id, Evento::query()->first()->seccion_id);
+    }
+
+    public function test_crear_evento_sin_seccion_queda_sin_sede(): void
+    {
+        [$tenant, $user] = $this->setupCampana('coordinador');
+
+        $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->post('/eventos', [
+                'nombre' => 'Evento Abierto',
+                'tipo' => 'reunion',
+                'fecha' => now()->toDateTimeString(),
+                'seccion_id' => null,
+            ])->assertSessionHasNoErrors();
+
+        TenantContext::set($tenant);
+        $this->assertNull(Evento::query()->first()->seccion_id);
+    }
+
     public function test_asistentes_solo_del_evento_y_tenant(): void
     {
         [$tenant, $user, $m, $municipio, $aviso] = $this->setupCampana();

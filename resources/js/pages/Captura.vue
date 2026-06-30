@@ -9,6 +9,7 @@ import { store as electoresStore } from '@/routes/electores';
 import {
     activa as loteriaActiva,
     cerrar as loteriaCerrar,
+    electores as loteriaElectores,
     store as loteriaStore,
 } from '@/routes/loterias';
 
@@ -35,10 +36,17 @@ const mensaje = ref<{ tipo: 'ok' | 'error'; texto: string } | null>(null);
 const guardando = ref(false);
 
 // Lotería
+type Capturado = {
+    id: number;
+    nombre: string;
+    telefono: string | null;
+    capturado_en: string | null;
+};
+
 const loteriaId = ref<number | null>(null);
 const seccionLoteria = ref<number | null>(null);
 const seccionSeleccionada = ref<number | null>(props.secciones[0]?.id ?? null);
-const capturadosSesion = ref(0);
+const capturados = ref<Capturado[]>([]);
 
 // Formulario de captura
 const form = ref({
@@ -56,6 +64,28 @@ const numeroSeccionLoteria = computed(
         props.secciones.find((s) => s.id === seccionLoteria.value)?.numero ??
         null,
 );
+
+const eventoSeleccionado = computed(
+    () => props.eventos.find((e) => e.id === eventoId.value) ?? null,
+);
+
+// El evento sin sede definida (seccion_id null) no puede heredar sección:
+// hay que pedirla en el formulario.
+const eventoRequiereSeccion = computed(
+    () =>
+        eventoSeleccionado.value !== null &&
+        eventoSeleccionado.value.seccion_id === null,
+);
+
+function formatoHora(iso: string | null): string {
+    if (!iso) {
+        return '';
+    }
+    return new Date(iso).toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+    });
+}
 
 function csrf(): string {
     return (
@@ -98,8 +128,19 @@ onMounted(async () => {
     if (data) {
         loteriaId.value = data.loteria_id;
         seccionLoteria.value = data.seccion_id;
+        await cargarCapturados();
     }
 });
+
+async function cargarCapturados() {
+    if (!loteriaId.value) {
+        return;
+    }
+    const resp = await fetch(loteriaElectores.url(loteriaId.value), {
+        headers: { Accept: 'application/json' },
+    });
+    capturados.value = (await resp.json()).electores ?? [];
+}
 
 async function abrirLoteria() {
     if (!seccionSeleccionada.value) {
@@ -111,7 +152,7 @@ async function abrirLoteria() {
     const data = await resp.json();
     loteriaId.value = data.loteria_id;
     seccionLoteria.value = data.seccion_id;
-    capturadosSesion.value = 0;
+    await cargarCapturados();
 }
 
 async function cerrarLoteria() {
@@ -121,6 +162,7 @@ async function cerrarLoteria() {
     await postJson(loteriaCerrar.url(loteriaId.value), {});
     loteriaId.value = null;
     seccionLoteria.value = null;
+    capturados.value = [];
 }
 
 async function guardar() {
@@ -152,6 +194,9 @@ async function guardar() {
 
     if (modo.value === 'evento') {
         payload.evento_id = eventoId.value;
+        if (eventoRequiereSeccion.value) {
+            payload.seccion_id = form.value.seccionId;
+        }
     }
 
     try {
@@ -160,7 +205,7 @@ async function guardar() {
         if (resp.status === 201) {
             mensaje.value = { tipo: 'ok', texto: 'Elector capturado.' };
             if (modo.value === 'loteria') {
-                capturadosSesion.value++;
+                await cargarCapturados();
             }
             limpiarForm();
         } else if (resp.status === 409) {
@@ -269,7 +314,7 @@ function ubicarme() {
                         Sección
                         <strong>{{ numeroSeccionLoteria }}</strong> ·
                         capturados:
-                        <strong>{{ capturadosSesion }}</strong>
+                        <strong>{{ capturados.length }}</strong>
                     </span>
                     <Button variant="outline" @click="cerrarLoteria">
                         Cerrar
@@ -292,6 +337,26 @@ function ubicarme() {
                 >
                     Guardar y siguiente
                 </Button>
+
+                <div
+                    v-if="capturados.length"
+                    class="flex flex-col gap-1 border-t border-sidebar-border/70 pt-3 dark:border-sidebar-border"
+                >
+                    <span class="text-sm font-medium">Capturados en esta sesión</span>
+                    <ul class="flex flex-col gap-1" dusk="loteria-capturados">
+                        <li
+                            v-for="capturado in capturados"
+                            :key="capturado.id"
+                            class="flex items-center justify-between gap-2 rounded bg-muted/50 px-2 py-1 text-sm"
+                        >
+                            <span class="truncate">{{ capturado.nombre }}</span>
+                            <span class="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
+                                <span v-if="capturado.telefono">{{ capturado.telefono }}</span>
+                                {{ formatoHora(capturado.capturado_en) }}
+                            </span>
+                        </li>
+                    </ul>
+                </div>
             </div>
         </section>
 
@@ -382,6 +447,24 @@ function ubicarme() {
                     </option>
                 </select>
 
+                <template v-if="eventoRequiereSeccion">
+                    <label class="text-sm font-medium">Sección</label>
+                    <select
+                        v-model.number="form.seccionId"
+                        class="rounded border bg-background p-2"
+                        dusk="captura-evento-seccion"
+                    >
+                        <option :value="null">Selecciona una sección</option>
+                        <option
+                            v-for="seccion in secciones"
+                            :key="seccion.id"
+                            :value="seccion.id"
+                        >
+                            Sección {{ seccion.numero }}
+                        </option>
+                    </select>
+                </template>
+
                 <Input v-model="form.nombre" placeholder="Nombre" />
                 <Input
                     v-model="form.telefono"
@@ -394,7 +477,12 @@ function ubicarme() {
                     Acepta el aviso de privacidad
                 </label>
                 <Button
-                    :disabled="guardando || !form.consentimiento || !eventoId"
+                    :disabled="
+                        guardando ||
+                        !form.consentimiento ||
+                        !eventoId ||
+                        (eventoRequiereSeccion && !form.seccionId)
+                    "
                     @click="guardar"
                 >
                     Guardar asistente
