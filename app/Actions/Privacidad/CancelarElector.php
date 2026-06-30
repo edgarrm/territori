@@ -18,11 +18,17 @@ class CancelarElector
 {
     public function __construct(private RecalcularCoberturaSeccion $recalcular) {}
 
-    public function handle(Elector $elector): void
+    /**
+     * Ejecuta la cancelación. Si se pasa una solicitud existente (la pendiente que
+     * un coordinador atiende desde la bandeja) se marca atendida en vez de crear
+     * una nueva; de lo contrario se registra una cancelación ya atendida (baja
+     * directa desde la ficha del elector).
+     */
+    public function handle(Elector $elector, ?SolicitudArco $solicitud = null): void
     {
         $seccionId = $elector->seccion_id;
 
-        DB::transaction(function () use ($elector, $seccionId): void {
+        DB::transaction(function () use ($elector, $seccionId, $solicitud): void {
             // Scrub de PII antes de la baja lógica (deja de existir el dato personal).
             // nombre/telefono son NOT NULL → cadena vacía; el resto a null.
             $elector->forceFill([
@@ -36,13 +42,17 @@ class CancelarElector
 
             $elector->delete();
 
-            SolicitudArco::create([
-                'elector_id' => $elector->id,
-                'tipo' => 'cancelacion',
-                'estado' => 'atendida',
-                'solicitado_en' => now(),
-                'atendido_en' => now(),
-            ]);
+            if ($solicitud !== null) {
+                $solicitud->update(['estado' => 'atendida', 'atendido_en' => now()]);
+            } else {
+                SolicitudArco::create([
+                    'elector_id' => $elector->id,
+                    'tipo' => 'cancelacion',
+                    'estado' => 'atendida',
+                    'solicitado_en' => now(),
+                    'atendido_en' => now(),
+                ]);
+            }
 
             $this->recalcular->handle(Seccion::findOrFail($seccionId));
         });

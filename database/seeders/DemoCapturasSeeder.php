@@ -209,16 +209,34 @@ class DemoCapturasSeeder extends Seeder
             $total++;
         }
 
-        // Una solicitud ARCO pendiente (acceso) sobre un elector cualquiera.
-        $electorId = DB::table('electores')->where('tenant_id', $tenant->id)->value('id');
-        DB::table('solicitudes_arco')->insert([
-            'tenant_id' => $tenant->id,
-            'elector_id' => $electorId,
-            'tipo' => 'acceso',
-            'estado' => 'pendiente',
-            'solicitado_en' => now(),
-            'atendido_en' => null,
-        ]);
+        // Solicitudes ARCO pendientes de varios tipos sobre electores reales,
+        // para que la bandeja de gestión tenga qué mostrar (incluida una
+        // cancelación para demostrar el flujo de baja). Más una atendida (historial).
+        $electorIds = DB::table('electores')->where('tenant_id', $tenant->id)->limit(5)->pluck('id')->all();
+
+        if ($electorIds !== []) {
+            $filas = [];
+            foreach (['acceso', 'rectificacion', 'oposicion', 'cancelacion'] as $i => $tipo) {
+                $filas[] = [
+                    'tenant_id' => $tenant->id,
+                    'elector_id' => $electorIds[$i % count($electorIds)],
+                    'tipo' => $tipo,
+                    'estado' => 'pendiente',
+                    'solicitado_en' => now()->subDays($i),
+                    'atendido_en' => null,
+                ];
+            }
+            // Una atendida para el filtro "Atendidas" (historial/trazabilidad).
+            $filas[] = [
+                'tenant_id' => $tenant->id,
+                'elector_id' => $electorIds[count($electorIds) - 1],
+                'tipo' => 'acceso',
+                'estado' => 'atendida',
+                'solicitado_en' => now()->subDays(6),
+                'atendido_en' => now()->subDays(5),
+            ];
+            DB::table('solicitudes_arco')->insert($filas);
+        }
 
         return $total;
     }

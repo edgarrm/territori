@@ -8,6 +8,7 @@ import {
     FolderGit2,
     LayoutGrid,
     Map,
+    ShieldCheck,
     Target,
     Users,
 } from '@lucide/vue';
@@ -43,6 +44,7 @@ const mainNavItems = computed<NavItem[]>(() => {
         items.push(
             { title: 'Metas', href: '/metas', icon: Target },
             { title: 'Brigadistas', href: '/brigadistas', icon: Users },
+            { title: 'Solicitudes ARCO', href: '/solicitudes-arco', icon: ShieldCheck },
         );
     }
 

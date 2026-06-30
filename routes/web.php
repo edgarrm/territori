@@ -51,6 +51,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
             // Cancelación ARCO (baja lógica) y export: acciones de gestión.
             Route::delete('api/electores/{elector}', [ElectorController::class, 'destroy'])->name('electores.destroy');
             Route::get('api/export/electores.csv', [ExportController::class, 'electores'])->name('export.electores');
+
+            // Bandeja de solicitudes ARCO: listar y atender (LFPDPPP, ADR-004).
+            Route::get('solicitudes-arco', [SolicitudArcoController::class, 'index'])->name('solicitudes-arco.index');
+            Route::put('api/solicitudes-arco/{solicitud}/atendido', [SolicitudArcoController::class, 'atendido'])->name('solicitudes-arco.atendido');
         });
 
         // Captura de electores (cualquier rol con membership; el 403 lo aplica el FormRequest/acción).
