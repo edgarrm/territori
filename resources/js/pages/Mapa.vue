@@ -66,9 +66,9 @@ const ESCALA = [
 // naturalmente bajos (capturar el 100% del padrón es irreal), por eso usa cortes
 // propios en vez de reutilizar la escala de cobertura de meta.
 const ESCALA_PENETRACION = [
-    { key: 'alta', label: 'Alta penetración', color: '#0ea5e9', min: 0.3 },
-    { key: 'buena', label: 'Buena penetración', color: '#16a34a', min: 0.15 },
-    { key: 'media', label: 'Media penetración', color: '#84cc16', min: 0.07 },
+    { key: 'alta', label: 'Alta penetración', color: '#0ea5e9', min: 0.1 },
+    { key: 'buena', label: 'Buena penetración', color: '#16a34a', min: 0.06 },
+    { key: 'media', label: 'Media penetración', color: '#84cc16', min: 0.03 },
     { key: 'baja', label: 'Baja penetración', color: '#f59e0b', min: 0.0001 },
     { key: 'nula', label: 'Sin penetración', color: '#ef4444', min: 0 },
 ] as const;

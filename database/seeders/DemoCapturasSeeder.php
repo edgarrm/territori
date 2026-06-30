@@ -68,6 +68,10 @@ class DemoCapturasSeeder extends Seeder
             return;
         }
 
+        // La cartografía no trae lista nominal (padrón). Sin ella la penetración
+        // es siempre 0. La sembramos realista por tipo para que la métrica viva.
+        $this->asegurarListaNominal($secciones);
+
         // Reset de datos derivados/capturas del tenant.
         DB::table('solicitudes_arco')->where('tenant_id', $tenant->id)->delete();
         DB::table('interacciones')->where('tenant_id', $tenant->id)->delete();
@@ -266,6 +270,33 @@ class DemoCapturasSeeder extends Seeder
         }
 
         return count($filas);
+    }
+
+    /**
+     * Siembra lista_nominal (padrón) por sección, dimensionada por tipo, de forma
+     * determinística (semilla = número de sección) para que las re-siembras sean
+     * estables. Muta la colección en memoria para que el cálculo de meta la use.
+     *
+     * @param  Collection<int, Seccion>  $secciones
+     */
+    private function asegurarListaNominal(Collection $secciones): void
+    {
+        // [min, max] de padrón por tipo de sección (INE: 2=No urbana, 3=Mixta).
+        $rangos = [
+            2 => [220, 950],
+            3 => [800, 1900],
+            4 => [1300, 3200],
+        ];
+
+        foreach ($secciones as $seccion) {
+            [$min, $max] = $rangos[$seccion->tipo] ?? [400, 1500];
+            $span = $max - $min;
+            $valor = $min + (int) (crc32((string) $seccion->numero) % ($span + 1));
+            $valor = (int) (round($valor / 10) * 10);
+
+            DB::table('secciones')->where('id', $seccion->id)->update(['lista_nominal' => $valor]);
+            $seccion->lista_nominal = $valor;
+        }
     }
 
     /**
