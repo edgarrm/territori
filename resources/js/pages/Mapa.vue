@@ -62,6 +62,17 @@ const ESCALA = [
     { key: 'desertica', label: 'Desértica', color: '#ef4444', min: 0 },
 ] as const;
 
+// Penetración = capturados / lista nominal (padrón completo). Sus valores son
+// naturalmente bajos (capturar el 100% del padrón es irreal), por eso usa cortes
+// propios en vez de reutilizar la escala de cobertura de meta.
+const ESCALA_PENETRACION = [
+    { key: 'alta', label: 'Alta penetración', color: '#0ea5e9', min: 0.3 },
+    { key: 'buena', label: 'Buena penetración', color: '#16a34a', min: 0.15 },
+    { key: 'media', label: 'Media penetración', color: '#84cc16', min: 0.07 },
+    { key: 'baja', label: 'Baja penetración', color: '#f59e0b', min: 0.0001 },
+    { key: 'nula', label: 'Sin penetración', color: '#ef4444', min: 0 },
+] as const;
+
 const TIPOS = [
     { key: 1, label: 'Urbana', color: '#6366f1' },
     { key: 2, label: 'No urbana', color: '#14b8a6' },
@@ -70,6 +81,13 @@ const TIPOS = [
 
 function bucket(valor: number) {
     return ESCALA.find((b) => valor >= b.min) ?? ESCALA[ESCALA.length - 1];
+}
+
+function bucketPenetracion(valor: number) {
+    return (
+        ESCALA_PENETRACION.find((b) => valor >= b.min) ??
+        ESCALA_PENETRACION[ESCALA_PENETRACION.length - 1]
+    );
 }
 
 const modo = ref<Modo>('cobertura');
@@ -82,8 +100,11 @@ function colorFeature(p: FeatureProps): string {
         return TIPOS.find((t) => t.key === p.tipo)?.color ?? '#94a3b8';
     }
 
-    return bucket(modo.value === 'penetracion' ? p.penetracion : p.cobertura)
-        .color;
+    if (modo.value === 'penetracion') {
+        return bucketPenetracion(p.penetracion).color;
+    }
+
+    return bucket(p.cobertura).color;
 }
 
 let mapa: L.Map | null = null;
@@ -119,11 +140,15 @@ const subtitulo = computed(() => {
 
 const brandColor = computed(() => page.props.marca?.color ?? '#1d4ed8');
 
-const leyenda = computed(() =>
-    modo.value === 'tipo'
-        ? TIPOS.map((t) => ({ label: t.label, color: t.color }))
-        : ESCALA.map((b) => ({ label: b.label, color: b.color })),
-);
+const leyenda = computed(() => {
+    if (modo.value === 'tipo') {
+        return TIPOS.map((t) => ({ label: t.label, color: t.color }));
+    }
+
+    const escala = modo.value === 'penetracion' ? ESCALA_PENETRACION : ESCALA;
+
+    return escala.map((b) => ({ label: b.label, color: b.color }));
+});
 
 const tituloLeyenda = computed(() =>
     modo.value === 'tipo'
@@ -164,11 +189,28 @@ function estiloFeature(feature?: GeoJSON.Feature) {
     const p = (feature?.properties ?? {}) as FeatureProps;
     const seleccionada = seccionSel.value?.seccion_id === p.seccion_id;
 
+    if (seleccionada) {
+        // Borde oscuro grueso + relleno tenue para destacar la sección sin
+        // tapar las cuadras y calles del mapa de fondo.
+        return {
+            fillColor: colorFeature(p),
+            fillOpacity: 0.35,
+            color: '#11151c',
+            weight: 3,
+            opacity: 1,
+            lineJoin: 'round' as const,
+        };
+    }
+
+    // Bordes blancos finos entre secciones: lucen como divisores limpios y
+    // al solaparse en los bordes compartidos se funden (sin líneas dobles).
     return {
         fillColor: colorFeature(p),
-        fillOpacity: seleccionada ? 0.95 : 0.7,
-        color: seleccionada ? '#0f172a' : '#1f2937',
-        weight: seleccionada ? 3 : 0.6,
+        fillOpacity: 0.72,
+        color: '#ffffff',
+        weight: 0.7,
+        opacity: 1,
+        lineJoin: 'round' as const,
     };
 }
 
@@ -185,12 +227,20 @@ async function cargarCobertura() {
     capa?.remove();
     capa = L.geoJSON(geojson, {
         style: estiloFeature,
+        smoothFactor: 0.5,
         onEachFeature: (feature, layer) => {
             const p = feature.properties as FeatureProps;
             layer.on('click', () => seleccionar(p));
-            layer.on('mouseover', (e) =>
-                (e.target as L.Path).setStyle({ fillOpacity: 0.9 }),
-            );
+            layer.on('mouseover', (e) => {
+                if (seccionSel.value?.seccion_id === p.seccion_id) {
+                    return;
+                }
+
+                (e.target as L.Path).setStyle({
+                    weight: 1.6,
+                    fillOpacity: 0.9,
+                });
+            });
             layer.on('mouseout', () => capa?.resetStyle());
             (layer as L.Path).bindTooltip(
                 `Sec. ${p.numero} · ${pct(p.cobertura)}`,
@@ -216,6 +266,18 @@ async function seleccionar(p: FeatureProps) {
         cargando: true,
     };
     capa?.setStyle(estiloFeature);
+    capa?.eachLayer((layer) => {
+        const feature = (layer as L.GeoJSON).feature as
+            | GeoJSON.Feature
+            | undefined;
+
+        if (
+            (feature?.properties as FeatureProps | undefined)?.seccion_id ===
+            p.seccion_id
+        ) {
+            (layer as L.Path).bringToFront();
+        }
+    });
 
     const respuesta = await fetch(resumenRoute.url(p.seccion_id));
     const resumen = await respuesta.json();
