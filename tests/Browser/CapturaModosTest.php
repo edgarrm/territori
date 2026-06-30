@@ -1,0 +1,76 @@
+<?php
+
+namespace Tests\Browser;
+
+use App\Models\Evento;
+use App\Models\Seccion;
+use Laravel\Dusk\Browser;
+use Tests\DuskTestCase;
+
+class CapturaModosTest extends DuskTestCase
+{
+    /**
+     * Modo Lotería: abrir sesión en una sección y capturar un elector.
+     */
+    public function test_captura_en_modo_loteria(): void
+    {
+        [$tenant, $user, , $municipio] = $this->crearCampana('admin');
+        $seccion = Seccion::query()->where('municipio_id', $municipio->id)->orderBy('numero')->firstOrFail();
+
+        $this->browse(function (Browser $browser) use ($user, $seccion) {
+            $browser->loginAs($user)
+                ->visit('/captura')
+                ->waitForText('Captura de electores')
+                ->waitFor('@loteria-seccion')
+                ->select('@loteria-seccion', (string) $seccion->id)
+                ->press('Abrir lotería')
+                ->waitForText('capturados:')
+                ->type('input[placeholder="Nombre"]', 'Loteria Tester')
+                ->type('input[placeholder="Teléfono (10 dígitos)"]', '5511112222')
+                ->check('input[type=checkbox]')
+                ->press('Guardar y siguiente')
+                ->waitForText('Elector capturado.');
+        });
+
+        $this->assertDatabaseHas('electores', [
+            'nombre' => 'Loteria Tester',
+            'tenant_id' => $tenant->id,
+            'modo_captura' => 'loteria',
+        ]);
+    }
+
+    /**
+     * Modo Evento: capturar un asistente que hereda la sección del evento.
+     */
+    public function test_captura_en_modo_evento(): void
+    {
+        [$tenant, $user, , $municipio] = $this->crearCampana('admin');
+        $seccion = Seccion::query()->where('municipio_id', $municipio->id)->orderBy('numero')->firstOrFail();
+        $evento = Evento::factory()->create([
+            'tenant_id' => $tenant->id,
+            'seccion_id' => $seccion->id,
+            'nombre' => 'Mitin Captura',
+        ]);
+
+        $this->browse(function (Browser $browser) use ($user, $evento) {
+            $browser->loginAs($user)
+                ->visit('/captura')
+                ->waitForText('Captura de electores')
+                ->press('Evento')
+                ->waitFor('@captura-evento-select')
+                ->select('@captura-evento-select', (string) $evento->id)
+                ->type('input[placeholder="Nombre"]', 'Asistente Tester')
+                ->type('input[placeholder="Teléfono (10 dígitos)"]', '5513334444')
+                ->check('input[type=checkbox]')
+                ->press('Guardar asistente')
+                ->waitForText('Elector capturado.');
+        });
+
+        $this->assertDatabaseHas('electores', [
+            'nombre' => 'Asistente Tester',
+            'tenant_id' => $tenant->id,
+            'modo_captura' => 'evento',
+            'evento_id' => $evento->id,
+        ]);
+    }
+}

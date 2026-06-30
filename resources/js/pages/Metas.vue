@@ -175,6 +175,7 @@ async function guardar(seccion: SeccionMeta) {
                                 type="number"
                                 min="0"
                                 class="w-24"
+                                :dusk="`meta-capturas-${seccion.seccion_id}`"
                             />
                             <Input
                                 v-else
@@ -189,6 +190,7 @@ async function guardar(seccion: SeccionMeta) {
                             <Button
                                 :disabled="guardando === seccion.seccion_id"
                                 @click="guardar(seccion)"
+                                :dusk="`meta-guardar-${seccion.seccion_id}`"
                             >
                                 Guardar
                             </Button>

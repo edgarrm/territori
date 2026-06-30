@@ -250,6 +250,7 @@ function ubicarme() {
                 <select
                     v-model.number="seccionSeleccionada"
                     class="rounded border bg-background p-2"
+                    dusk="loteria-seccion"
                 >
                     <option
                         v-for="seccion in secciones"
@@ -370,6 +371,7 @@ function ubicarme() {
                 <select
                     v-model.number="eventoId"
                     class="rounded border bg-background p-2"
+                    dusk="captura-evento-select"
                 >
                     <option
                         v-for="evento in eventos"
