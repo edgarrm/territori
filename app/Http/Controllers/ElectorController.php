@@ -14,6 +14,7 @@ use App\Models\Seccion;
 use App\Support\Pii;
 use App\Support\Tenancy\TenantContext;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -95,23 +96,49 @@ class ElectorController extends Controller
         ]);
     }
 
-    public function indexPorSeccion(Seccion $seccion): JsonResponse
+    public function indexPorSeccion(Request $request, Seccion $seccion): JsonResponse
     {
         $viewer = $this->miMembership();
+        $busqueda = trim((string) $request->query('q', ''));
 
         $electores = Elector::query()
             ->where('seccion_id', $seccion->id)
+            // Origen legible + verificación de PII del enlace necesitan estas relaciones.
+            ->with(['evento:id,nombre', 'redCiudadana:id,nombre,enlace_membership_id'])
+            // El teléfono está cifrado: solo se puede filtrar por nombre (ILIKE).
+            ->when($busqueda !== '', fn ($query) => $query->where('nombre', 'ILIKE', '%'.$busqueda.'%'))
             ->latest()
-            ->paginate(50)
+            ->paginate(25)
+            ->withQueryString()
             ->through(fn (Elector $elector): array => [
                 'id' => $elector->id,
                 'nombre' => $elector->nombre,
                 'telefono' => $this->puedeVerPii($elector, $viewer)
                     ? $elector->telefono
                     : Pii::enmascararTelefono($elector->telefono),
+                'origen' => $this->origen($elector),
             ]);
 
         return response()->json($electores);
+    }
+
+    /**
+     * Etiqueta legible de cómo se registró el elector: individual, lotería,
+     * evento (con su nombre) o red ciudadana (con su nombre).
+     */
+    private function origen(Elector $elector): string
+    {
+        return match ($elector->modo_captura) {
+            'individual' => 'Individual',
+            'loteria' => 'Lotería',
+            'evento' => $elector->evento?->nombre !== null
+                ? 'Evento: '.$elector->evento->nombre
+                : 'Evento',
+            'red_ciudadana' => $elector->redCiudadana?->nombre !== null
+                ? 'Red: '.$elector->redCiudadana->nombre
+                : 'Red ciudadana',
+            default => $elector->modo_captura,
+        };
     }
 
     /**

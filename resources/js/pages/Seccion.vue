@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
+import { watchDebounced } from '@vueuse/core';
 import { onMounted, reactive, ref } from 'vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -46,7 +47,12 @@ type Resumen = {
     ultimo_registro: string | null;
 };
 
-type ElectorFila = { id: number; nombre: string; telefono: string };
+type ElectorFila = {
+    id: number;
+    nombre: string;
+    telefono: string;
+    origen: string;
+};
 
 type Pagina = {
     data: ElectorFila[];
@@ -103,6 +109,7 @@ const resumen = ref<Resumen | null>(null);
 const pagina = ref<Pagina | null>(null);
 const cargandoLista = ref(false);
 const aviso = ref<Aviso>(null);
+const busqueda = ref('');
 
 async function cargarResumen() {
     const resp = await fetch(resumenRoute.url(props.seccion.id), {
@@ -114,8 +121,13 @@ async function cargarResumen() {
 async function cargarElectores(url?: string) {
     cargandoLista.value = true;
 
+    // El teléfono está cifrado: la búsqueda es solo por nombre.
+    const base = electoresRoute.url(props.seccion.id, {
+        query: busqueda.value.trim() ? { q: busqueda.value.trim() } : {},
+    });
+
     try {
-        const resp = await fetch(url ?? electoresRoute.url(props.seccion.id), {
+        const resp = await fetch(url ?? base, {
             headers: { Accept: 'application/json' },
         });
         pagina.value = await resp.json();
@@ -123,6 +135,10 @@ async function cargarElectores(url?: string) {
         cargandoLista.value = false;
     }
 }
+
+// Reinicia a la primera página al cambiar la búsqueda (debounce para no
+// disparar una petición por tecla).
+watchDebounced(busqueda, () => cargarElectores(), { debounce: 300 });
 
 onMounted(() => {
     cargarResumen();
@@ -347,20 +363,30 @@ async function guardar() {
         <section
             class="rounded-xl border border-sidebar-border/70 bg-card p-4 dark:border-sidebar-border"
         >
-            <div class="mb-3 flex items-center justify-between">
+            <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <h2 class="text-base font-semibold">
                     Electores
                     <span v-if="pagina" class="text-muted-foreground"
                         >({{ fmt(pagina.total) }})</span
                     >
                 </h2>
+                <Input
+                    v-model="busqueda"
+                    type="search"
+                    placeholder="Buscar por nombre…"
+                    class="w-full sm:w-64"
+                />
             </div>
 
             <p
                 v-if="pagina && pagina.total === 0"
                 class="rounded-lg border border-dashed bg-background p-6 text-center text-sm text-muted-foreground"
             >
-                Esta sección aún no tiene electores capturados.
+                {{
+                    busqueda.trim()
+                        ? 'Ningún elector coincide con la búsqueda.'
+                        : 'Esta sección aún no tiene electores capturados.'
+                }}
             </p>
 
             <div v-else-if="pagina" class="overflow-x-auto">
@@ -371,6 +397,7 @@ async function guardar() {
                         >
                             <th class="py-2 pr-4 font-medium">Nombre</th>
                             <th class="py-2 pr-4 font-medium">Teléfono</th>
+                            <th class="py-2 pr-4 font-medium">Origen</th>
                             <th class="py-2 font-medium"></th>
                         </tr>
                     </thead>
@@ -381,6 +408,13 @@ async function guardar() {
                             </td>
                             <td class="py-2 pr-4 tabular-nums">
                                 {{ elector.telefono }}
+                            </td>
+                            <td class="py-2 pr-4">
+                                <span
+                                    class="inline-block rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground"
+                                >
+                                    {{ elector.origen }}
+                                </span>
                             </td>
                             <td class="py-2 text-right">
                                 <a
