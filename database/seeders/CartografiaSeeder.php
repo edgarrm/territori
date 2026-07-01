@@ -18,12 +18,24 @@ class CartografiaSeeder extends Seeder
         $municipioIdPorClave = $this->cargarMunicipios("{$directorio}/municipios.geojson", $entidadId);
         $resumenSecciones = $this->cargarSecciones("{$directorio}/secciones.geojson", $municipioIdPorClave);
 
-        $this->reportar([
+        $conteos = [
             'entidades' => 1,
             'municipios' => count($municipioIdPorClave),
             'secciones' => $resumenSecciones['insertadas'],
             'secciones_invalidas' => $resumenSecciones['invalidas'],
-        ]);
+        ];
+
+        // La lista nominal (padrón) es opcional: si el estado trae un lista_nominal.csv
+        // junto a los GeoJSON, poblamos secciones.lista_nominal con el dato real.
+        $rutaListaNominal = "{$directorio}/lista_nominal.csv";
+
+        if (is_file($rutaListaNominal)) {
+            $resumenPadron = $this->cargarListaNominal($rutaListaNominal, $municipioIdPorClave);
+            $conteos['lista_nominal_actualizadas'] = $resumenPadron['actualizadas'];
+            $conteos['lista_nominal_sin_match'] = $resumenPadron['sin_match'];
+        }
+
+        $this->reportar($conteos);
     }
 
     private function cargarEntidad(string $ruta): int
@@ -140,6 +152,117 @@ class CartografiaSeeder extends Seeder
         }
 
         return ['insertadas' => $insertadas, 'invalidas' => $invalidas];
+    }
+
+    /**
+     * Puebla secciones.lista_nominal desde un CSV del padrón. Detecta las columnas
+     * por encabezado (tolerante a mayúsculas/acentos): número de sección, lista
+     * nominal y, opcionalmente, clave de municipio. Casa por número (y municipio
+     * si viene). No inserta secciones nuevas: solo actualiza las ya cargadas.
+     *
+     * @param  array<int, int>  $municipioIdPorClave
+     * @return array{actualizadas: int, sin_match: int}
+     */
+    private function cargarListaNominal(string $ruta, array $municipioIdPorClave): array
+    {
+        $manejador = fopen($ruta, 'r');
+
+        if ($manejador === false) {
+            throw new \RuntimeException("No se pudo leer el archivo: {$ruta}");
+        }
+
+        try {
+            $encabezado = fgetcsv($manejador, null, ',', '"', '');
+
+            if ($encabezado === false || $encabezado === null) {
+                return ['actualizadas' => 0, 'sin_match' => 0];
+            }
+
+            $columnas = array_map(fn ($valor) => $this->normalizar((string) $valor), $encabezado);
+            $indiceSeccion = $this->buscarColumna($columnas, ['seccion', 'seccion_id', 'clave_seccion', 'clave', 'numero']);
+            $indiceLista = $this->buscarColumna($columnas, ['lista_nominal', 'listado_nominal', 'listanominal', 'listado', 'lista_nominal_2024', 'padron', 'lista']);
+            $indiceMunicipio = $this->buscarColumna($columnas, ['municipio', 'municipio_id', 'clave_municipio', 'mun']);
+
+            if ($indiceSeccion === null || $indiceLista === null) {
+                throw new \RuntimeException(
+                    "El CSV {$ruta} no tiene columnas reconocibles de sección y/o lista nominal."
+                );
+            }
+
+            $actualizadas = 0;
+            $sinMatch = 0;
+
+            while (($fila = fgetcsv($manejador, null, ',', '"', '')) !== false) {
+                $numero = (int) preg_replace('/\D/', '', (string) ($fila[$indiceSeccion] ?? ''));
+                $listaNominal = (int) preg_replace('/\D/', '', (string) ($fila[$indiceLista] ?? ''));
+
+                if ($numero === 0) {
+                    continue;
+                }
+
+                $query = DB::table('secciones')->where('numero', $numero);
+
+                // La columna de municipio puede traer la CLAVE numérica o el NOMBRE.
+                // Solo filtramos cuando es una clave conocida; si es un nombre (texto),
+                // casamos por número (la cartografía carga un municipio a la vez).
+                if ($indiceMunicipio !== null) {
+                    $claveMunicipio = (int) preg_replace('/\D/', '', (string) ($fila[$indiceMunicipio] ?? ''));
+
+                    if ($claveMunicipio > 0) {
+                        $municipioId = $municipioIdPorClave[$claveMunicipio] ?? null;
+
+                        if ($municipioId === null) {
+                            $sinMatch++;
+
+                            continue;
+                        }
+
+                        $query->where('municipio_id', $municipioId);
+                    }
+                }
+
+                $afectadas = $query->update(['lista_nominal' => $listaNominal, 'updated_at' => now()]);
+
+                if ($afectadas > 0) {
+                    $actualizadas += $afectadas;
+                } else {
+                    $sinMatch++;
+                }
+            }
+
+            return ['actualizadas' => $actualizadas, 'sin_match' => $sinMatch];
+        } finally {
+            fclose($manejador);
+        }
+    }
+
+    /**
+     * Normaliza un encabezado de columna: minúsculas, sin acentos ni espacios.
+     */
+    private function normalizar(string $valor): string
+    {
+        $valor = str_replace("\u{FEFF}", '', $valor);
+        $valor = mb_strtolower(trim($valor));
+        $valor = strtr($valor, ['á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u', 'ñ' => 'n']);
+
+        return (string) preg_replace('/[\s\-]+/', '_', $valor);
+    }
+
+    /**
+     * @param  array<int, string>  $columnas
+     * @param  array<int, string>  $candidatos
+     */
+    private function buscarColumna(array $columnas, array $candidatos): ?int
+    {
+        foreach ($candidatos as $candidato) {
+            $indice = array_search($candidato, $columnas, true);
+
+            if ($indice !== false) {
+                return (int) $indice;
+            }
+        }
+
+        return null;
     }
 
     /**

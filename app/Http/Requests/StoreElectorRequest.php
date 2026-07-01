@@ -34,7 +34,7 @@ class StoreElectorRequest extends FormRequest
         $membership = $tenant !== null ? $this->user()?->membershipEn($tenant) : null;
         $modos = $membership?->esEnlace()
             ? 'red_ciudadana'
-            : 'individual,loteria,evento,red_ciudadana';
+            : 'enlace_seccional,loteria,evento,red_ciudadana';
 
         return [
             'modo_captura' => ['required', 'in:'.$modos],

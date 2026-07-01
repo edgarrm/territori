@@ -127,13 +127,13 @@ class ElectorController extends Controller
     }
 
     /**
-     * Etiqueta legible de cómo se registró el elector: individual, lotería,
+     * Etiqueta legible de cómo se registró el elector: enlace seccional, lotería,
      * evento (con su nombre) o red ciudadana (con su nombre).
      */
     private function origen(Elector $elector): string
     {
         return match ($elector->modo_captura) {
-            'individual' => 'Individual',
+            'enlace_seccional' => 'Enlace Seccional',
             'loteria' => 'Lotería',
             'evento' => $elector->evento?->nombre !== null
                 ? 'Evento: '.$elector->evento->nombre

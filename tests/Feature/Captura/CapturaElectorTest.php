@@ -43,14 +43,14 @@ class CapturaElectorTest extends TestCase
         return [$tenant, $user, $municipio, $aviso];
     }
 
-    public function test_captura_individual_con_seccion_explicita(): void
+    public function test_captura_enlace_seccional_con_seccion_explicita(): void
     {
         [$tenant, $user, $municipio, $aviso] = $this->setupCampana();
         $seccion = Seccion::query()->where('municipio_id', $municipio->id)->where('numero', 1)->first();
 
         $response = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
             ->postJson('/api/electores', [
-                'modo_captura' => 'individual',
+                'modo_captura' => 'enlace_seccional',
                 'seccion_id' => $seccion->id,
                 'nombre' => 'Juana Pérez',
                 'telefono' => '5512345678',
@@ -63,20 +63,20 @@ class CapturaElectorTest extends TestCase
         TenantContext::set($tenant);
         $elector = Elector::query()->first();
         $this->assertSame($seccion->id, $elector->seccion_id);
-        $this->assertSame('individual', $elector->modo_captura);
+        $this->assertSame('enlace_seccional', $elector->modo_captura);
         $this->assertSame('Juana Pérez', $elector->nombre);
         $membership = Membership::query()->where('user_id', $user->id)->first();
         $this->assertSame($membership->id, $elector->membership_id);
     }
 
-    public function test_captura_individual_resuelve_seccion_por_gps(): void
+    public function test_captura_enlace_seccional_resuelve_seccion_por_gps(): void
     {
         [$tenant, $user, $municipio, $aviso] = $this->setupCampana();
         $seccionUno = Seccion::query()->where('municipio_id', $municipio->id)->where('numero', 1)->first();
 
         $response = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
             ->postJson('/api/electores', [
-                'modo_captura' => 'individual',
+                'modo_captura' => 'enlace_seccional',
                 'nombre' => 'Pedro GPS',
                 'telefono' => '5500000001',
                 'ubicacion' => ['lat' => 0.5, 'lng' => 0.5],
@@ -97,7 +97,7 @@ class CapturaElectorTest extends TestCase
 
         $response = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
             ->postJson('/api/electores', [
-                'modo_captura' => 'individual',
+                'modo_captura' => 'enlace_seccional',
                 'seccion_id' => $seccion->id,
                 'nombre' => 'Sin Consentimiento',
                 'telefono' => '5512345678',
@@ -118,7 +118,7 @@ class CapturaElectorTest extends TestCase
 
         $response = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
             ->postJson('/api/electores', [
-                'modo_captura' => 'individual',
+                'modo_captura' => 'enlace_seccional',
                 'seccion_id' => $seccion->id,
                 'nombre' => 'Tel Corto',
                 'telefono' => '123',
@@ -138,7 +138,7 @@ class CapturaElectorTest extends TestCase
         $seccion = Seccion::query()->where('municipio_id', $municipio->id)->where('numero', 1)->first();
 
         $payload = [
-            'modo_captura' => 'individual',
+            'modo_captura' => 'enlace_seccional',
             'seccion_id' => $seccion->id,
             'nombre' => 'Primero',
             'telefono' => '55 1234 5678',
@@ -174,7 +174,7 @@ class CapturaElectorTest extends TestCase
         $avisoB = AvisoPrivacidad::factory()->create(['tenant_id' => $tenantB->id]);
 
         $payload = [
-            'modo_captura' => 'individual',
+            'modo_captura' => 'enlace_seccional',
             'seccion_id' => $seccionA->id,
             'nombre' => 'Misma Persona',
             'telefono' => '5512345678',
@@ -200,7 +200,7 @@ class CapturaElectorTest extends TestCase
 
         $response = $this->actingAs($intruso)->withSession(['tenant_id' => $tenant->id])
             ->postJson('/api/electores', [
-                'modo_captura' => 'individual',
+                'modo_captura' => 'enlace_seccional',
                 'seccion_id' => $seccion->id,
                 'nombre' => 'Intruso',
                 'telefono' => '5512345678',
@@ -219,7 +219,7 @@ class CapturaElectorTest extends TestCase
 
         $response = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
             ->postJson('/api/electores', [
-                'modo_captura' => 'individual',
+                'modo_captura' => 'enlace_seccional',
                 'seccion_id' => $seccionAjena->id,
                 'nombre' => 'Fuera de municipio',
                 'telefono' => '5512345678',
@@ -264,7 +264,7 @@ class CapturaElectorTest extends TestCase
 
         $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
             ->postJson('/api/electores', [
-                'modo_captura' => 'individual',
+                'modo_captura' => 'enlace_seccional',
                 'seccion_id' => $seccion->id,
                 'nombre' => 'Cifrado',
                 'telefono' => '5512345678',

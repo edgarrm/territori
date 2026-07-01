@@ -55,7 +55,7 @@ class EmailElectorTest extends TestCase
 
         $response = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
             ->postJson('/api/electores', [
-                'modo_captura' => 'individual',
+                'modo_captura' => 'enlace_seccional',
                 'seccion_id' => $seccion->id,
                 'nombre' => 'Con Email',
                 'telefono' => '5512345678',
@@ -78,7 +78,7 @@ class EmailElectorTest extends TestCase
 
         $response = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
             ->postJson('/api/electores', [
-                'modo_captura' => 'individual',
+                'modo_captura' => 'enlace_seccional',
                 'seccion_id' => $seccion->id,
                 'nombre' => 'Sin Email',
                 'telefono' => '5512345678',
@@ -99,7 +99,7 @@ class EmailElectorTest extends TestCase
 
         $response = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
             ->postJson('/api/electores', [
-                'modo_captura' => 'individual',
+                'modo_captura' => 'enlace_seccional',
                 'seccion_id' => $seccion->id,
                 'nombre' => 'Email Malo',
                 'telefono' => '5512345678',
@@ -122,7 +122,7 @@ class EmailElectorTest extends TestCase
 
         $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
             ->postJson('/api/electores', [
-                'modo_captura' => 'individual',
+                'modo_captura' => 'enlace_seccional',
                 'seccion_id' => $seccion->id,
                 'nombre' => 'Cifrado',
                 'telefono' => '5512345678',

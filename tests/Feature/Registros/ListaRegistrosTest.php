@@ -89,13 +89,13 @@ class ListaRegistrosTest extends TestCase
             'nombre' => 'Red Norte',
         ]);
 
-        $individual = $this->elector(['nombre' => 'Ana', 'modo_captura' => 'individual']);
+        $enlaceSeccional = $this->elector(['nombre' => 'Ana', 'modo_captura' => 'enlace_seccional']);
         $porEvento = $this->elector(['nombre' => 'Beto', 'modo_captura' => 'evento', 'evento_id' => $evento->id]);
         $porRed = $this->elector(['nombre' => 'Caro', 'modo_captura' => 'red_ciudadana', 'red_ciudadana_id' => $red->id]);
 
         $porId = collect($this->lista())->keyBy('id');
 
-        $this->assertSame('Individual', $porId[$individual->id]['origen']);
+        $this->assertSame('Enlace Seccional', $porId[$enlaceSeccional->id]['origen']);
         $this->assertSame('Evento: Mitin Central', $porId[$porEvento->id]['origen']);
         $this->assertSame('Red: Red Norte', $porId[$porRed->id]['origen']);
     }

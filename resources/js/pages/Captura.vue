@@ -25,7 +25,7 @@ defineOptions({
 type Seccion = { id: number; numero: number };
 type Evento = { id: number; nombre: string; fecha: string; seccion_id: number | null };
 type Aviso = { id: number; version: string; texto: string } | null;
-type Modo = 'loteria' | 'individual' | 'evento';
+type Modo = 'loteria' | 'enlace_seccional' | 'evento';
 
 const props = defineProps<{ secciones: Seccion[]; eventos: Evento[] }>();
 
@@ -188,7 +188,7 @@ async function guardar() {
         aviso_privacidad_id: aviso.value.id,
     };
 
-    if (modo.value === 'individual') {
+    if (modo.value === 'enlace_seccional') {
         payload.seccion_id = form.value.seccionId;
         payload.domicilio = form.value.domicilio || null;
         payload.observaciones = form.value.observaciones || null;
@@ -263,10 +263,10 @@ function ubicarme() {
                 Lotería
             </Button>
             <Button
-                :variant="modo === 'individual' ? 'default' : 'outline'"
-                @click="modo = 'individual'"
+                :variant="modo === 'enlace_seccional' ? 'default' : 'outline'"
+                @click="modo = 'enlace_seccional'"
             >
-                Individual
+                Enlace Seccional
             </Button>
             <Button
                 :variant="modo === 'evento' ? 'default' : 'outline'"
@@ -369,9 +369,9 @@ function ubicarme() {
             </div>
         </section>
 
-        <!-- INDIVIDUAL -->
+        <!-- ENLACE SECCIONAL -->
         <section
-            v-else-if="modo === 'individual'"
+            v-else-if="modo === 'enlace_seccional'"
             class="flex flex-col gap-3 rounded-xl border border-sidebar-border/70 p-4 dark:border-sidebar-border"
         >
             <label class="text-sm font-medium">Sección</label>

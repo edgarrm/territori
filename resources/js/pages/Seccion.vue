@@ -206,7 +206,7 @@ async function guardar() {
                 'X-CSRF-TOKEN': csrf(),
             },
             body: JSON.stringify({
-                modo_captura: 'individual',
+                modo_captura: 'enlace_seccional',
                 seccion_id: props.seccion.id,
                 nombre: form.nombre,
                 telefono: form.telefono,

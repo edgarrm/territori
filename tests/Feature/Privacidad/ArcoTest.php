@@ -106,7 +106,7 @@ class ArcoTest extends TestCase
         // El mismo teléfono se puede volver a capturar (el dedup ve solo vivos).
         $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
             ->postJson('/api/electores', [
-                'modo_captura' => 'individual',
+                'modo_captura' => 'enlace_seccional',
                 'seccion_id' => $s->id,
                 'nombre' => 'Recapturado',
                 'telefono' => '5511112222',

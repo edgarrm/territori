@@ -88,6 +88,29 @@ class CartografiaSeederTest extends TestCase
         $this->assertSame(2, $seccion->distrito_local);
     }
 
+    public function test_seeder_carga_lista_nominal_del_csv(): void
+    {
+        (new CartografiaSeeder)->run($this->fixturesDir);
+
+        $municipioDoce = Municipio::query()->where('clave', 12)->first();
+        $municipioUno = Municipio::query()->where('clave', 1)->first();
+
+        // Encabezado en mayúsculas y "1,000" con separador de miles.
+        $this->assertSame(
+            1000,
+            Seccion::query()->where('municipio_id', $municipioDoce->id)->where('numero', 1)->value('lista_nominal'),
+        );
+        $this->assertSame(
+            1500,
+            Seccion::query()->where('municipio_id', $municipioDoce->id)->where('numero', 3)->value('lista_nominal'),
+        );
+
+        // La sección 1 del municipio 1 no está en el CSV: queda sin lista nominal.
+        $this->assertNull(
+            Seccion::query()->where('municipio_id', $municipioUno->id)->where('numero', 1)->value('lista_nominal'),
+        );
+    }
+
     public function test_geom_srid_4326(): void
     {
         (new CartografiaSeeder)->run($this->fixturesDir);

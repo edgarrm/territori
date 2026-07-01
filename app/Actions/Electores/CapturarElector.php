@@ -17,7 +17,7 @@ use MatanYadaev\EloquentSpatial\Enums\Srid;
 use MatanYadaev\EloquentSpatial\Objects\Point;
 
 /**
- * Orquesta una captura de elector (lotería o individual): resuelve sección,
+ * Orquesta una captura de elector (lotería o enlace seccional): resuelve sección,
  * deduplica por telefono_hash dentro del tenant, exige consentimiento y dispara
  * ElectorCapturado. Nunca toma tenant_id ni rol del request.
  */

@@ -132,7 +132,7 @@ class RedCiudadanaTest extends TestCase
 
         $response = $this->actingAs($enlaceUser)->withSession(['tenant_id' => $this->tenant->id])
             ->postJson('/api/electores', [
-                'modo_captura' => 'individual',
+                'modo_captura' => 'enlace_seccional',
                 'seccion_id' => $seccion->id,
                 'nombre' => 'No Permitido',
                 'telefono' => '5512340002',

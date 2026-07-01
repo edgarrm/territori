@@ -26,7 +26,7 @@ class ElectorFactory extends Factory
             'tenant_id' => Tenant::factory(),
             'seccion_id' => Seccion::factory(),
             'membership_id' => Membership::factory(),
-            'modo_captura' => 'individual',
+            'modo_captura' => 'enlace_seccional',
             'loteria_id' => null,
             'evento_id' => null,
             'red_ciudadana_id' => null,

@@ -9,9 +9,9 @@ use Tests\DuskTestCase;
 class CapturaElectorTest extends DuskTestCase
 {
     /**
-     * Captura individual de un elector vía la UI; queda persistido.
+     * Captura de enlace seccional de un elector vía la UI; queda persistido.
      */
-    public function test_captura_individual_crea_un_elector(): void
+    public function test_captura_enlace_seccional_crea_un_elector(): void
     {
         [$tenant, $user, , $municipio] = $this->crearCampana('admin');
         $seccion = Seccion::query()->where('municipio_id', $municipio->id)->firstOrFail();
@@ -20,7 +20,7 @@ class CapturaElectorTest extends DuskTestCase
             $browser->loginAs($user)
                 ->visit('/captura')
                 ->waitForText('Captura de electores')
-                ->press('Individual')
+                ->press('Enlace Seccional')
                 ->waitFor('@captura-seccion')
                 ->select('@captura-seccion', (string) $seccion->id)
                 ->type('@captura-nombre', 'Dusk Tester')
@@ -50,7 +50,7 @@ class CapturaElectorTest extends DuskTestCase
             $browser->loginAs($user)
                 ->visit('/captura')
                 ->waitForText('Captura de electores')
-                ->press('Individual')
+                ->press('Enlace Seccional')
                 ->waitFor('@captura-seccion')
                 ->select('@captura-seccion', (string) $seccion->id)
                 ->type('@captura-nombre', 'Brigada Zona')

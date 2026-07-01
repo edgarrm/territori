@@ -68,7 +68,7 @@ class RestriccionZonaTest extends TestCase
     {
         return $this->actingAs($this->user)->withSession(['tenant_id' => $this->tenant->id])
             ->postJson('/api/electores', array_merge([
-                'modo_captura' => 'individual',
+                'modo_captura' => 'enlace_seccional',
                 'seccion_id' => $seccion->id,
                 'nombre' => 'Vecino Zona',
                 'telefono' => '5512340009',

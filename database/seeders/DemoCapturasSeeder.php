@@ -118,7 +118,7 @@ class DemoCapturasSeeder extends Seeder
                     'tenant_id' => $tenant->id,
                     'seccion_id' => $seccion->id,
                     'membership_id' => $brigadista->id,
-                    'modo_captura' => $n % 3 === 0 ? 'loteria' : 'individual',
+                    'modo_captura' => $n % 3 === 0 ? 'loteria' : 'enlace_seccional',
                     'loteria_id' => null,
                     'evento_id' => null,
                     'nombre' => $nombres[array_rand($nombres)],
@@ -307,6 +307,12 @@ class DemoCapturasSeeder extends Seeder
         ];
 
         foreach ($secciones as $seccion) {
+            // Respeta el padrón real (CartografiaSeeder con lista_nominal.csv): solo
+            // inventa la lista nominal cuando la sección no la trae.
+            if ((int) ($seccion->lista_nominal ?? 0) > 0) {
+                continue;
+            }
+
             [$min, $max] = $rangos[$seccion->tipo] ?? [400, 1500];
             $span = $max - $min;
             $valor = $min + (int) (crc32((string) $seccion->numero) % ($span + 1));
