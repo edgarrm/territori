@@ -10,13 +10,15 @@ class LoginResponse implements LoginResponseContract
 {
     public function toResponse($request)
     {
-        if (TenantContext::get()) {
-            // Tenant ya resuelto por subdominio antes del login.
-            return redirect()->intended(route('dashboard', absolute: false));
-        }
-
         $user = $request->user();
         abort_unless($user instanceof User, 403);
+
+        if ($tenant = TenantContext::get()) {
+            // Tenant ya resuelto por subdominio antes del login.
+            $membership = $user->membershipEn($tenant);
+
+            return redirect()->intended(route($membership?->rutaInicial() ?? 'dashboard', absolute: false));
+        }
 
         $memberships = $user->memberships()->where('activo', true)->get();
 
@@ -25,9 +27,10 @@ class LoginResponse implements LoginResponseContract
         }
 
         if ($memberships->count() === 1) {
-            $request->session()->put('tenant_id', $memberships->first()->tenant_id);
+            $membership = $memberships->first();
+            $request->session()->put('tenant_id', $membership->tenant_id);
 
-            return redirect()->intended(route('dashboard', absolute: false));
+            return redirect()->intended(route($membership->rutaInicial(), absolute: false));
         }
 
         return redirect()->route('campanas.seleccionar');

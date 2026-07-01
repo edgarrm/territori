@@ -29,6 +29,7 @@ class ElectorFactory extends Factory
             'modo_captura' => 'individual',
             'loteria_id' => null,
             'evento_id' => null,
+            'red_ciudadana_id' => null,
             'nombre' => fake()->name(),
             'telefono' => $telefono,
             'telefono_hash' => Telefono::hash($telefono),

@@ -140,6 +140,13 @@ class ElectorController extends Controller
             return true;
         }
 
+        // El enlace ve la PII completa de todos los registros de sus redes,
+        // sin importar quién los capturó.
+        if ($elector->red_ciudadana_id !== null
+            && $elector->redCiudadana?->enlace_membership_id === $viewer->id) {
+            return true;
+        }
+
         return $elector->membership_id === $viewer->id;
     }
 

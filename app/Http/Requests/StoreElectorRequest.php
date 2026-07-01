@@ -29,9 +29,17 @@ class StoreElectorRequest extends FormRequest
         $tenant = TenantContext::get();
         $tenantId = $tenant?->id;
 
+        // El rol "enlace" (acceso restringido) solo captura en sus redes; el
+        // resto de roles puede usar cualquier modo, incluido red_ciudadana.
+        $membership = $tenant !== null ? $this->user()?->membershipEn($tenant) : null;
+        $modos = $membership?->esEnlace()
+            ? 'red_ciudadana'
+            : 'individual,loteria,evento,red_ciudadana';
+
         return [
-            'modo_captura' => ['required', 'in:individual,loteria,evento'],
+            'modo_captura' => ['required', 'in:'.$modos],
             'evento_id' => ['nullable', 'integer'],
+            'red_ciudadana_id' => ['nullable', 'integer'],
             'nombre' => ['required', 'string', 'max:160'],
             'telefono' => [
                 'required',
