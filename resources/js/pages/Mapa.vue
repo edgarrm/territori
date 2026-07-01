@@ -190,13 +190,14 @@ function estiloFeature(feature?: GeoJSON.Feature) {
     const seleccionada = seccionSel.value?.seccion_id === p.seccion_id;
 
     if (seleccionada) {
-        // Borde oscuro grueso + relleno tenue para destacar la sección sin
-        // tapar las cuadras y calles del mapa de fondo.
+        // Relleno casi transparente + borde grueso en color de marca: deja ver
+        // las calles del mapa base (con sus nombres) dentro de la sección para
+        // ubicarla con claridad, sin perder su contorno.
         return {
             fillColor: colorFeature(p),
-            fillOpacity: 0.35,
-            color: '#11151c',
-            weight: 3,
+            fillOpacity: 0.1,
+            color: brandColor.value,
+            weight: 4,
             opacity: 1,
             lineJoin: 'round' as const,
         };
@@ -225,7 +226,9 @@ async function cargarCobertura() {
     );
 
     capa?.remove();
-    capa = L.geoJSON(geojson, {
+    // smoothFactor no está tipado en GeoJSONOptions pero Leaflet lo propaga a las
+    // capas de polígono en tiempo de ejecución.
+    const opciones: L.GeoJSONOptions & { smoothFactor?: number } = {
         style: estiloFeature,
         smoothFactor: 0.5,
         onEachFeature: (feature, layer) => {
@@ -249,13 +252,32 @@ async function cargarCobertura() {
                 },
             );
         },
-    }).addTo(mapa as L.Map);
+    };
+    capa = L.geoJSON(geojson, opciones).addTo(mapa as L.Map);
 
     const bounds = capa.getBounds();
 
     if (bounds.isValid()) {
         mapa?.fitBounds(bounds, { padding: [20, 20] });
     }
+}
+
+// Centra y acerca el mapa a los límites de una sección para leer sus calles.
+function enfocarSeccion(seccionId: number) {
+    capa?.eachLayer((layer) => {
+        const feature = (layer as L.GeoJSON).feature as
+            | GeoJSON.Feature
+            | undefined;
+        const p = feature?.properties as FeatureProps | undefined;
+
+        if (p?.seccion_id === seccionId) {
+            (layer as L.Path).bringToFront();
+            mapa?.fitBounds((layer as L.Polygon).getBounds(), {
+                maxZoom: 16,
+                padding: [40, 40],
+            });
+        }
+    });
 }
 
 async function seleccionar(p: FeatureProps) {
@@ -266,18 +288,8 @@ async function seleccionar(p: FeatureProps) {
         cargando: true,
     };
     capa?.setStyle(estiloFeature);
-    capa?.eachLayer((layer) => {
-        const feature = (layer as L.GeoJSON).feature as
-            | GeoJSON.Feature
-            | undefined;
-
-        if (
-            (feature?.properties as FeatureProps | undefined)?.seccion_id ===
-            p.seccion_id
-        ) {
-            (layer as L.Path).bringToFront();
-        }
-    });
+    // Acerca automáticamente a la sección para ubicarla y ver sus calles.
+    enfocarSeccion(p.seccion_id);
 
     const respuesta = await fetch(resumenRoute.url(p.seccion_id));
     const resumen = await respuesta.json();
@@ -306,20 +318,6 @@ function buscar() {
     }
 
     seleccionar(objetivo);
-
-    capa?.eachLayer((layer) => {
-        const feature = (layer as L.GeoJSON).feature as
-            | GeoJSON.Feature
-            | undefined;
-        const p = feature?.properties as FeatureProps | undefined;
-
-        if (p?.seccion_id === objetivo.seccion_id) {
-            mapa?.fitBounds((layer as L.Polygon).getBounds(), {
-                maxZoom: 16,
-                padding: [40, 40],
-            });
-        }
-    });
 }
 
 function cambiarModo(nuevo: Modo) {
@@ -339,6 +337,24 @@ onMounted(() => {
             maxZoom: 19,
         },
     ).addTo(mapa);
+
+    // Capa de solo etiquetas (calles y colonias) en un pane por encima de los
+    // polígonos de sección, para que los nombres queden legibles sobre el
+    // relleno de la sección seleccionada. Sin capturar clics (pointer-events).
+    mapa.createPane('etiquetas');
+    const paneEtiquetas = mapa.getPane('etiquetas');
+    if (paneEtiquetas) {
+        paneEtiquetas.style.zIndex = '620';
+        paneEtiquetas.style.pointerEvents = 'none';
+    }
+    L.tileLayer(
+        'https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png',
+        {
+            pane: 'etiquetas',
+            maxZoom: 19,
+        },
+    ).addTo(mapa);
+
     cargarCobertura();
 });
 
