@@ -8,6 +8,7 @@ use App\Models\Elector;
 use App\Models\Evento;
 use App\Models\Loteria;
 use App\Models\Membership;
+use App\Models\RedCiudadana;
 use App\Models\Seccion;
 use App\Support\Telefono;
 use App\Support\Tenancy\TenantContext;
@@ -33,6 +34,7 @@ class CapturarElector
         $modo = $datos['modo_captura'];
         $loteria = $this->resolverLoteria($modo, $datos, $membership);
         $evento = $this->resolverEvento($modo, $datos);
+        $red = $this->resolverRedCiudadana($modo, $datos, $membership);
         $seccion = $this->resolverSeccion($modo, $datos, $loteria, $evento, $membership);
 
         $telefonoHash = Telefono::hash($datos['telefono']);
@@ -53,9 +55,11 @@ class CapturarElector
             'modo_captura' => $modo,
             'loteria_id' => $loteria?->id,
             'evento_id' => $evento?->id,
+            'red_ciudadana_id' => $red?->id,
             'nombre' => $datos['nombre'],
             'telefono' => $datos['telefono'],
             'telefono_hash' => $telefonoHash,
+            'email' => $datos['email'] ?? null,
             'domicilio' => $datos['domicilio'] ?? null,
             'ubicacion' => $ubicacion,
             'observaciones' => $datos['observaciones'] ?? null,
@@ -119,6 +123,43 @@ class CapturarElector
         }
 
         return $evento;
+    }
+
+    /**
+     * Resuelve la red ciudadana para el modo 'red_ciudadana'. La red debe ser del
+     * tenant activo y la membership que captura debe ser su enlace (nunca una red
+     * ajena). La sección se resuelve aparte (una red no tiene sede fija).
+     *
+     * @param  array<string, mixed>  $datos
+     */
+    private function resolverRedCiudadana(string $modo, array $datos, Membership $membership): ?RedCiudadana
+    {
+        if ($modo !== 'red_ciudadana') {
+            return null;
+        }
+
+        if (empty($datos['red_ciudadana_id'])) {
+            throw ValidationException::withMessages([
+                'red_ciudadana_id' => 'Indica la red ciudadana para capturar en este modo.',
+            ]);
+        }
+
+        $red = RedCiudadana::query()->find((int) $datos['red_ciudadana_id']);
+
+        if ($red === null) {
+            throw ValidationException::withMessages([
+                'red_ciudadana_id' => 'La red ciudadana no existe en esta campaña.',
+            ]);
+        }
+
+        // Solo el enlace de la red (o gestión) puede capturar en ella.
+        if ($red->enlace_membership_id !== $membership->id && ! $membership->esGestion()) {
+            throw ValidationException::withMessages([
+                'red_ciudadana_id' => 'No eres el enlace de esta red ciudadana.',
+            ]);
+        }
+
+        return $red;
     }
 
     /**

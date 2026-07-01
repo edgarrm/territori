@@ -25,9 +25,11 @@ use MatanYadaev\EloquentSpatial\Traits\HasSpatial;
  * @property string $modo_captura
  * @property int|null $loteria_id
  * @property int|null $evento_id
+ * @property int|null $red_ciudadana_id
  * @property string $nombre
  * @property string $telefono
  * @property string|null $telefono_hash
+ * @property string|null $email
  * @property string|null $domicilio
  * @property Point|null $ubicacion
  * @property string|null $observaciones
@@ -56,9 +58,11 @@ class Elector extends Model
         'modo_captura',
         'loteria_id',
         'evento_id',
+        'red_ciudadana_id',
         'nombre',
         'telefono',
         'telefono_hash',
+        'email',
         'domicilio',
         'ubicacion',
         'observaciones',
@@ -73,6 +77,7 @@ class Elector extends Model
     {
         return [
             'telefono' => 'encrypted',
+            'email' => 'encrypted',
             'domicilio' => 'encrypted',
             'consentimiento' => 'boolean',
             'ubicacion' => Point::class,
@@ -109,6 +114,14 @@ class Elector extends Model
     public function evento(): BelongsTo
     {
         return $this->belongsTo(Evento::class);
+    }
+
+    /**
+     * @return BelongsTo<RedCiudadana, $this>
+     */
+    public function redCiudadana(): BelongsTo
+    {
+        return $this->belongsTo(RedCiudadana::class);
     }
 
     /**

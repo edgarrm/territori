@@ -34,4 +34,27 @@ class Pii
     {
         return ($domicilio === null || $domicilio === '') ? $domicilio : '•••';
     }
+
+    /**
+     * Deja visible solo la inicial y el dominio: juan@correo.com → j•••@correo.com.
+     * Sin arroba (dato inválido) se oculta por completo.
+     */
+    public static function enmascararEmail(?string $email): ?string
+    {
+        if ($email === null || $email === '') {
+            return $email;
+        }
+
+        $arroba = strpos($email, '@');
+
+        if ($arroba === false) {
+            return '•••';
+        }
+
+        $local = substr($email, 0, $arroba);
+        $dominio = substr($email, $arroba);
+        $inicial = $local === '' ? '' : substr($local, 0, 1);
+
+        return $inicial.'•••'.$dominio;
+    }
 }

@@ -27,6 +27,10 @@ class ActualizarElector
             $cambios['nombre'] = $datos['nombre'];
         }
 
+        if (array_key_exists('email', $datos)) {
+            $cambios['email'] = $datos['email'];
+        }
+
         if (array_key_exists('domicilio', $datos)) {
             $cambios['domicilio'] = $datos['domicilio'];
         }

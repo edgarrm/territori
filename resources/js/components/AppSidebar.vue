@@ -8,6 +8,7 @@ import {
     FolderGit2,
     LayoutGrid,
     Map,
+    Network,
     ShieldCheck,
     Target,
     Users,
@@ -30,14 +31,27 @@ const page = usePage<{ auth: { rol: string | null } }>();
 const esGestion = computed(() =>
     ['coordinador', 'admin'].includes(page.props.auth?.rol ?? ''),
 );
+// El rol "enlace" tiene acceso restringido: solo a sus redes ciudadanas.
+const esEnlace = computed(() => page.props.auth?.rol === 'enlace');
+
+const redesItem: NavItem = {
+    title: 'Redes ciudadanas',
+    href: '/redes-ciudadanas',
+    icon: Network,
+};
 
 const mainNavItems = computed<NavItem[]>(() => {
+    if (esEnlace.value) {
+        return [redesItem];
+    }
+
     const items: NavItem[] = [
         { title: 'Dashboard', href: dashboard(), icon: LayoutGrid },
         { title: 'Mapa', href: '/mapa', icon: Map },
         { title: 'Captura', href: '/captura', icon: ClipboardList },
         { title: 'Agenda', href: '/agenda', icon: CalendarCheck },
         { title: 'Eventos', href: '/eventos', icon: CalendarDays },
+        redesItem,
     ];
 
     if (esGestion.value) {

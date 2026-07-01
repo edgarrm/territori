@@ -25,6 +25,7 @@ type Elector = {
     seccion_id: number;
     nombre: string;
     telefono: string;
+    email: string | null;
     domicilio: string | null;
     observaciones: string | null;
 };
@@ -60,6 +61,7 @@ const timeline = ref<Interaccion[]>([...props.interacciones]);
 const datos = reactive({
     nombre: props.elector.nombre,
     telefono: props.elector.telefono,
+    email: props.elector.email ?? '',
     domicilio: props.elector.domicilio ?? '',
     observaciones: props.elector.observaciones ?? '',
 });
@@ -202,6 +204,9 @@ function cancelarElector() {
 
             <label class="text-sm font-medium">Teléfono</label>
             <Input v-model="datos.telefono" />
+
+            <label class="text-sm font-medium">Email</label>
+            <Input v-model="datos.email" type="email" />
 
             <label class="text-sm font-medium">Domicilio</label>
             <Input v-model="datos.domicilio" />
