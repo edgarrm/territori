@@ -42,6 +42,7 @@ class StoreElectorRequest extends FormRequest
                     }
                 },
             ],
+            'email' => ['nullable', 'email', 'max:160'],
             'consentimiento' => ['accepted'],
             'aviso_privacidad_id' => [
                 'required',

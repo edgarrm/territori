@@ -140,6 +140,7 @@ const mensaje = ref<{ tipo: 'ok' | 'error'; texto: string } | null>(null);
 const form = reactive({
     nombre: '',
     telefono: '',
+    email: '',
     domicilio: '',
     observaciones: '',
     consentimiento: false,
@@ -155,6 +156,7 @@ function csrf(): string {
 function limpiarForm() {
     form.nombre = '';
     form.telefono = '';
+    form.email = '';
     form.domicilio = '';
     form.observaciones = '';
     form.consentimiento = false;
@@ -192,6 +194,7 @@ async function guardar() {
                 seccion_id: props.seccion.id,
                 nombre: form.nombre,
                 telefono: form.telefono,
+                email: form.email || null,
                 domicilio: form.domicilio || null,
                 observaciones: form.observaciones || null,
                 consentimiento: form.consentimiento,
@@ -451,6 +454,12 @@ async function guardar() {
                         v-model="form.telefono"
                         placeholder="Teléfono (10 dígitos)"
                         inputmode="tel"
+                    />
+                    <Input
+                        v-model="form.email"
+                        type="email"
+                        placeholder="Email (opcional)"
+                        inputmode="email"
                     />
                     <Input
                         v-model="form.domicilio"

@@ -156,6 +156,7 @@ class ElectorController extends Controller
             'modo_captura' => $elector->modo_captura,
             'nombre' => $elector->nombre,
             'telefono' => $verPii ? $elector->telefono : Pii::enmascararTelefono($elector->telefono),
+            'email' => $verPii ? $elector->email : Pii::enmascararEmail($elector->email),
             'domicilio' => $verPii ? $elector->domicilio : Pii::enmascararDomicilio($elector->domicilio),
             'observaciones' => $elector->observaciones,
             'consentimiento' => $elector->consentimiento,

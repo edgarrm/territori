@@ -56,6 +56,7 @@ class CapturarElector
             'nombre' => $datos['nombre'],
             'telefono' => $datos['telefono'],
             'telefono_hash' => $telefonoHash,
+            'email' => $datos['email'] ?? null,
             'domicilio' => $datos['domicilio'] ?? null,
             'ubicacion' => $ubicacion,
             'observaciones' => $datos['observaciones'] ?? null,

@@ -28,6 +28,7 @@ use MatanYadaev\EloquentSpatial\Traits\HasSpatial;
  * @property string $nombre
  * @property string $telefono
  * @property string|null $telefono_hash
+ * @property string|null $email
  * @property string|null $domicilio
  * @property Point|null $ubicacion
  * @property string|null $observaciones
@@ -59,6 +60,7 @@ class Elector extends Model
         'nombre',
         'telefono',
         'telefono_hash',
+        'email',
         'domicilio',
         'ubicacion',
         'observaciones',
@@ -73,6 +75,7 @@ class Elector extends Model
     {
         return [
             'telefono' => 'encrypted',
+            'email' => 'encrypted',
             'domicilio' => 'encrypted',
             'consentimiento' => 'boolean',
             'ubicacion' => Point::class,

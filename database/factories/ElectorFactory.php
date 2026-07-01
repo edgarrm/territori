@@ -32,6 +32,7 @@ class ElectorFactory extends Factory
             'nombre' => fake()->name(),
             'telefono' => $telefono,
             'telefono_hash' => Telefono::hash($telefono),
+            'email' => null,
             'domicilio' => null,
             'ubicacion' => null,
             'observaciones' => null,

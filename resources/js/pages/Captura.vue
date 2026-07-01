@@ -52,6 +52,7 @@ const capturados = ref<Capturado[]>([]);
 const form = ref({
     nombre: '',
     telefono: '',
+    email: '',
     domicilio: '',
     observaciones: '',
     consentimiento: false,
@@ -109,6 +110,7 @@ async function postJson(url: string, body: Record<string, unknown>) {
 function limpiarForm() {
     form.value.nombre = '';
     form.value.telefono = '';
+    form.value.email = '';
     form.value.domicilio = '';
     form.value.observaciones = '';
     form.value.consentimiento = false;
@@ -181,6 +183,7 @@ async function guardar() {
         modo_captura: modo.value,
         nombre: form.value.nombre,
         telefono: form.value.telefono,
+        email: form.value.email || null,
         consentimiento: form.value.consentimiento,
         aviso_privacidad_id: aviso.value.id,
     };
@@ -327,6 +330,12 @@ function ubicarme() {
                     placeholder="Teléfono (10 dígitos)"
                     inputmode="tel"
                 />
+                <Input
+                    v-model="form.email"
+                    type="email"
+                    placeholder="Email (opcional)"
+                    inputmode="email"
+                />
                 <label class="flex items-center gap-2 text-sm">
                     <input v-model="form.consentimiento" type="checkbox" />
                     Acepta el aviso de privacidad
@@ -387,6 +396,13 @@ function ubicarme() {
                 placeholder="Teléfono (10 dígitos)"
                 inputmode="tel"
                 dusk="captura-telefono"
+            />
+            <Input
+                v-model="form.email"
+                type="email"
+                placeholder="Email (opcional)"
+                inputmode="email"
+                dusk="captura-email"
             />
             <Input v-model="form.domicilio" placeholder="Domicilio (opcional)" />
             <Input
@@ -470,6 +486,12 @@ function ubicarme() {
                     v-model="form.telefono"
                     placeholder="Teléfono (10 dígitos)"
                     inputmode="tel"
+                />
+                <Input
+                    v-model="form.email"
+                    type="email"
+                    placeholder="Email (opcional)"
+                    inputmode="email"
                 />
 
                 <label class="flex items-center gap-2 text-sm">
