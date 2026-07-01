@@ -6,6 +6,7 @@ use App\Actions\Brigadistas\AsignarZonas;
 use App\Models\AvisoPrivacidad;
 use App\Models\Membership;
 use App\Models\Municipio;
+use App\Models\RedCiudadana;
 use App\Models\Seccion;
 use App\Models\Tenant;
 use App\Models\User;
@@ -55,6 +56,7 @@ class DemoTenantSeeder extends Seeder
             'admin@demo.test' => 'admin',
             'coordinador@demo.test' => 'coordinador',
             'brigadista@demo.test' => 'brigadista',
+            'enlace@demo.test' => 'enlace',
         ];
 
         foreach ($roles as $email => $rol) {
@@ -95,6 +97,19 @@ class DemoTenantSeeder extends Seeder
 
         if ($brigadista && $seccionIds !== []) {
             (new AsignarZonas)->handle($brigadista, $seccionIds);
+        }
+
+        // Red ciudadana demo cuyo enlace es el usuario con rol "enlace".
+        $enlace = Membership::query()
+            ->where('tenant_id', $tenant->id)
+            ->where('rol', 'enlace')
+            ->first();
+
+        if ($enlace) {
+            RedCiudadana::query()->firstOrCreate(
+                ['tenant_id' => $tenant->id, 'nombre' => 'Red Vecinal Centro'],
+                ['enlace_membership_id' => $enlace->id, 'descripcion' => 'Red ciudadana demo del enlace.'],
+            );
         }
     }
 }

@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 
 /**
@@ -81,6 +82,35 @@ class Membership extends Model
     public function esBrigadista(): bool
     {
         return $this->rol === 'brigadista';
+    }
+
+    public function esEnlace(): bool
+    {
+        return $this->rol === 'enlace';
+    }
+
+    public function esGestion(): bool
+    {
+        return in_array($this->rol, ['coordinador', 'admin'], true);
+    }
+
+    /**
+     * Redes ciudadanas de las que esta membership es el enlace responsable.
+     *
+     * @return HasMany<RedCiudadana, $this>
+     */
+    public function redesComoEnlace(): HasMany
+    {
+        return $this->hasMany(RedCiudadana::class, 'enlace_membership_id');
+    }
+
+    /**
+     * Ruta de aterrizaje según el rol: el enlace (acceso restringido) entra a
+     * sus redes ciudadanas; el resto al dashboard.
+     */
+    public function rutaInicial(): string
+    {
+        return $this->esEnlace() ? 'redes-ciudadanas.index' : 'dashboard';
     }
 
     public function activar(): void

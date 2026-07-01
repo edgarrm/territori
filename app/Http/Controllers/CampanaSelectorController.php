@@ -45,7 +45,7 @@ class CampanaSelectorController extends Controller
 
         $request->session()->put('tenant_id', $membership->tenant_id);
 
-        return redirect()->route('dashboard');
+        return redirect()->route($membership->rutaInicial());
     }
 
     public function sinMembership(): Response
