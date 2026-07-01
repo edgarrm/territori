@@ -104,6 +104,7 @@ class VisibilidadPiiTest extends TestCase
         [$tenant, , $seccion, $aviso] = $this->setupCampana();
         [$user, $membership] = $this->miembro($tenant, 'brigadista');
         [, $otro] = $this->miembro($tenant, 'brigadista');
+        $membership->secciones()->attach($seccion->id, ['tenant_id' => $tenant->id]);
         $propio = $this->elector($tenant, $membership, $seccion, $aviso, '5511112222', 'Mi Calle 1');
         $ajeno = $this->elector($tenant, $otro, $seccion, $aviso, '5599998888', 'Otra Calle 2');
 

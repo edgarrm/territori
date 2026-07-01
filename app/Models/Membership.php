@@ -95,6 +95,20 @@ class Membership extends Model
     }
 
     /**
+     * ¿Puede capturar en esta sección? El brigadista está acotado a sus zonas
+     * asignadas (brigadista_seccion); sin zonas no puede capturar en ninguna.
+     * Gestión (coordinador/admin) y otros roles no dependen de zonas.
+     */
+    public function puedeCapturarEnSeccion(int $seccionId): bool
+    {
+        if (! $this->esBrigadista()) {
+            return true;
+        }
+
+        return $this->secciones()->whereKey($seccionId)->exists();
+    }
+
+    /**
      * Redes ciudadanas de las que esta membership es el enlace responsable.
      *
      * @return HasMany<RedCiudadana, $this>
@@ -102,6 +116,27 @@ class Membership extends Model
     public function redesComoEnlace(): HasMany
     {
         return $this->hasMany(RedCiudadana::class, 'enlace_membership_id');
+    }
+
+    /**
+     * Roles que esta membership puede asignar al invitar a otro miembro. El
+     * admin da de alta cualquier rol; el coordinador solo brigadistas y enlaces
+     * (nunca coordinadores ni admins, para evitar escalación de privilegios).
+     *
+     * @return list<string>
+     */
+    public function rolesQuePuedeAsignar(): array
+    {
+        return match ($this->rol) {
+            'admin' => ['admin', 'coordinador', 'brigadista', 'enlace'],
+            'coordinador' => ['brigadista', 'enlace'],
+            default => [],
+        };
+    }
+
+    public function puedeAsignarRol(string $rol): bool
+    {
+        return in_array($rol, $this->rolesQuePuedeAsignar(), true);
     }
 
     /**

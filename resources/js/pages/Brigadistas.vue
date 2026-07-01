@@ -10,7 +10,7 @@ defineOptions({
     layout: {
         breadcrumbs: [
             { title: 'Dashboard', href: dashboard() },
-            { title: 'Brigadistas', href: '/brigadistas' },
+            { title: 'Miembros', href: '/brigadistas' },
         ],
     },
 });
@@ -29,15 +29,40 @@ type Brigadista = {
     secciones_ids: number[];
 };
 
+type Miembro = {
+    membership_id: number;
+    nombre: string | null;
+    email: string | null;
+    rol: string;
+    activo: boolean;
+};
+
 type Seccion = { id: number; numero: number };
 
 const props = defineProps<{
     brigadistas: Brigadista[];
+    otrosMiembros: Miembro[];
+    rolesAsignables: string[];
     secciones: Seccion[];
     facturacion: { activos: number; limite: number | null; puede_activar: boolean };
 }>();
 
-const alta = ref({ email: '', name: '', meta_diaria: 0 });
+const ETIQUETA_ROL: Record<string, string> = {
+    admin: 'Administrador',
+    coordinador: 'Coordinador',
+    brigadista: 'Brigadista',
+    enlace: 'Enlace',
+};
+
+function etiquetaRol(rol: string): string {
+    return ETIQUETA_ROL[rol] ?? rol;
+}
+
+const rolInicial = props.rolesAsignables.includes('brigadista')
+    ? 'brigadista'
+    : (props.rolesAsignables[0] ?? '');
+
+const alta = ref({ email: '', name: '', rol: rolInicial, meta_diaria: 0 });
 const errorAlta = ref<string | null>(null);
 const procesando = ref(false);
 
@@ -64,8 +89,8 @@ async function agregar() {
             errorAlta.value = (await res.json()).message ?? 'No se pudo agregar.';
             return;
         }
-        alta.value = { email: '', name: '', meta_diaria: 0 };
-        router.reload({ only: ['brigadistas', 'facturacion'] });
+        alta.value = { email: '', name: '', rol: rolInicial, meta_diaria: 0 };
+        router.reload({ only: ['brigadistas', 'otrosMiembros', 'facturacion'] });
     } finally {
         procesando.value = false;
     }
@@ -97,6 +122,14 @@ function toggleSeccion(id: number) {
     seleccion.value = new Set(seleccion.value);
 }
 
+function seleccionarTodas() {
+    seleccion.value = new Set(props.secciones.map((s) => s.id));
+}
+
+function vaciarSeleccion() {
+    seleccion.value = new Set();
+}
+
 async function guardarZonas(b: Brigadista) {
     await enviar(zonasRoute.url(b.membership_id), 'PUT', {
         seccion_ids: [...seleccion.value],
@@ -107,10 +140,10 @@ async function guardarZonas(b: Brigadista) {
 </script>
 
 <template>
-    <Head title="Brigadistas" />
+    <Head title="Miembros" />
 
     <div class="flex h-full flex-1 flex-col gap-4 p-4">
-        <h1 class="text-xl font-semibold">Brigadistas</h1>
+        <h1 class="text-xl font-semibold">Miembros</h1>
 
         <div
             class="flex items-center justify-between rounded-xl border p-3 text-sm"
@@ -134,19 +167,32 @@ async function guardarZonas(b: Brigadista) {
         <form class="flex flex-wrap items-end gap-2" @submit.prevent="agregar">
             <div class="flex flex-col gap-1">
                 <label class="text-xs text-muted-foreground">Email</label>
-                <Input v-model="alta.email" type="email" required placeholder="brigadista@x.com" />
+                <Input v-model="alta.email" type="email" required placeholder="miembro@x.com" />
             </div>
             <div class="flex flex-col gap-1">
                 <label class="text-xs text-muted-foreground">Nombre</label>
                 <Input v-model="alta.name" type="text" placeholder="Nombre" />
             </div>
             <div class="flex flex-col gap-1">
+                <label class="text-xs text-muted-foreground">Rol</label>
+                <select
+                    v-model="alta.rol"
+                    class="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                >
+                    <option v-for="rol in rolesAsignables" :key="rol" :value="rol">
+                        {{ etiquetaRol(rol) }}
+                    </option>
+                </select>
+            </div>
+            <div v-if="alta.rol === 'brigadista'" class="flex flex-col gap-1">
                 <label class="text-xs text-muted-foreground">Meta diaria</label>
                 <Input v-model="alta.meta_diaria" type="number" min="0" class="w-24" />
             </div>
-            <Button type="submit" :disabled="procesando">Agregar brigadista</Button>
+            <Button type="submit" :disabled="procesando || !alta.rol">Agregar miembro</Button>
             <p v-if="errorAlta" class="w-full text-sm text-red-600">{{ errorAlta }}</p>
         </form>
+
+        <h2 class="mt-2 text-base font-semibold">Brigadistas</h2>
 
         <div
             v-if="brigadistas.length === 0"
@@ -201,23 +247,80 @@ async function guardarZonas(b: Brigadista) {
                             </button>
                             <div
                                 v-if="zonasAbiertas === b.membership_id"
-                                class="mt-2 max-h-48 w-48 overflow-auto rounded border bg-background p-2"
+                                class="mt-2 w-56 rounded border bg-background p-2"
                             >
-                                <label
-                                    v-for="s in secciones"
-                                    :key="s.id"
-                                    class="flex items-center gap-2 py-0.5 text-xs"
-                                >
-                                    <input
-                                        type="checkbox"
-                                        :checked="seleccion.has(s.id)"
-                                        @change="toggleSeccion(s.id)"
-                                    />
-                                    {{ s.numero }}
-                                </label>
+                                <div class="mb-2 flex items-center justify-between gap-2">
+                                    <span class="text-xs text-muted-foreground">
+                                        {{ seleccion.size }} de {{ secciones.length }}
+                                    </span>
+                                    <div class="flex gap-1">
+                                        <button
+                                            type="button"
+                                            class="rounded border px-2 py-0.5 text-xs hover:bg-muted"
+                                            @click="seleccionarTodas"
+                                        >
+                                            Todas
+                                        </button>
+                                        <button
+                                            type="button"
+                                            class="rounded border px-2 py-0.5 text-xs hover:bg-muted"
+                                            @click="vaciarSeleccion"
+                                        >
+                                            Vaciar
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="max-h-48 overflow-auto rounded border bg-background p-2">
+                                    <label
+                                        v-for="s in secciones"
+                                        :key="s.id"
+                                        class="flex items-center gap-2 py-0.5 text-xs"
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            :checked="seleccion.has(s.id)"
+                                            @change="toggleSeccion(s.id)"
+                                        />
+                                        {{ s.numero }}
+                                    </label>
+                                </div>
                                 <Button class="mt-2 w-full" @click="guardarZonas(b)">Guardar zonas</Button>
                             </div>
                         </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h2 class="mt-4 text-base font-semibold">Otros miembros</h2>
+
+        <div
+            v-if="otrosMiembros.length === 0"
+            class="text-sm text-muted-foreground"
+        >
+            Aún no hay coordinadores ni enlaces en esta campaña.
+        </div>
+
+        <div
+            v-else
+            class="overflow-hidden rounded-xl border border-sidebar-border/70 dark:border-sidebar-border"
+        >
+            <table class="w-full text-sm">
+                <thead class="bg-muted/50">
+                    <tr>
+                        <th class="p-2 text-left">Miembro</th>
+                        <th class="p-2 text-left">Rol</th>
+                        <th class="p-2 text-left">Activo</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="m in otrosMiembros" :key="m.membership_id" class="border-t">
+                        <td class="p-2">
+                            <div class="font-medium">{{ m.nombre ?? m.email }}</div>
+                            <div class="text-xs text-muted-foreground">{{ m.email }}</div>
+                        </td>
+                        <td class="p-2">{{ etiquetaRol(m.rol) }}</td>
+                        <td class="p-2">{{ m.activo ? 'Sí' : 'No' }}</td>
                     </tr>
                 </tbody>
             </table>

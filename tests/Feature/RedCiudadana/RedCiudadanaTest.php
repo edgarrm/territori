@@ -206,6 +206,106 @@ class RedCiudadanaTest extends TestCase
         $response->assertForbidden();
     }
 
+    public function test_enlace_ve_solo_sus_redes_en_index(): void
+    {
+        [$enlaceUser, $enlace] = $this->miembro('enlace');
+        $miRed = $this->red($enlace);
+        [, $otroEnlace] = $this->miembro('brigadista');
+        $this->red($otroEnlace);
+
+        $response = $this->actingAs($enlaceUser)->withSession(['tenant_id' => $this->tenant->id])
+            ->get('/redes-ciudadanas');
+
+        $response->assertInertia(fn ($page) => $page
+            ->component('RedesCiudadanas')
+            ->where('esGestion', false)
+            ->has('redes', 1)
+            ->where('redes.0.id', $miRed->id)
+            ->has('enlaces', 0)
+        );
+    }
+
+    public function test_gestion_ve_todas_las_redes_y_catalogo_de_enlaces_en_index(): void
+    {
+        [$coordUser] = $this->miembro('coordinador');
+        [, $enlaceUno] = $this->miembro('brigadista');
+        [, $enlaceDos] = $this->miembro('brigadista');
+        $this->red($enlaceUno);
+        $this->red($enlaceDos);
+
+        $response = $this->actingAs($coordUser)->withSession(['tenant_id' => $this->tenant->id])
+            ->get('/redes-ciudadanas');
+
+        $response->assertInertia(fn ($page) => $page
+            ->component('RedesCiudadanas')
+            ->where('esGestion', true)
+            ->has('redes', 2)
+            ->has('enlaces', 3)
+        );
+    }
+
+    public function test_catalogo_de_enlaces_no_incluye_membresias_de_otro_tenant(): void
+    {
+        [$coordUser] = $this->miembro('coordinador');
+
+        $otroMunicipio = Municipio::query()->where('clave', 12)->first();
+        $otroTenant = Tenant::factory()->create(['municipio_id' => $otroMunicipio->id]);
+        $otroUser = User::factory()->create();
+        Membership::create(['tenant_id' => $otroTenant->id, 'user_id' => $otroUser->id, 'rol' => 'brigadista']);
+
+        $response = $this->actingAs($coordUser)->withSession(['tenant_id' => $this->tenant->id])
+            ->get('/redes-ciudadanas');
+
+        $response->assertInertia(fn ($page) => $page
+            ->component('RedesCiudadanas')
+            ->has('enlaces', 1)
+        );
+    }
+
+    public function test_no_se_puede_asignar_enlace_de_otro_tenant(): void
+    {
+        [$coordUser] = $this->miembro('coordinador');
+
+        $otroMunicipio = Municipio::query()->where('clave', 12)->first();
+        $otroTenant = Tenant::factory()->create(['municipio_id' => $otroMunicipio->id]);
+        $otroUser = User::factory()->create();
+        $ajena = Membership::create(['tenant_id' => $otroTenant->id, 'user_id' => $otroUser->id, 'rol' => 'brigadista']);
+
+        $response = $this->actingAs($coordUser)->withSession(['tenant_id' => $this->tenant->id])
+            ->post('/redes-ciudadanas', [
+                'nombre' => 'Red Cruzada',
+                'enlace_membership_id' => $ajena->id,
+            ]);
+
+        $response->assertSessionHasErrors('enlace_membership_id');
+        TenantContext::set($this->tenant);
+        $this->assertSame(0, RedCiudadana::query()->count());
+    }
+
+    public function test_no_se_puede_capturar_en_red_inactiva(): void
+    {
+        [$enlaceUser, $enlace] = $this->miembro('enlace');
+        $red = $this->red($enlace);
+        $red->update(['activa' => false]);
+        $seccion = $this->seccion();
+
+        $response = $this->actingAs($enlaceUser)->withSession(['tenant_id' => $this->tenant->id])
+            ->postJson('/api/electores', [
+                'modo_captura' => 'red_ciudadana',
+                'red_ciudadana_id' => $red->id,
+                'seccion_id' => $seccion->id,
+                'nombre' => 'Vecino Inactivo',
+                'telefono' => '5512340004',
+                'consentimiento' => true,
+                'aviso_privacidad_id' => $this->aviso->id,
+            ]);
+
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors('red_ciudadana_id');
+        TenantContext::set($this->tenant);
+        $this->assertSame(0, Elector::query()->count());
+    }
+
     public function test_rol_enlace_no_accede_al_resto_del_dominio(): void
     {
         [$enlaceUser] = $this->miembro('enlace');

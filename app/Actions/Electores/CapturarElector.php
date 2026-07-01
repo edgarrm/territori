@@ -159,13 +159,38 @@ class CapturarElector
             ]);
         }
 
+        if (! $red->activa) {
+            throw ValidationException::withMessages([
+                'red_ciudadana_id' => 'Esta red ciudadana está inactiva.',
+            ]);
+        }
+
         return $red;
+    }
+
+    /**
+     * Resuelve la sección y, para el brigadista, exige que sea una de sus zonas
+     * asignadas (aplica a todos los modos). Gestión no está acotada a zonas.
+     *
+     * @param  array<string, mixed>  $datos
+     */
+    private function resolverSeccion(string $modo, array $datos, ?Loteria $loteria, ?Evento $evento, Membership $membership): Seccion
+    {
+        $seccion = $this->resolverSeccionCruda($modo, $datos, $loteria, $evento, $membership);
+
+        if (! $membership->puedeCapturarEnSeccion($seccion->id)) {
+            throw ValidationException::withMessages([
+                'seccion_id' => 'Solo puedes capturar en las secciones que tienes asignadas.',
+            ]);
+        }
+
+        return $seccion;
     }
 
     /**
      * @param  array<string, mixed>  $datos
      */
-    private function resolverSeccion(string $modo, array $datos, ?Loteria $loteria, ?Evento $evento, Membership $membership): Seccion
+    private function resolverSeccionCruda(string $modo, array $datos, ?Loteria $loteria, ?Evento $evento, Membership $membership): Seccion
     {
         if ($modo === 'loteria') {
             return Seccion::findOrFail($loteria->seccion_id);

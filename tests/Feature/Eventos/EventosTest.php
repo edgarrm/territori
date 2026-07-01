@@ -39,6 +39,7 @@ class EventosTest extends TestCase
     {
         [$tenant, $user, $m, $municipio, $aviso] = $this->setupCampana();
         $seccion = Seccion::query()->where('municipio_id', $municipio->id)->where('numero', 1)->first();
+        $m->secciones()->attach($seccion->id, ['tenant_id' => $tenant->id]);
         $evento = Evento::factory()->create(['tenant_id' => $tenant->id, 'seccion_id' => $seccion->id]);
 
         $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
@@ -62,6 +63,7 @@ class EventosTest extends TestCase
     {
         [$tenant, $user, $m, $municipio, $aviso] = $this->setupCampana();
         $seccion = Seccion::query()->where('municipio_id', $municipio->id)->where('numero', 2)->first();
+        $m->secciones()->attach($seccion->id, ['tenant_id' => $tenant->id]);
         $evento = Evento::factory()->create(['tenant_id' => $tenant->id, 'seccion_id' => null]);
 
         $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])

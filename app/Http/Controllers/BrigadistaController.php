@@ -28,8 +28,27 @@ class BrigadistaController extends Controller
             ->get(['id', 'numero'])
             ->map(fn (Seccion $s): array => ['id' => $s->id, 'numero' => $s->numero]);
 
+        // Miembros que no son brigadistas (coordinadores, enlaces, admins): la
+        // tabla de brigadistas lleva ratios/zonas que no aplican a estos roles.
+        $otrosMiembros = Membership::query()
+            ->where('tenant_id', $tenant?->id)
+            ->where('rol', '!=', 'brigadista')
+            ->with('user:id,name,email')
+            ->orderBy('rol')
+            ->get()
+            ->map(fn (Membership $m): array => [
+                'membership_id' => $m->id,
+                'nombre' => $m->user->name,
+                'email' => $m->user->email,
+                'rol' => $m->rol,
+                'activo' => $m->activo,
+            ])
+            ->all();
+
         return Inertia::render('Brigadistas', [
             'brigadistas' => $ratios->paraTenant($tenant),
+            'otrosMiembros' => $otrosMiembros,
+            'rolesAsignables' => $this->miMembership()?->rolesQuePuedeAsignar() ?? [],
             'secciones' => $secciones,
             'facturacion' => [
                 'activos' => $tenant->brigadistasActivosCount(),
@@ -37,6 +56,17 @@ class BrigadistaController extends Controller
                 'puede_activar' => $tenant->puedeActivarBrigadista(),
             ],
         ]);
+    }
+
+    /**
+     * Membresía activa del usuario en el tenant actual.
+     */
+    private function miMembership(): ?Membership
+    {
+        $user = request()->user();
+        $tenant = TenantContext::get();
+
+        return ($user !== null && $tenant !== null) ? $user->membershipEn($tenant) : null;
     }
 
     public function store(StoreBrigadistaRequest $request, InvitarMiembro $invitar): JsonResponse|RedirectResponse
@@ -47,7 +77,7 @@ class BrigadistaController extends Controller
             $invitar->handle($tenant, [
                 'email' => $request->validated('email'),
                 'name' => $request->validated('name'),
-                'rol' => 'brigadista',
+                'rol' => $request->validated('rol'),
                 'meta_diaria' => $request->validated('meta_diaria'),
                 'activo' => $request->boolean('activo', true),
             ]);

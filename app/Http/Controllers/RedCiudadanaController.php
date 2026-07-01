@@ -48,6 +48,7 @@ class RedCiudadanaController extends Controller
         // (puede ser una membership de cualquier rol).
         $enlaces = $esGestion
             ? Membership::query()
+                ->where('tenant_id', TenantContext::get()?->id)
                 ->where('activo', true)
                 ->with('user')
                 ->get()

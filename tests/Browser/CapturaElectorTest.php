@@ -36,4 +36,34 @@ class CapturaElectorTest extends DuskTestCase
             'seccion_id' => $seccion->id,
         ]);
     }
+
+    /**
+     * Un brigadista con una zona asignada captura en ella correctamente.
+     */
+    public function test_brigadista_captura_en_su_zona_asignada(): void
+    {
+        [$tenant, $user, $membership, $municipio] = $this->crearCampana('brigadista');
+        $seccion = Seccion::query()->where('municipio_id', $municipio->id)->firstOrFail();
+        $membership->secciones()->attach($seccion->id, ['tenant_id' => $tenant->id]);
+
+        $this->browse(function (Browser $browser) use ($user, $seccion) {
+            $browser->loginAs($user)
+                ->visit('/captura')
+                ->waitForText('Captura de electores')
+                ->press('Individual')
+                ->waitFor('@captura-seccion')
+                ->select('@captura-seccion', (string) $seccion->id)
+                ->type('@captura-nombre', 'Brigada Zona')
+                ->type('@captura-telefono', '5512349999')
+                ->check('@captura-consentimiento')
+                ->click('@captura-guardar')
+                ->waitForText('Elector capturado.');
+        });
+
+        $this->assertDatabaseHas('electores', [
+            'nombre' => 'Brigada Zona',
+            'tenant_id' => $tenant->id,
+            'seccion_id' => $seccion->id,
+        ]);
+    }
 }

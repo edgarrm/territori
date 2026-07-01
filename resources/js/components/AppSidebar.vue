@@ -57,7 +57,7 @@ const mainNavItems = computed<NavItem[]>(() => {
     if (esGestion.value) {
         items.push(
             { title: 'Metas', href: '/metas', icon: Target },
-            { title: 'Brigadistas', href: '/brigadistas', icon: Users },
+            { title: 'Miembros', href: '/brigadistas', icon: Users },
             { title: 'Solicitudes ARCO', href: '/solicitudes-arco', icon: ShieldCheck },
         );
     }

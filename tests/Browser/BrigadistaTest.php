@@ -20,9 +20,9 @@ class BrigadistaTest extends DuskTestCase
             $browser->loginAs($user)
                 ->visit('/brigadistas')
                 ->waitForText('Brigadistas')
-                ->type('input[placeholder="brigadista@x.com"]', 'nuevo@brigada.test')
+                ->type('input[placeholder="miembro@x.com"]', 'nuevo@brigada.test')
                 ->type('input[placeholder="Nombre"]', 'Nuevo Brigadista')
-                ->press('Agregar brigadista')
+                ->press('Agregar miembro')
                 ->waitForText('nuevo@brigada.test');
         });
 
@@ -30,6 +30,34 @@ class BrigadistaTest extends DuskTestCase
         $this->assertDatabaseHas('memberships', [
             'tenant_id' => $tenant->id,
             'rol' => 'brigadista',
+        ]);
+    }
+
+    /**
+     * Gestión da de alta a un enlace desde la pantalla de Miembros; aparece en
+     * la tabla de "Otros miembros" y queda con rol enlace en BD.
+     */
+    public function test_alta_de_enlace_desde_miembros(): void
+    {
+        [$tenant, $user] = $this->crearCampana('coordinador');
+
+        $this->browse(function (Browser $browser) use ($user) {
+            $browser->loginAs($user)
+                ->visit('/brigadistas')
+                ->waitForText('Otros miembros')
+                ->type('input[placeholder="miembro@x.com"]', 'nuevo@enlace.test')
+                ->type('input[placeholder="Nombre"]', 'Nuevo Enlace')
+                ->select('select', 'enlace')
+                ->press('Agregar miembro')
+                ->waitForText('nuevo@enlace.test');
+        });
+
+        $user = User::where('email', 'nuevo@enlace.test')->first();
+        $this->assertNotNull($user);
+        $this->assertDatabaseHas('memberships', [
+            'tenant_id' => $tenant->id,
+            'user_id' => $user->id,
+            'rol' => 'enlace',
         ]);
     }
 

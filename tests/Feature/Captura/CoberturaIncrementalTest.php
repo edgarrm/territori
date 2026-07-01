@@ -18,10 +18,12 @@ use App\Support\Tenancy\TenantContext;
 use Database\Seeders\CartografiaSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
+use Tests\Concerns\AsignaZonas;
 use Tests\TestCase;
 
 class CoberturaIncrementalTest extends TestCase
 {
+    use AsignaZonas;
     use RefreshDatabase;
 
     /**
@@ -34,6 +36,7 @@ class CoberturaIncrementalTest extends TestCase
         $tenant = Tenant::factory()->create(['municipio_id' => $municipio->id]);
         $user = User::factory()->create();
         $membership = Membership::create(['tenant_id' => $tenant->id, 'user_id' => $user->id, 'rol' => 'brigadista']);
+        $this->asignarTodasLasZonas($membership, $municipio->id);
         TenantContext::set($tenant);
         $aviso = AvisoPrivacidad::factory()->create(['tenant_id' => $tenant->id]);
 

@@ -48,6 +48,11 @@ class HandleInertiaRequests extends Middleware
             'auth' => [
                 'user' => $request->user(),
                 'rol' => $membership?->rol,
+                // Zonas del brigadista (para acotar el mapa en el front); vacío
+                // para otros roles. La restricción real la impone el backend.
+                'secciones_asignadas' => $membership?->esBrigadista()
+                    ? $membership->secciones()->pluck('secciones.id')->all()
+                    : [],
                 'tenant' => $tenant?->nombre,
                 'tenant_id' => $tenant?->id,
                 'campanas' => $user instanceof User

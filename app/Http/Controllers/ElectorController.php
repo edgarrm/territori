@@ -99,6 +99,10 @@ class ElectorController extends Controller
     public function indexPorSeccion(Request $request, Seccion $seccion): JsonResponse
     {
         $viewer = $this->miMembership();
+
+        // El brigadista solo consulta electores de sus zonas asignadas.
+        abort_if($viewer !== null && ! $viewer->puedeCapturarEnSeccion($seccion->id), 403);
+
         $busqueda = trim((string) $request->query('q', ''));
 
         $electores = Elector::query()

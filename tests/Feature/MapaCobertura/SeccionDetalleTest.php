@@ -17,22 +17,23 @@ class SeccionDetalleTest extends TestCase
     use RefreshDatabase;
 
     /**
-     * @return array{0: Tenant, 1: User, 2: Municipio}
+     * @return array{0: Tenant, 1: User, 2: Municipio, 3: Membership}
      */
     private function tenantConMiembro(string $rol = 'brigadista'): array
     {
         $municipio = Municipio::factory()->create();
         $tenant = Tenant::factory()->create(['municipio_id' => $municipio->id]);
         $user = User::factory()->create();
-        Membership::create(['tenant_id' => $tenant->id, 'user_id' => $user->id, 'rol' => $rol]);
+        $membership = Membership::create(['tenant_id' => $tenant->id, 'user_id' => $user->id, 'rol' => $rol]);
 
-        return [$tenant, $user, $municipio];
+        return [$tenant, $user, $municipio, $membership];
     }
 
     public function test_pagina_detalle_renderiza_para_miembro(): void
     {
-        [$tenant, $user, $municipio] = $this->tenantConMiembro();
+        [$tenant, $user, $municipio, $brigadista] = $this->tenantConMiembro();
         $seccion = Seccion::factory()->create(['municipio_id' => $municipio->id]);
+        $brigadista->secciones()->attach($seccion->id, ['tenant_id' => $tenant->id]);
 
         $response = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
             ->get("/secciones/{$seccion->id}");
@@ -68,10 +69,12 @@ class SeccionDetalleTest extends TestCase
     public function test_electores_scoped_por_tenant(): void
     {
         [$tenantA, $userA, $municipio] = $this->tenantConMiembro();
-        [$tenantB, $userB] = $this->tenantConMiembro();
+        [$tenantB, $userB, , $brigadistaB] = $this->tenantConMiembro();
         Tenant::query()->whereKey($tenantB->id)->update(['municipio_id' => $municipio->id]);
 
         $seccion = Seccion::factory()->create(['municipio_id' => $municipio->id]);
+        // El brigadista de B tiene la sección asignada, pero no verá electores de A.
+        $brigadistaB->secciones()->attach($seccion->id, ['tenant_id' => $tenantB->id]);
 
         TenantContext::set($tenantA);
         Elector::factory()->create(['tenant_id' => $tenantA->id, 'seccion_id' => $seccion->id]);

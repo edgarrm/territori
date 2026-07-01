@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Actions\Metas\DefinirMetaSeccion;
 use App\Models\CoberturaSeccion;
 use App\Models\Elector;
+use App\Models\Membership;
 use App\Models\MetaSeccion;
 use App\Models\Seccion;
 use App\Models\Tenant;
@@ -34,6 +35,7 @@ class MapaController extends Controller
     public function cobertura(Request $request): JsonResponse
     {
         $tenant = TenantContext::get();
+        $viewer = $this->miMembership();
 
         $filas = DB::table('secciones')
             ->leftJoin('cobertura_seccion', function ($join) use ($tenant) {
@@ -41,6 +43,11 @@ class MapaController extends Controller
                     ->where('cobertura_seccion.tenant_id', '=', $tenant?->id);
             })
             ->where('secciones.municipio_id', $tenant?->municipio_id)
+            // El brigadista solo ve sus zonas asignadas; gestión ve todas.
+            ->when(
+                $viewer?->esBrigadista(),
+                fn ($query) => $query->whereIn('secciones.id', $viewer->secciones()->pluck('secciones.id')),
+            )
             ->select([
                 'secciones.id as seccion_id',
                 'secciones.numero',
@@ -85,6 +92,8 @@ class MapaController extends Controller
      */
     public function detalle(Seccion $seccion): Response
     {
+        $this->asegurarAccesoSeccion($seccion);
+
         return Inertia::render('Seccion', [
             'seccion' => [
                 'id' => $seccion->id,
@@ -95,6 +104,8 @@ class MapaController extends Controller
 
     public function resumenSeccion(Seccion $seccion): JsonResponse
     {
+        $this->asegurarAccesoSeccion($seccion);
+
         $tenant = TenantContext::get();
 
         $cobertura = CoberturaSeccion::where('tenant_id', $tenant?->id)
@@ -187,5 +198,30 @@ class MapaController extends Controller
             'meta_capturas' => $meta->meta_capturas,
             'fuente_meta' => $meta->fuente_meta,
         ]);
+    }
+
+    /**
+     * El brigadista solo puede consultar sus zonas asignadas; para secciones
+     * ajenas responde 403. Gestión y demás roles no están acotados.
+     */
+    private function asegurarAccesoSeccion(Seccion $seccion): void
+    {
+        $viewer = $this->miMembership();
+
+        abort_if(
+            $viewer !== null && ! $viewer->puedeCapturarEnSeccion($seccion->id),
+            403,
+        );
+    }
+
+    /**
+     * Membresía activa del usuario en el tenant actual.
+     */
+    private function miMembership(): ?Membership
+    {
+        $user = request()->user();
+        $tenant = TenantContext::get();
+
+        return ($user !== null && $tenant !== null) ? $user->membershipEn($tenant) : null;
     }
 }

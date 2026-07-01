@@ -39,4 +39,9 @@ class MembershipFactory extends Factory
     {
         return $this->state(['rol' => 'admin']);
     }
+
+    public function enlace(): static
+    {
+        return $this->state(['rol' => 'enlace']);
+    }
 }

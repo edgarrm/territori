@@ -13,10 +13,12 @@ use App\Models\User;
 use App\Support\Tenancy\TenantContext;
 use Database\Seeders\CartografiaSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Concerns\AsignaZonas;
 use Tests\TestCase;
 
 class LoteriaTest extends TestCase
 {
+    use AsignaZonas;
     use RefreshDatabase;
 
     /**
@@ -28,7 +30,8 @@ class LoteriaTest extends TestCase
         $municipio = Municipio::query()->where('clave', 12)->first();
         $tenant = Tenant::factory()->create(['municipio_id' => $municipio->id]);
         $user = User::factory()->create();
-        Membership::create(['tenant_id' => $tenant->id, 'user_id' => $user->id, 'rol' => 'brigadista']);
+        $membership = Membership::create(['tenant_id' => $tenant->id, 'user_id' => $user->id, 'rol' => 'brigadista']);
+        $this->asignarTodasLasZonas($membership, $municipio->id);
         TenantContext::set($tenant);
         $aviso = AvisoPrivacidad::factory()->create(['tenant_id' => $tenant->id]);
 

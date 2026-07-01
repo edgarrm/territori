@@ -70,7 +70,7 @@ class GestionBrigadistasTest extends TestCase
         [$tenant, $coord] = $this->tenantConCoordinador();
 
         $this->actuandoEn($coord, $tenant)
-            ->postJson('/brigadistas', ['email' => 'nuevo@x.com', 'name' => 'Nuevo', 'meta_diaria' => 10])
+            ->postJson('/brigadistas', ['email' => 'nuevo@x.com', 'name' => 'Nuevo', 'rol' => 'brigadista', 'meta_diaria' => 10])
             ->assertCreated();
 
         $user = User::where('email', 'nuevo@x.com')->first();
@@ -81,6 +81,78 @@ class GestionBrigadistasTest extends TestCase
             'rol' => 'brigadista',
             'meta_diaria' => 10,
         ]);
+    }
+
+    public function test_admin_puede_crear_coordinador(): void
+    {
+        $municipio = Municipio::factory()->create();
+        $tenant = Tenant::factory()->create(['municipio_id' => $municipio->id]);
+        $adminUser = User::factory()->create();
+        Membership::factory()->admin()->create(['tenant_id' => $tenant->id, 'user_id' => $adminUser->id]);
+
+        $this->actuandoEn($adminUser, $tenant)
+            ->postJson('/brigadistas', ['email' => 'coord@x.com', 'rol' => 'coordinador'])
+            ->assertCreated();
+
+        $this->assertDatabaseHas('memberships', [
+            'tenant_id' => $tenant->id,
+            'rol' => 'coordinador',
+        ]);
+    }
+
+    public function test_coordinador_puede_crear_enlace(): void
+    {
+        [$tenant, $coord] = $this->tenantConCoordinador();
+
+        $this->actuandoEn($coord, $tenant)
+            ->postJson('/brigadistas', ['email' => 'enlace@x.com', 'rol' => 'enlace'])
+            ->assertCreated();
+
+        $this->assertDatabaseHas('memberships', [
+            'tenant_id' => $tenant->id,
+            'rol' => 'enlace',
+        ]);
+    }
+
+    public function test_coordinador_no_puede_crear_coordinador(): void
+    {
+        [$tenant, $coord] = $this->tenantConCoordinador();
+
+        $this->actuandoEn($coord, $tenant)
+            ->post('/brigadistas', ['email' => 'otro@x.com', 'rol' => 'coordinador'])
+            ->assertSessionHasErrors('rol');
+
+        // La validación corta antes de crear al usuario o su membership.
+        $this->assertDatabaseMissing('users', ['email' => 'otro@x.com']);
+    }
+
+    public function test_coordinador_no_puede_crear_admin(): void
+    {
+        [$tenant, $coord] = $this->tenantConCoordinador();
+
+        $this->actuandoEn($coord, $tenant)
+            ->post('/brigadistas', ['email' => 'root@x.com', 'rol' => 'admin'])
+            ->assertSessionHasErrors('rol');
+
+        $this->assertDatabaseMissing('users', ['email' => 'root@x.com']);
+    }
+
+    public function test_index_expone_roles_asignables_y_otros_miembros(): void
+    {
+        [$tenant, $coord] = $this->tenantConCoordinador();
+        $enlace = Membership::factory()->enlace()->create(['tenant_id' => $tenant->id]);
+        Membership::factory()->brigadista()->create(['tenant_id' => $tenant->id]);
+
+        $this->actuandoEn($coord, $tenant)->get('/brigadistas')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Brigadistas')
+                // Coordinador solo puede asignar brigadista y enlace.
+                ->has('rolesAsignables', 2)
+                // Otros miembros: el coordinador actual + el enlace (no brigadistas).
+                ->has('otrosMiembros', 2)
+                ->where('otrosMiembros', fn ($miembros) => collect($miembros)->pluck('rol')->contains('enlace'))
+            );
     }
 
     public function test_activar_al_tope_devuelve_422(): void

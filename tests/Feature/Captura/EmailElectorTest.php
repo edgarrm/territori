@@ -13,10 +13,12 @@ use App\Support\Tenancy\TenantContext;
 use Database\Seeders\CartografiaSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Tests\Concerns\AsignaZonas;
 use Tests\TestCase;
 
 class EmailElectorTest extends TestCase
 {
+    use AsignaZonas;
     use RefreshDatabase;
 
     /**
@@ -29,7 +31,11 @@ class EmailElectorTest extends TestCase
 
         $tenant = Tenant::factory()->create(['municipio_id' => $municipio->id]);
         $user = User::factory()->create();
-        Membership::create(['tenant_id' => $tenant->id, 'user_id' => $user->id, 'rol' => $rol]);
+        $membership = Membership::create(['tenant_id' => $tenant->id, 'user_id' => $user->id, 'rol' => $rol]);
+
+        if ($rol === 'brigadista') {
+            $this->asignarTodasLasZonas($membership, $municipio->id);
+        }
 
         TenantContext::set($tenant);
         $aviso = AvisoPrivacidad::factory()->create(['tenant_id' => $tenant->id]);
