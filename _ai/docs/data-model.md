@@ -80,7 +80,7 @@
 | id | bigint PK | |
 | tenant_id | bigint FK→tenants | indexado |
 | user_id | bigint FK→users | indexado |
-| rol | varchar(20) | `admin\|coordinador\|brigadista` (rol EN esta campaña) |
+| rol | varchar(20) | `admin\|coordinador\|brigadista\|enlace` (rol EN esta campaña; `enlace` = acceso restringido a sus redes ciudadanas, ADR-006) |
 | meta_diaria | integer NULL | solo si rol=brigadista; meta en ESTA campaña |
 | activo | boolean | default true; **un brigadista `activo` cuenta para facturación** (P4) |
 | activado_en | timestamptz | última activación (trazabilidad de cobro) |
@@ -143,6 +143,19 @@
 | seccion_id | bigint FK→secciones NULL | sección sede |
 | ubicacion | GEOMETRY(Point,4326) NULL | |
 
+### 🏢 redes_ciudadanas (ADR-006)
+| Columna | Tipo | Notas |
+|---|---|---|
+| id | bigint PK | |
+| tenant_id | bigint | |
+| enlace_membership_id | bigint FK→memberships | el enlace responsable (membresía de CUALQUIER rol) |
+| nombre | varchar(160) | |
+| descripcion | text NULL | |
+| activa | boolean | default true |
+| Índice | (tenant_id, enlace_membership_id) | |
+
+> La red no fija sección: cada registro resuelve la suya por `seccion_id`/GPS. El enlace ve la PII completa de todos los registros de sus redes.
+
 ### 🏢 electores ⟵ entidad central
 | Columna | Tipo | Notas |
 |---|---|---|
@@ -150,12 +163,14 @@
 | tenant_id | bigint | indexado, compuesto (tenant_id,seccion_id) |
 | seccion_id | bigint FK→secciones | |
 | membership_id | bigint FK→memberships | brigadista (membresía) que capturó; garantiza pertenencia al tenant |
-| modo_captura | varchar(12) | `loteria\|individual\|evento` |
+| modo_captura | varchar(20) | `loteria\|individual\|evento\|red_ciudadana` (ADR-006) |
 | loteria_id | bigint FK→loterias NULL | |
 | evento_id | bigint FK→eventos NULL | |
+| red_ciudadana_id | bigint FK→redes_ciudadanas NULL | origen cuando modo=red_ciudadana (ADR-006) |
 | nombre | varchar(160) | |
 | telefono | varchar (encrypted) | cifrado en reposo (ADR-004) |
 | telefono_hash | varchar(64) NULL | hash determinista normalizado, para dedup; indexado |
+| email | varchar (encrypted) NULL | PII opcional cifrada (ADR-004) |
 | domicilio | varchar (encrypted) NULL | |
 | ubicacion | GEOMETRY(Point,4326) NULL | GPS de captura |
 | observaciones | text NULL | nota fija / característica permanente |

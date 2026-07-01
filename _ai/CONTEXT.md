@@ -16,6 +16,7 @@ SaaS multi-tenant de **gestión territorial para campañas políticas** en Méxi
 - **Coordinador**: vive en el dashboard, reasigna esfuerzo. Rol `coordinador`.
 - **Candidato/Dirección**: ve macro y proyección. (usa rol `coordinador` o `admin`).
 - **Admin SaaS**: da de alta campañas. Rol `admin`.
+- **Enlace**: responsable de una red ciudadana. Rol `enlace` = acceso restringido: solo sus redes ciudadanas (agregar/ver registros); todo lo demás → 403 (ADR-006).
 
 ---
 
@@ -35,9 +36,10 @@ SaaS multi-tenant de **gestión territorial para campañas políticas** en Méxi
 
 1. **ADR-001 Multi-tenancy**: single-DB, `tenant_id` por columna, trait `BelongsToTenant` con global scope. `tenant_id` se resuelve del usuario autenticado, **NUNCA del request**. Catálogos INE (entidades/municipios/secciones) son **globales, sin tenant_id**.
 2. **ADR-002 PostGIS**: geometrías en SRID 4326. Detección de sección por GPS con `ST_Contains`. Geometría servida al front siempre simplificada/cacheada.
-3. **ADR-003 Captura unificada**: los 3 modos (lotería/individual/evento) escriben en `electores`, diferenciados por `modo_captura`. La cobertura del mapa se lee de la tabla derivada `cobertura_seccion`, **nunca** se agrega en vivo sobre `electores`.
+3. **ADR-003 Captura unificada**: los modos (lotería/individual/evento/red_ciudadana) escriben en `electores`, diferenciados por `modo_captura`. La cobertura del mapa se lee de la tabla derivada `cobertura_seccion`, **nunca** se agrega en vivo sobre `electores`.
 4. **ADR-004 Privacidad**: datos personales bajo LFPDPPP. NO se captura intención de voto. Consentimiento obligatorio. Teléfono/domicilio cifrados; `telefono_hash` para dedup. Derechos ARCO soportados.
 5. **ADR-005 White-label + facturación**: marca por tenant (`marca_nombre/logo/color/subdominio`), resolución de tenant por subdominio o tras login. Cobro por **brigadista activo** = membership con `rol=brigadista` y `activo=true`; `tenants.limite_brigadistas` por plan.
+6. **ADR-006 Red ciudadana + rol enlace**: modo de captura `red_ciudadana` (modelo `RedCiudadana`, tenant-scoped) con un enlace responsable (`enlace_membership_id`, membresía de cualquier rol). El rol `enlace` es de acceso restringido: solo sus redes; el resto del dominio se agrupa bajo `rol:brigadista,coordinador,admin` en `routes/web.php`.
 
 ## Modelo de datos
 
