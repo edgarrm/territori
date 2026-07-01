@@ -18,7 +18,9 @@ _ai/
 │   ├── ADR-001-multi-tenancy.md
 │   ├── ADR-002-postgis.md
 │   ├── ADR-003-captura-y-cobertura.md
-│   └── ADR-004-privacidad.md
+│   ├── ADR-004-privacidad.md
+│   ├── ADR-005-whitelabel-facturacion.md
+│   └── ADR-006-red-ciudadana-y-enlace.md
 ├── specs/                             ← una spec por feature, ANTES de implementar
 │   ├── _template.spec.md
 │   └── import-cartografia.spec.md     ← Sprint 1, listo para implementar

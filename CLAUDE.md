@@ -214,3 +214,24 @@ Vue components must have a single root element.
 - IMPORTANT: Activate `inertia-vue-development` when working with Inertia Vue client-side patterns.
 
 </laravel-boost-guidelines>
+
+# Dominio de Territori
+
+La fuente de verdad del dominio vive en `_ai/` (`CONTEXT.md`, `docs/data-model.md`, `adrs/`). Léela antes de tocar el dominio. Resumen de los conceptos que más se olvidan:
+
+## Roles (multi-tenant)
+
+El rol vive en `memberships.rol` (nunca en `users`), se valida con el middleware `rol:` (`EnsureRol`) y con la membership activa del tenant. Valores:
+
+- `admin`, `coordinador`, `brigadista` — roles de campo/gestión (ADR-001, ADR-004).
+- `enlace` — **acceso restringido**: solo a *sus* redes ciudadanas (agregar y ver registros). Mapa, dashboard, brigadistas, metas, etc. le responden **403**. Aterriza en `redes-ciudadanas` tras login (`Membership::rutaInicial()`). Ver ADR-006.
+
+Helpers: `Membership::esBrigadista()`, `esEnlace()`, `esGestion()`. Al agregar rutas del dominio general, cuélgalas del grupo `rol:brigadista,coordinador,admin` en `routes/web.php` para que el rol `enlace` quede fuera.
+
+## Modos de captura (`electores.modo_captura`)
+
+`individual | loteria | evento | red_ciudadana`. La orquestación está en `app/Actions/Electores/CapturarElector.php` (resuelve lotería/evento/red y la sección). Cada origen tiene su FK espejo: `loteria_id`, `evento_id`, `red_ciudadana_id`. Una **red ciudadana** (`RedCiudadana`) tiene un enlace responsable (`enlace_membership_id`, membership de cualquier rol) y no fija sección: cada registro resuelve la suya por `seccion_id`/GPS. Ver ADR-003 y ADR-006.
+
+## PII (ADR-004)
+
+`telefono`, `email` y `domicilio` son PII: cast `encrypted` en `Elector`, enmascarados en presentación con `App\Support\Pii` según `ElectorController::puedeVerPii()`. El cifrado impide búsqueda parcial por teléfono/email (solo por nombre con `ILIKE`, o por `telefono_hash` exacto para dedup). El enlace ve la PII completa de todos los registros de sus redes.

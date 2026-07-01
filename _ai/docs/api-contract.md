@@ -39,14 +39,19 @@
 ## Captura de electores
 - `GET /captura` — `captura` · página Inertia (lotería / individual / evento).
 - `POST /api/electores` — `electores.store`
-  body: `{ modo_captura:"loteria|individual|evento", seccion_id?, loteria_id?, evento_id?, nombre, telefono, domicilio?, ubicacion?{lat,lng}, observaciones?, consentimiento:true, aviso_privacidad_id }`.
-  Reglas: `loteria`→sección heredada de la lotería abierta; `evento`→sección heredada del evento (fallback GPS); si falta `seccion_id` y hay `ubicacion`→`ST_Contains`; rechaza si `consentimiento!=true`; dedup por `telefono_hash`. `membership_id` se resuelve en el servidor.
+  body: `{ modo_captura:"loteria|individual|evento|red_ciudadana", seccion_id?, loteria_id?, evento_id?, red_ciudadana_id?, nombre, telefono, email?, domicilio?, ubicacion?{lat,lng}, observaciones?, consentimiento:true, aviso_privacidad_id }`.
+  Reglas: `loteria`→sección heredada de la lotería abierta; `evento`→sección heredada del evento (fallback GPS); `red_ciudadana`→sección por `seccion_id`/GPS y valida que quien captura sea el enlace de la red (o gestión); si falta `seccion_id` y hay `ubicacion`→`ST_Contains`; rechaza si `consentimiento!=true`; dedup por `telefono_hash`. `email` opcional (validado como email). El rol `enlace` solo puede `modo_captura=red_ciudadana`. `membership_id` se resuelve en el servidor.
   → `201 { id, seccion_id, ... }` · `409` duplicado (con id existente).
 - `GET /api/electores/{elector}` — `electores.show` · ficha + observaciones (JSON).
 - `GET /electores/{elector}` — `electores.page` · página Inertia: ficha editable + timeline de interacciones.
 - `PUT /api/electores/{elector}` — `electores.update` · edita `nombre/telefono/domicilio/observaciones` (re-hashea si cambia el teléfono; `409` si colisiona con otro elector).
 - `DELETE /api/electores/{elector}` — `electores.destroy` *(gestión)* · **cancelación ARCO**: baja lógica + scrub de PII + registra `solicitudes_arco` + recobertura.
-- `GET /api/secciones/{seccion}/electores` — `secciones.electores` · lista paginada (scoped).
+- `GET /api/secciones/{seccion}/electores` — `secciones.electores` · lista paginada (25/pág, scoped). Query `?q=` filtra por **nombre** (ILIKE; el teléfono cifrado no admite búsqueda parcial). Cada fila incluye `origen` legible (Individual / Lotería / Evento: X / Red: Y).
+
+## Redes ciudadanas (ADR-006)
+- `GET /redes-ciudadanas` — `redes-ciudadanas.index` · página Inertia. El enlace ve solo sus redes; gestión ve todas y puede crear. Accesible al rol `enlace`.
+- `POST /redes-ciudadanas` — `redes-ciudadanas.store` *(gestión)* · crea red y designa enlace: `{ nombre, descripcion?, enlace_membership_id }`.
+- `GET /api/redes-ciudadanas/{red}/registros` — `redes-ciudadanas.registros` · registros de la red (paginado). Solo su enlace o gestión (403 si no); PII completa.
 
 ## Loterías (sesión de captura masiva)
 - `POST /api/loterias` — `loterias.store` · abre sesión (una abierta por brigadista; reabrir devuelve la existente).
