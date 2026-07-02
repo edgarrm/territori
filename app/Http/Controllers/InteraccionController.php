@@ -6,7 +6,10 @@ use App\Actions\Interacciones\RegistrarInteraccion;
 use App\Http\Requests\StoreInteraccionRequest;
 use App\Models\Elector;
 use App\Models\Interaccion;
+use App\Models\Seccion;
 use App\Support\Tenancy\TenantContext;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -52,14 +55,44 @@ class InteraccionController extends Controller
     }
 
     /**
-     * Agenda del día: seguimientos vencidos no atendidos. Brigadista ve los
-     * suyos; coordinador/admin ven todos los del tenant (rol desde la membership).
+     * Agenda del día: seguimientos vencidos no atendidos. La lista se carga desde
+     * el cliente vía agendaData (paginada + búsqueda), como en el detalle de sección.
      */
-    public function agenda(Request $request): Response
+    public function agenda(): Response
     {
         return Inertia::render('Agenda', [
-            'pendientes' => $this->pendientes($request),
+            'secciones' => $this->seccionesAccesibles(),
         ]);
+    }
+
+    /**
+     * Secciones que el usuario puede usar como filtro: gestión todas las del
+     * municipio; brigadista/anfitrión solo sus zonas asignadas (espejo del
+     * catálogo de LoteriaController).
+     *
+     * @return array<int, array{id: int, numero: int}>
+     */
+    private function seccionesAccesibles(): array
+    {
+        $tenant = TenantContext::get();
+        $viewer = $tenant !== null ? request()->user()?->membershipEn($tenant) : null;
+
+        if ($viewer === null) {
+            return [];
+        }
+
+        $query = $viewer->esGestion()
+            ? Seccion::query()->where('municipio_id', $tenant?->municipio_id)
+            : $viewer->secciones();
+
+        return $query
+            ->orderBy('numero')
+            ->get(['secciones.id', 'numero'])
+            ->map(fn (Seccion $seccion): array => [
+                'id' => $seccion->id,
+                'numero' => $seccion->numero,
+            ])
+            ->all();
     }
 
     public function agendaData(Request $request): JsonResponse
@@ -68,32 +101,59 @@ class InteraccionController extends Controller
     }
 
     /**
-     * @return array<int, array<string, mixed>>
+     * Seguimientos vencidos no atendidos, paginados. Brigadista ve los suyos;
+     * coordinador/admin ven todos los del tenant (rol desde la membership).
+     * Filtros opcionales: `q` (nombre del elector, ILIKE) y `secciones` (arreglo
+     * de ids de sección, del multiselect de secciones accesibles).
+     *
+     * @return LengthAwarePaginator<int, array<string, mixed>>
      */
-    private function pendientes(Request $request): array
+    private function pendientes(Request $request): LengthAwarePaginator
     {
         $membership = $request->user()->membershipEn(TenantContext::get());
 
-        $query = Interaccion::query()
+        $busqueda = trim((string) $request->query('q', ''));
+        $secciones = array_values(array_filter(array_map(
+            'intval',
+            (array) $request->query('secciones', []),
+        )));
+
+        return Interaccion::query()
             ->pendientes()
-            ->with('elector:id,nombre,seccion_id')
-            ->orderBy('proximo_seguimiento');
-
-        if ($membership->esBrigadista()) {
-            $query->where('membership_id', $membership->id);
-        }
-
-        return $query->get()->map(fn (Interaccion $i): array => [
-            'id' => $i->id,
-            'tipo' => $i->tipo,
-            'nota' => $i->nota,
-            'proximo_seguimiento' => $i->proximo_seguimiento?->toDateString(),
-            'elector' => [
-                'id' => $i->elector->id,
-                'nombre' => $i->elector->nombre,
-                'seccion_id' => $i->elector->seccion_id,
-            ],
-        ])->all();
+            ->with(['elector:id,nombre,seccion_id', 'elector.seccion:id,numero'])
+            ->when(
+                $membership->esBrigadista(),
+                fn (Builder $query) => $query->where('membership_id', $membership->id),
+            )
+            ->when(
+                $busqueda !== '',
+                fn (Builder $query) => $query->whereHas(
+                    'elector',
+                    fn (Builder $elector) => $elector->where('nombre', 'ILIKE', '%'.$busqueda.'%'),
+                ),
+            )
+            ->when(
+                $secciones !== [],
+                fn (Builder $query) => $query->whereHas(
+                    'elector',
+                    fn (Builder $elector) => $elector->whereIn('seccion_id', $secciones),
+                ),
+            )
+            ->orderBy('proximo_seguimiento')
+            ->paginate(25)
+            ->withQueryString()
+            ->through(fn (Interaccion $i): array => [
+                'id' => $i->id,
+                'tipo' => $i->tipo,
+                'nota' => $i->nota,
+                'proximo_seguimiento' => $i->proximo_seguimiento?->toDateString(),
+                'elector' => [
+                    'id' => $i->elector->id,
+                    'nombre' => $i->elector->nombre,
+                    'seccion_id' => $i->elector->seccion_id,
+                    'seccion_numero' => $i->elector->seccion?->numero,
+                ],
+            ]);
     }
 
     /**
