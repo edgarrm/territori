@@ -5,6 +5,7 @@ import {
     CalendarCheck,
     CalendarDays,
     ClipboardList,
+    Contact,
     FolderGit2,
     LayoutGrid,
     Map,
@@ -70,6 +71,7 @@ const mainNavItems = computed<NavItem[]>(() => {
 
     if (esGestion.value) {
         items.push(
+            { title: 'Capturados', href: '/capturados', icon: Contact },
             { title: 'Metas', href: '/metas', icon: Target },
             { title: 'Miembros', href: '/brigadistas', icon: Users },
             {

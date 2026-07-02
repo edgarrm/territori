@@ -79,6 +79,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
                 // Bandeja de solicitudes ARCO: listar y atender (LFPDPPP, ADR-004).
                 Route::get('solicitudes-arco', [SolicitudArcoController::class, 'index'])->name('solicitudes-arco.index');
                 Route::put('api/solicitudes-arco/{solicitud}/atendido', [SolicitudArcoController::class, 'atendido'])->name('solicitudes-arco.atendido');
+
+                // Lista global de capturados (todos los electores del municipio),
+                // paginada y con filtros por nombre, tipo de captura y sección.
+                Route::get('capturados', [ElectorController::class, 'index'])->name('capturados');
+                Route::get('api/capturados', [ElectorController::class, 'data'])->name('capturados.data');
             });
 
             // Captura de electores (brigadista/coordinador/admin; el 403 fino lo aplica el FormRequest/acción).

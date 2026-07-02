@@ -13,6 +13,7 @@ use App\Models\Membership;
 use App\Models\Seccion;
 use App\Support\Pii;
 use App\Support\Tenancy\TenantContext;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -20,6 +21,19 @@ use Inertia\Response;
 
 class ElectorController extends Controller
 {
+    /**
+     * Catálogo de tipos de captura (modo_captura) para el filtro de la lista
+     * global de capturados. Espejo de los modos válidos en StoreElectorRequest.
+     *
+     * @var array<string, string>
+     */
+    private const MODOS = [
+        'enlace_seccional' => 'Enlace Seccional',
+        'loteria' => 'Lotería',
+        'evento' => 'Evento',
+        'red_ciudadana' => 'Red Ciudadana',
+    ];
+
     public function store(StoreElectorRequest $request, CapturarElector $capturar): JsonResponse
     {
         $membership = $request->user()->membershipEn(TenantContext::get());
@@ -94,6 +108,91 @@ class ElectorController extends Controller
                 'atendido_en' => $i->atendido_en?->toIso8601String(),
             ])->all(),
         ]);
+    }
+
+    /**
+     * Vista global de capturados (solo gestión, restringida por ruta). Expone
+     * los catálogos para los filtros: secciones del municipio (para mapear
+     * números en la tabla), secciones disponibles del rol y tipos de captura.
+     */
+    public function index(): Response
+    {
+        $viewer = $this->miMembership();
+
+        $secciones = Seccion::query()
+            ->where('municipio_id', TenantContext::get()?->municipio_id)
+            ->orderBy('numero')
+            ->get(['id', 'numero'])
+            ->map(fn (Seccion $seccion): array => [
+                'id' => $seccion->id,
+                'numero' => $seccion->numero,
+            ])
+            ->all();
+
+        return Inertia::render('Capturados', [
+            'secciones' => $secciones,
+            'seccionesFiltro' => $viewer?->seccionesDisponibles() ?? [],
+            'modos' => array_map(
+                fn (string $valor, string $etiqueta): array => ['valor' => $valor, 'etiqueta' => $etiqueta],
+                array_keys(self::MODOS),
+                array_values(self::MODOS),
+            ),
+        ]);
+    }
+
+    /**
+     * Lista paginada de capturados para el cliente. Filtros opcionales: `q`
+     * (nombre, ILIKE), `modos` (arreglo de tipos de captura) y `secciones`
+     * (arreglo de ids de sección). El global scope de tenant acota al tenant
+     * activo; la ruta ya restringe a gestión (ve todo el municipio).
+     */
+    public function data(Request $request): JsonResponse
+    {
+        $viewer = $this->miMembership();
+
+        $busqueda = trim((string) $request->query('q', ''));
+
+        $secciones = array_values(array_filter(array_map(
+            'intval',
+            (array) $request->query('secciones', []),
+        )));
+
+        $modos = array_values(array_intersect(
+            array_map('strval', (array) $request->query('modos', [])),
+            array_keys(self::MODOS),
+        ));
+
+        $electores = Elector::query()
+            ->with(['evento:id,nombre', 'redCiudadana:id,nombre,enlace_membership_id', 'seccion:id,numero'])
+            ->when(
+                $busqueda !== '',
+                fn (Builder $query) => $query->where('nombre', 'ILIKE', '%'.$busqueda.'%'),
+            )
+            ->when(
+                $modos !== [],
+                fn (Builder $query) => $query->whereIn('modo_captura', $modos),
+            )
+            ->when(
+                $secciones !== [],
+                fn (Builder $query) => $query->whereIn('seccion_id', $secciones),
+            )
+            ->latest()
+            ->paginate(25)
+            ->withQueryString()
+            ->through(fn (Elector $elector): array => [
+                'id' => $elector->id,
+                'nombre' => $elector->nombre,
+                'seccion_id' => $elector->seccion_id,
+                'seccion_numero' => $elector->seccion?->numero,
+                'modo_captura' => $elector->modo_captura,
+                'origen' => $this->origen($elector),
+                'telefono' => $this->puedeVerPii($elector, $viewer)
+                    ? $elector->telefono
+                    : Pii::enmascararTelefono($elector->telefono),
+                'capturado_en' => $elector->created_at?->toIso8601String(),
+            ]);
+
+        return response()->json($electores);
     }
 
     public function indexPorSeccion(Request $request, Seccion $seccion): JsonResponse
