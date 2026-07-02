@@ -112,6 +112,8 @@ class RedCiudadanaTest extends TestCase
                 'seccion_id' => $seccion->id,
                 'nombre' => 'Vecino Uno',
                 'telefono' => '5512340001',
+                'domicilio' => 'Av. Vecinal 45',
+                'observaciones' => 'Contacto de la cuadra',
                 'consentimiento' => true,
                 'aviso_privacidad_id' => $this->aviso->id,
             ]);
@@ -123,6 +125,8 @@ class RedCiudadanaTest extends TestCase
         $this->assertSame('red_ciudadana', $elector->modo_captura);
         $this->assertSame($red->id, $elector->red_ciudadana_id);
         $this->assertSame($seccion->id, $elector->seccion_id);
+        $this->assertSame('Av. Vecinal 45', $elector->domicilio);
+        $this->assertSame('Contacto de la cuadra', $elector->observaciones);
     }
 
     public function test_rol_enlace_no_puede_capturar_en_otro_modo(): void

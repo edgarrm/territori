@@ -165,6 +165,8 @@ async function guardar() {
         nombre: form.value.nombre,
         telefono: form.value.telefono,
         email: form.value.email || null,
+        domicilio: form.value.domicilio || null,
+        observaciones: form.value.observaciones || null,
         consentimiento: form.value.consentimiento,
         aviso_privacidad_id: aviso.value.id,
     };
@@ -175,8 +177,6 @@ async function guardar() {
 
     if (modo.value === 'enlace_seccional') {
         payload.seccion_id = form.value.seccionId;
-        payload.domicilio = form.value.domicilio || null;
-        payload.observaciones = form.value.observaciones || null;
         payload.ubicacion = form.value.ubicacion;
     }
 
@@ -317,6 +317,14 @@ function ubicarme() {
                     type="email"
                     placeholder="Email (opcional)"
                     inputmode="email"
+                />
+                <Input
+                    v-model="form.domicilio"
+                    placeholder="Domicilio (opcional)"
+                />
+                <Input
+                    v-model="form.observaciones"
+                    placeholder="Observaciones (opcional)"
                 />
                 <label class="flex items-center gap-2 text-sm">
                     <input v-model="form.consentimiento" type="checkbox" />
@@ -487,6 +495,14 @@ function ubicarme() {
                     type="email"
                     placeholder="Email (opcional)"
                     inputmode="email"
+                />
+                <Input
+                    v-model="form.domicilio"
+                    placeholder="Domicilio (opcional)"
+                />
+                <Input
+                    v-model="form.observaciones"
+                    placeholder="Observaciones (opcional)"
                 />
 
                 <label class="flex items-center gap-2 text-sm">

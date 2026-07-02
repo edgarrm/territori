@@ -271,6 +271,35 @@ class LoteriaTest extends TestCase
         $this->assertSame($loteria->id, $elector->loteria_id);
     }
 
+    public function test_captura_modo_loteria_persiste_domicilio_y_observaciones(): void
+    {
+        [$tenant, $user, $membership, $municipio, $aviso] = $this->setupCampana();
+        $seccion = Seccion::query()->where('municipio_id', $municipio->id)->where('numero', 2)->first();
+
+        $loteria = Loteria::factory()->create([
+            'tenant_id' => $tenant->id,
+            'membership_id' => $membership->id,
+            'seccion_id' => $seccion->id,
+        ]);
+
+        $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->postJson('/api/electores', [
+                'modo_captura' => 'loteria',
+                'loteria_id' => $loteria->id,
+                'nombre' => 'Voto Con Domicilio',
+                'telefono' => '5512345678',
+                'domicilio' => 'Calle Falsa 123',
+                'observaciones' => 'Simpatizante activo',
+                'consentimiento' => true,
+                'aviso_privacidad_id' => $aviso->id,
+            ])->assertCreated();
+
+        TenantContext::set($tenant);
+        $elector = Elector::query()->first();
+        $this->assertSame('Calle Falsa 123', $elector->domicilio);
+        $this->assertSame('Simpatizante activo', $elector->observaciones);
+    }
+
     public function test_modo_loteria_sin_loteria_id_falla(): void
     {
         [$tenant, $user, , , $aviso] = $this->setupCampana();

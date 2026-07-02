@@ -133,6 +133,8 @@ const form = reactive({
     nombre: '',
     telefono: '',
     email: '',
+    domicilio: '',
+    observaciones: '',
     seccionId: props.secciones[0]?.id ?? null,
     consentimiento: false,
 });
@@ -141,6 +143,8 @@ function limpiarForm() {
     form.nombre = '';
     form.telefono = '';
     form.email = '';
+    form.domicilio = '';
+    form.observaciones = '';
     form.consentimiento = false;
 }
 
@@ -179,6 +183,8 @@ async function guardarRegistro() {
                 nombre: form.nombre,
                 telefono: form.telefono,
                 email: form.email || null,
+                domicilio: form.domicilio || null,
+                observaciones: form.observaciones || null,
                 consentimiento: form.consentimiento,
                 aviso_privacidad_id: aviso.value.id,
             }),
@@ -384,6 +390,14 @@ async function guardarRegistro() {
                         type="email"
                         placeholder="Email (opcional)"
                         inputmode="email"
+                    />
+                    <Input
+                        v-model="form.domicilio"
+                        placeholder="Domicilio (opcional)"
+                    />
+                    <Input
+                        v-model="form.observaciones"
+                        placeholder="Observaciones (opcional)"
                     />
 
                     <label class="text-sm font-medium">Sección</label>
