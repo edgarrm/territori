@@ -28,6 +28,10 @@ class StoreBrigadistaRequest extends FormRequest
             'rol' => ['required', Rule::in($this->rolesAsignables())],
             'meta_diaria' => ['nullable', 'integer', 'min:0'],
             'activo' => ['boolean'],
+            // Zonas iniciales; solo se aplican a roles con zonas (brigadista y
+            // anfitrión). La pertenencia al municipio la valida AsignarZonas.
+            'seccion_ids' => ['sometimes', 'array'],
+            'seccion_ids.*' => ['integer'],
         ];
     }
 

@@ -76,6 +76,33 @@ const alta = ref({ email: '', name: '', rol: rolInicial, meta_diaria: 0 });
 const errorAlta = ref<string | null>(null);
 const procesando = ref(false);
 
+// Selector de zonas del alta (independiente del editor de zonas por fila). Solo
+// aplica a roles con zonas: brigadista y anfitrión.
+const altaZonasAbierto = ref(false);
+const altaSeleccion = ref<Set<number>>(new Set());
+
+function rolConZonas(rol: string): boolean {
+    return rol === 'brigadista' || rol === 'anfitrion';
+}
+
+function toggleSeccionAlta(id: number) {
+    if (altaSeleccion.value.has(id)) {
+        altaSeleccion.value.delete(id);
+    } else {
+        altaSeleccion.value.add(id);
+    }
+
+    altaSeleccion.value = new Set(altaSeleccion.value);
+}
+
+function seleccionarTodasAlta() {
+    altaSeleccion.value = new Set(props.secciones.map((s) => s.id));
+}
+
+function vaciarSeleccionAlta() {
+    altaSeleccion.value = new Set();
+}
+
 function csrf(): string {
     return (
         document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')
@@ -100,7 +127,13 @@ async function agregar() {
     procesando.value = true;
 
     try {
-        const res = await enviar(store.url(), 'POST', alta.value);
+        const seccionIds = rolConZonas(alta.value.rol)
+            ? [...altaSeleccion.value]
+            : [];
+        const res = await enviar(store.url(), 'POST', {
+            ...alta.value,
+            seccion_ids: seccionIds,
+        });
 
         if (res.status === 422) {
             errorAlta.value =
@@ -110,6 +143,8 @@ async function agregar() {
         }
 
         alta.value = { email: '', name: '', rol: rolInicial, meta_diaria: 0 };
+        altaSeleccion.value = new Set();
+        altaZonasAbierto.value = false;
         router.reload({
             only: ['brigadistas', 'otrosMiembros', 'facturacion'],
         });
@@ -234,6 +269,61 @@ async function guardarZonas(m: { membership_id: number }) {
                     min="0"
                     class="w-24"
                 />
+            </div>
+            <div
+                v-if="rolConZonas(alta.rol)"
+                class="relative flex flex-col gap-1"
+            >
+                <label class="text-xs text-muted-foreground">Secciones</label>
+                <button
+                    type="button"
+                    class="h-9 rounded-md border border-input bg-background px-3 text-left text-sm"
+                    @click="altaZonasAbierto = !altaZonasAbierto"
+                >
+                    {{ altaSeleccion.size }} secciones
+                </button>
+                <div
+                    v-if="altaZonasAbierto"
+                    class="absolute top-full z-10 mt-1 w-56 rounded border bg-background p-2 shadow-md"
+                >
+                    <div class="mb-2 flex items-center justify-between gap-2">
+                        <span class="text-xs text-muted-foreground">
+                            {{ altaSeleccion.size }} de {{ secciones.length }}
+                        </span>
+                        <div class="flex gap-1">
+                            <button
+                                type="button"
+                                class="rounded border px-2 py-0.5 text-xs hover:bg-muted"
+                                @click="seleccionarTodasAlta"
+                            >
+                                Todas
+                            </button>
+                            <button
+                                type="button"
+                                class="rounded border px-2 py-0.5 text-xs hover:bg-muted"
+                                @click="vaciarSeleccionAlta"
+                            >
+                                Vaciar
+                            </button>
+                        </div>
+                    </div>
+                    <div
+                        class="max-h-48 overflow-auto rounded border bg-background p-2"
+                    >
+                        <label
+                            v-for="s in secciones"
+                            :key="s.id"
+                            class="flex items-center gap-2 py-0.5 text-xs"
+                        >
+                            <input
+                                type="checkbox"
+                                :checked="altaSeleccion.has(s.id)"
+                                @change="toggleSeccionAlta(s.id)"
+                            />
+                            {{ s.numero }}
+                        </label>
+                    </div>
+                </div>
             </div>
             <Button type="submit" :disabled="procesando || !alta.rol"
                 >Agregar miembro</Button

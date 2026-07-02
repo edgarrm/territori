@@ -12,6 +12,8 @@ use App\Support\Tenancy\TenantContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 use RuntimeException;
@@ -71,18 +73,31 @@ class BrigadistaController extends Controller
         return ($user !== null && $tenant !== null) ? $user->membershipEn($tenant) : null;
     }
 
-    public function store(StoreBrigadistaRequest $request, InvitarMiembro $invitar): JsonResponse|RedirectResponse
+    public function store(StoreBrigadistaRequest $request, InvitarMiembro $invitar, AsignarZonas $asignar): JsonResponse|RedirectResponse
     {
         $tenant = TenantContext::get();
+        $seccionIds = $request->validated('seccion_ids', []);
 
         try {
-            $invitar->handle($tenant, [
-                'email' => $request->validated('email'),
-                'name' => $request->validated('name'),
-                'rol' => $request->validated('rol'),
-                'meta_diaria' => $request->validated('meta_diaria'),
-                'activo' => $request->boolean('activo', true),
-            ]);
+            // Alta y zonas en una transacción: si las secciones no son válidas
+            // (AsignarZonas lanza ValidationException), no queda un miembro sin
+            // sus zonas (estado parcial).
+            DB::transaction(function () use ($invitar, $asignar, $tenant, $request, $seccionIds): void {
+                $miembro = $invitar->handle($tenant, [
+                    'email' => $request->validated('email'),
+                    'name' => $request->validated('name'),
+                    'rol' => $request->validated('rol'),
+                    'meta_diaria' => $request->validated('meta_diaria'),
+                    'activo' => $request->boolean('activo', true),
+                ]);
+
+                if ($seccionIds !== [] && ($miembro->esBrigadista() || $miembro->esAnfitrion())) {
+                    $asignar->handle($miembro, $seccionIds);
+                }
+            });
+        } catch (ValidationException $e) {
+            // Secciones fuera del municipio: la transacción ya revirtió el alta.
+            return response()->json(['message' => $e->getMessage()], 422);
         } catch (RuntimeException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }

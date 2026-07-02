@@ -111,6 +111,66 @@ class GestionBrigadistasTest extends TestCase
         ]);
     }
 
+    public function test_alta_asigna_zonas_a_brigadista(): void
+    {
+        [$tenant, $coord, $municipio] = $this->tenantConCoordinador();
+        $seccion = Seccion::factory()->create(['municipio_id' => $municipio->id]);
+
+        $this->actuandoEn($coord, $tenant)
+            ->postJson('/brigadistas', [
+                'email' => 'brig@x.com',
+                'rol' => 'brigadista',
+                'seccion_ids' => [$seccion->id],
+            ])
+            ->assertCreated();
+
+        $membership = Membership::where('tenant_id', $tenant->id)
+            ->where('rol', 'brigadista')
+            ->firstOrFail();
+
+        $this->assertDatabaseHas('brigadista_seccion', [
+            'tenant_id' => $tenant->id,
+            'membership_id' => $membership->id,
+            'seccion_id' => $seccion->id,
+        ]);
+    }
+
+    public function test_alta_ignora_zonas_para_rol_sin_zonas(): void
+    {
+        [$tenant, $coord, $municipio] = $this->tenantConCoordinador();
+        $seccion = Seccion::factory()->create(['municipio_id' => $municipio->id]);
+
+        $this->actuandoEn($coord, $tenant)
+            ->postJson('/brigadistas', [
+                'email' => 'enlace@x.com',
+                'rol' => 'enlace',
+                'seccion_ids' => [$seccion->id],
+            ])
+            ->assertCreated();
+
+        $this->assertDatabaseMissing('brigadista_seccion', [
+            'tenant_id' => $tenant->id,
+            'seccion_id' => $seccion->id,
+        ]);
+    }
+
+    public function test_alta_con_seccion_de_otro_municipio_no_crea_al_miembro(): void
+    {
+        [$tenant, $coord] = $this->tenantConCoordinador();
+        $ajena = Seccion::factory()->create(['municipio_id' => Municipio::factory()->create()->id]);
+
+        $this->actuandoEn($coord, $tenant)
+            ->postJson('/brigadistas', [
+                'email' => 'brig@x.com',
+                'rol' => 'brigadista',
+                'seccion_ids' => [$ajena->id],
+            ])
+            ->assertStatus(422);
+
+        // La transacción hace rollback: ni el usuario ni la membresía quedan.
+        $this->assertDatabaseMissing('users', ['email' => 'brig@x.com']);
+    }
+
     public function test_admin_puede_crear_coordinador(): void
     {
         $municipio = Municipio::factory()->create();
