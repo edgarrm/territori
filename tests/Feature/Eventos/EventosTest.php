@@ -24,6 +24,8 @@ class EventosTest extends TestCase
      */
     private function setupCampana(string $rol = 'brigadista'): array
     {
+        // La página de eventos es Inertia; sin build no hay manifest de Vite.
+        $this->withoutVite();
         (new CartografiaSeeder)->run(base_path('tests/Fixtures/cartografia/99-test'));
         $municipio = Municipio::query()->where('clave', 12)->first();
         $tenant = Tenant::factory()->create(['municipio_id' => $municipio->id]);
@@ -199,5 +201,77 @@ class EventosTest extends TestCase
         $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
             ->getJson("/api/eventos/{$eventoAjeno->id}/asistentes")
             ->assertNotFound();
+    }
+
+    public function test_data_pagina_eventos_a_15_por_pagina(): void
+    {
+        [$tenant, $user] = $this->setupCampana('coordinador');
+        Evento::factory()->count(16)->create(['tenant_id' => $tenant->id]);
+
+        $response = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->getJson('/api/eventos');
+
+        $response->assertOk();
+        $response->assertJsonCount(15, 'data');
+        $response->assertJsonPath('total', 16);
+        $response->assertJsonPath('last_page', 2);
+    }
+
+    public function test_data_busca_por_nombre_del_evento(): void
+    {
+        [$tenant, $user] = $this->setupCampana('coordinador');
+        Evento::factory()->create(['tenant_id' => $tenant->id, 'nombre' => 'Mitin Centro']);
+        Evento::factory()->create(['tenant_id' => $tenant->id, 'nombre' => 'Asamblea Norte']);
+
+        $response = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->getJson('/api/eventos?q=mitin');
+
+        $response->assertOk();
+        $response->assertJsonCount(1, 'data');
+        $response->assertJsonPath('data.0.nombre', 'Mitin Centro');
+    }
+
+    public function test_data_filtra_por_secciones(): void
+    {
+        [$tenant, $user, , $municipio] = $this->setupCampana('coordinador');
+        $una = Seccion::query()->where('municipio_id', $municipio->id)->where('numero', 1)->first();
+        $otra = Seccion::query()->where('municipio_id', $municipio->id)->where('numero', 2)->first();
+        Evento::factory()->create(['tenant_id' => $tenant->id, 'seccion_id' => $una->id]);
+        Evento::factory()->create(['tenant_id' => $tenant->id, 'seccion_id' => $otra->id]);
+
+        $response = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->getJson('/api/eventos?secciones[]='.$otra->id);
+
+        $response->assertOk();
+        $response->assertJsonCount(1, 'data');
+        $response->assertJsonPath('data.0.seccion_id', $otra->id);
+    }
+
+    public function test_index_seccionesfiltro_gestion_ve_todas_las_del_municipio(): void
+    {
+        [$tenant, $user, , $municipio] = $this->setupCampana('coordinador');
+        $total = Seccion::query()->where('municipio_id', $municipio->id)->count();
+
+        $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->get('/eventos')
+            ->assertInertia(fn ($page) => $page
+                ->component('Eventos')
+                ->has('seccionesFiltro', $total)
+            );
+    }
+
+    public function test_index_seccionesfiltro_brigadista_solo_sus_zonas(): void
+    {
+        [$tenant, $user, $m, $municipio] = $this->setupCampana('brigadista');
+        $seccion = Seccion::query()->where('municipio_id', $municipio->id)->where('numero', 1)->first();
+        $m->secciones()->sync([$seccion->id => ['tenant_id' => $tenant->id]]);
+
+        $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->get('/eventos')
+            ->assertInertia(fn ($page) => $page
+                ->component('Eventos')
+                ->has('seccionesFiltro', 1)
+                ->where('seccionesFiltro.0.id', $seccion->id)
+            );
     }
 }

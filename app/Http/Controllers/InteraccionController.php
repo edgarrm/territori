@@ -6,7 +6,6 @@ use App\Actions\Interacciones\RegistrarInteraccion;
 use App\Http\Requests\StoreInteraccionRequest;
 use App\Models\Elector;
 use App\Models\Interaccion;
-use App\Models\Seccion;
 use App\Support\Tenancy\TenantContext;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
@@ -60,39 +59,11 @@ class InteraccionController extends Controller
      */
     public function agenda(): Response
     {
+        $viewer = request()->user()?->membershipEn(TenantContext::get());
+
         return Inertia::render('Agenda', [
-            'secciones' => $this->seccionesAccesibles(),
+            'secciones' => $viewer?->seccionesDisponibles() ?? [],
         ]);
-    }
-
-    /**
-     * Secciones que el usuario puede usar como filtro: gestión todas las del
-     * municipio; brigadista/anfitrión solo sus zonas asignadas (espejo del
-     * catálogo de LoteriaController).
-     *
-     * @return array<int, array{id: int, numero: int}>
-     */
-    private function seccionesAccesibles(): array
-    {
-        $tenant = TenantContext::get();
-        $viewer = $tenant !== null ? request()->user()?->membershipEn($tenant) : null;
-
-        if ($viewer === null) {
-            return [];
-        }
-
-        $query = $viewer->esGestion()
-            ? Seccion::query()->where('municipio_id', $tenant?->municipio_id)
-            : $viewer->secciones();
-
-        return $query
-            ->orderBy('numero')
-            ->get(['secciones.id', 'numero'])
-            ->map(fn (Seccion $seccion): array => [
-                'id' => $seccion->id,
-                'numero' => $seccion->numero,
-            ])
-            ->all();
     }
 
     public function agendaData(Request $request): JsonResponse

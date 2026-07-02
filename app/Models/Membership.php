@@ -114,6 +114,30 @@ class Membership extends Model
     }
 
     /**
+     * Catálogo de secciones que esta membership puede ver y filtrar: gestión
+     * (coordinador/admin) todas las del municipio de la campaña; el resto
+     * (brigadista/anfitrión) solo sus zonas asignadas. Espejo del catálogo que
+     * usan LoteriaController y CapturaController.
+     *
+     * @return array<int, array{id: int, numero: int}>
+     */
+    public function seccionesDisponibles(): array
+    {
+        $query = $this->esGestion()
+            ? Seccion::query()->where('municipio_id', $this->tenant->municipio_id)
+            : $this->secciones();
+
+        return $query
+            ->orderBy('numero')
+            ->get(['secciones.id', 'numero'])
+            ->map(fn (Seccion $seccion): array => [
+                'id' => $seccion->id,
+                'numero' => $seccion->numero,
+            ])
+            ->all();
+    }
+
+    /**
      * Redes ciudadanas de las que esta membership es el enlace responsable.
      *
      * @return HasMany<RedCiudadana, $this>

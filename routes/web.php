@@ -99,6 +99,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
             // Eventos (cualquier miembro de campo) + solicitudes ARCO.
             Route::get('eventos', [EventoController::class, 'index'])->name('eventos');
+            Route::get('api/eventos', [EventoController::class, 'data'])->name('eventos.data');
             Route::post('eventos', [EventoController::class, 'store'])->name('eventos.store');
             Route::get('api/eventos/{evento}/asistentes', [EventoController::class, 'asistentes'])->name('eventos.asistentes');
             Route::post('api/solicitudes-arco', [SolicitudArcoController::class, 'store'])->name('solicitudes-arco.store');

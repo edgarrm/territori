@@ -8,8 +8,10 @@ use App\Models\Elector;
 use App\Models\Evento;
 use App\Models\Seccion;
 use App\Support\Tenancy\TenantContext;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -17,13 +19,10 @@ class EventoController extends Controller
 {
     public function index(): Response
     {
-        $eventos = Evento::query()
-            ->withCount('electores')
-            ->orderByDesc('fecha')
-            ->get()
-            ->map(fn (Evento $e): array => $this->presentar($e))
-            ->all();
+        $viewer = request()->user()?->membershipEn(TenantContext::get());
 
+        // Catálogo del alta: todas las secciones del municipio (la sede puede
+        // ser cualquiera). El filtro usa las secciones disponibles por rol.
         $secciones = Seccion::query()
             ->where('municipio_id', TenantContext::get()?->municipio_id)
             ->orderBy('numero')
@@ -35,9 +34,40 @@ class EventoController extends Controller
             ->all();
 
         return Inertia::render('Eventos', [
-            'eventos' => $eventos,
             'secciones' => $secciones,
+            'seccionesFiltro' => $viewer?->seccionesDisponibles() ?? [],
         ]);
+    }
+
+    /**
+     * Lista paginada de eventos para el cliente. Filtros opcionales: `q`
+     * (nombre del evento, ILIKE) y `secciones` (arreglo de ids de sección/sede,
+     * del multiselect de secciones disponibles por rol).
+     */
+    public function data(Request $request): JsonResponse
+    {
+        $busqueda = trim((string) $request->query('q', ''));
+        $secciones = array_values(array_filter(array_map(
+            'intval',
+            (array) $request->query('secciones', []),
+        )));
+
+        $eventos = Evento::query()
+            ->withCount('electores')
+            ->when(
+                $busqueda !== '',
+                fn (Builder $query) => $query->where('nombre', 'ILIKE', '%'.$busqueda.'%'),
+            )
+            ->when(
+                $secciones !== [],
+                fn (Builder $query) => $query->whereIn('seccion_id', $secciones),
+            )
+            ->orderByDesc('fecha')
+            ->paginate(15)
+            ->withQueryString()
+            ->through(fn (Evento $e): array => $this->presentar($e));
+
+        return response()->json($eventos);
     }
 
     public function store(StoreEventoRequest $request, CrearEvento $crear): RedirectResponse
