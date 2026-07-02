@@ -246,6 +246,7 @@ onMounted(() => cargar());
                             <th class="p-3 font-medium">Origen</th>
                             <th class="p-3 font-medium">Teléfono</th>
                             <th class="p-3 font-medium">Capturado</th>
+                            <th class="p-3 font-medium text-right">Ficha</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -286,6 +287,14 @@ onMounted(() => cargar());
                                           ).toLocaleDateString()
                                         : '—'
                                 }}
+                            </td>
+                            <td class="p-3 text-right">
+                                <a
+                                    :href="`/electores/${c.id}`"
+                                    class="text-sm font-medium text-primary hover:underline"
+                                >
+                                    Ver ficha
+                                </a>
                             </td>
                         </tr>
                     </tbody>
