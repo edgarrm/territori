@@ -146,15 +146,52 @@ const subtitulo = computed(() => {
 
 const brandColor = computed(() => page.props.marca?.color ?? '#1d4ed8');
 
-const leyenda = computed(() => {
+function claveEstatus(p: FeatureProps): string | number {
     if (modo.value === 'tipo') {
-        return TIPOS.map((t) => ({ label: t.label, color: t.color }));
+        return p.tipo;
+    }
+
+    if (modo.value === 'penetracion') {
+        return bucketPenetracion(p.penetracion).key;
+    }
+
+    return bucket(p.cobertura).key;
+}
+
+const conteosPorEstatus = computed(() => {
+    const conteos = new Map<string | number, number>();
+
+    for (const p of features.value) {
+        const clave = claveEstatus(p);
+        conteos.set(clave, (conteos.get(clave) ?? 0) + 1);
+    }
+
+    return conteos;
+});
+
+const leyenda = computed(() => {
+    const conteos = conteosPorEstatus.value;
+
+    if (modo.value === 'tipo') {
+        return TIPOS.map((t) => ({
+            key: t.key,
+            label: t.label,
+            color: t.color,
+            count: conteos.get(t.key) ?? 0,
+        }));
     }
 
     const escala = modo.value === 'penetracion' ? ESCALA_PENETRACION : ESCALA;
 
-    return escala.map((b) => ({ label: b.label, color: b.color }));
+    return escala.map((b) => ({
+        key: b.key,
+        label: b.label,
+        color: b.color,
+        count: conteos.get(b.key) ?? 0,
+    }));
 });
+
+const totalSeccionesMostradas = computed(() => features.value.length);
 
 const tituloLeyenda = computed(() =>
     modo.value === 'tipo'
@@ -495,6 +532,40 @@ onBeforeUnmount(() => {
                             Cobertura media
                         </div>
                     </div>
+
+                    <!-- Distribución por estatus: mismo desglose de la leyenda del mapa, dinámico según el modo -->
+                    <div class="col-span-2 rounded-xl border bg-background p-3">
+                        <div class="mb-2 flex items-center justify-between">
+                            <div
+                                class="text-[0.7rem] font-medium tracking-wide text-muted-foreground uppercase"
+                            >
+                                {{ tituloLeyenda }}
+                            </div>
+                            <div
+                                class="text-[0.7rem] font-medium text-muted-foreground tabular-nums"
+                            >
+                                {{ fmt(totalSeccionesMostradas) }} secciones
+                            </div>
+                        </div>
+                        <ul class="space-y-1.5">
+                            <li
+                                v-for="item in leyenda"
+                                :key="item.key"
+                                class="flex items-center gap-2 text-sm"
+                            >
+                                <span
+                                    class="size-2.5 shrink-0 rounded-sm"
+                                    :style="{ backgroundColor: item.color }"
+                                />
+                                <span class="flex-1 text-muted-foreground">{{
+                                    item.label
+                                }}</span>
+                                <span class="font-medium tabular-nums">{{
+                                    fmt(item.count)
+                                }}</span>
+                            </li>
+                        </ul>
+                    </div>
                 </div>
 
                 <!-- Buscador -->
@@ -675,16 +746,27 @@ onBeforeUnmount(() => {
                 <ul class="space-y-1">
                     <li
                         v-for="item in leyenda"
-                        :key="item.label"
+                        :key="item.key"
                         class="flex items-center gap-2 text-xs"
                     >
                         <span
-                            class="size-3 rounded-sm"
+                            class="size-3 shrink-0 rounded-sm"
                             :style="{ backgroundColor: item.color }"
                         />
-                        {{ item.label }}
+                        <span class="flex-1">{{ item.label }}</span>
+                        <span class="text-muted-foreground tabular-nums">
+                            {{ fmt(item.count) }}
+                        </span>
                     </li>
                 </ul>
+                <div
+                    class="mt-2 flex items-center justify-between border-t border-black/5 pt-2 text-xs font-semibold"
+                >
+                    <span>Total</span>
+                    <span class="tabular-nums">
+                        {{ fmt(totalSeccionesMostradas) }}
+                    </span>
+                </div>
             </div>
         </div>
     </div>
