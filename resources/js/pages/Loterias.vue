@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, router, useForm } from '@inertiajs/vue3';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { onMounted, reactive, ref } from 'vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -10,6 +10,7 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { mapa } from '@/routes';
 import { vigente as avisoVigente } from '@/routes/avisos';
 import { store as electoresStore } from '@/routes/electores';
 import {
@@ -298,11 +299,16 @@ async function guardarCaptura() {
                 <div class="flex items-center justify-between gap-3">
                     <div class="flex flex-wrap items-center gap-2">
                         <span class="font-medium">{{ loteria.nombre }}</span>
-                        <span
-                            class="rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-800 dark:bg-sky-900/40 dark:text-sky-200"
+                        <Link
+                            :href="
+                                mapa.url({
+                                    query: { seccion: loteria.seccion_id },
+                                })
+                            "
+                            class="rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-800 hover:underline dark:bg-sky-900/40 dark:text-sky-200"
                         >
                             {{ seccionLabel(loteria.seccion_id) }}
-                        </span>
+                        </Link>
                         <span class="text-xs text-muted-foreground">
                             · {{ new Date(loteria.fecha).toLocaleDateString() }}
                             <template v-if="loteria.encargado">

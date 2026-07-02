@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, useForm } from '@inertiajs/vue3';
+import { Head, Link, useForm } from '@inertiajs/vue3';
 import { ChevronDown } from '@lucide/vue';
 import { watchDebounced } from '@vueuse/core';
 import { onMounted, ref } from 'vue';
@@ -13,7 +13,7 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
-import { dashboard } from '@/routes';
+import { dashboard, mapa } from '@/routes';
 import { data as eventosData } from '@/routes/eventos';
 
 defineOptions({
@@ -306,13 +306,20 @@ async function verAsistentes(id: number) {
                     <div class="flex items-center justify-between gap-3">
                         <div class="flex flex-wrap items-center gap-2">
                             <span class="font-medium">{{ evento.nombre }}</span>
-                            <span
-                                class="rounded-full px-2 py-0.5 text-xs font-medium"
-                                :class="
-                                    evento.seccion_id === null
-                                        ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200'
-                                        : 'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200'
+                            <Link
+                                v-if="evento.seccion_id !== null"
+                                :href="
+                                    mapa.url({
+                                        query: { seccion: evento.seccion_id },
+                                    })
                                 "
+                                class="rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-800 hover:underline dark:bg-sky-900/40 dark:text-sky-200"
+                            >
+                                {{ seccionLabel(evento.seccion_id) }}
+                            </Link>
+                            <span
+                                v-else
+                                class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-200"
                             >
                                 {{ seccionLabel(evento.seccion_id) }}
                             </span>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3';
+import { Head, Link } from '@inertiajs/vue3';
 import { ChevronDown } from '@lucide/vue';
 import { watchDebounced } from '@vueuse/core';
 import { onMounted, ref } from 'vue';
@@ -13,7 +13,7 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
-import { dashboard } from '@/routes';
+import { dashboard, mapa } from '@/routes';
 import { data as capturadosData } from '@/routes/capturados';
 
 defineOptions({
@@ -264,11 +264,18 @@ onMounted(() => cargar());
                                 </a>
                             </td>
                             <td class="p-3 text-muted-foreground">
-                                {{
-                                    c.seccion_numero !== null
-                                        ? `Sección ${c.seccion_numero}`
-                                        : '—'
-                                }}
+                                <Link
+                                    v-if="c.seccion_id !== null"
+                                    :href="
+                                        mapa.url({
+                                            query: { seccion: c.seccion_id },
+                                        })
+                                    "
+                                    class="text-primary hover:underline"
+                                >
+                                    Sección {{ c.seccion_numero }}
+                                </Link>
+                                <span v-else>—</span>
                             </td>
                             <td class="p-3 text-muted-foreground">
                                 {{ modoLabel(c.modo_captura) }}

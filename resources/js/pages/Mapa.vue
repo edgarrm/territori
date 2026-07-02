@@ -26,6 +26,7 @@ const props = defineProps<{
     municipio: string | null;
     estado: string | null;
     totalSecciones: number;
+    seccionInicial?: number | null;
 }>();
 
 const page = usePage<{
@@ -258,7 +259,7 @@ function estiloFeature(feature?: GeoJSON.Feature) {
     };
 }
 
-async function cargarCobertura() {
+async function cargarCobertura(ajustarVista = true) {
     const respuesta = await fetch(
         coberturaRoute.url({ query: { modo: modo.value } }),
     );
@@ -297,6 +298,12 @@ async function cargarCobertura() {
         },
     };
     capa = leaflet.geoJSON(geojson, opciones).addTo(mapa as L.Map);
+
+    // Al enfocar una sección concreta (deep-link) omitimos el encuadre global
+    // para no competir con el zoom de la sección y perder el foco.
+    if (!ajustarVista) {
+        return;
+    }
 
     const bounds = capa.getBounds();
 
@@ -408,7 +415,21 @@ onMounted(async () => {
         )
         .addTo(mapa);
 
-    cargarCobertura();
+    // Deep-link: si otra vista enlazó con ?seccion={id}, cargamos la capa sin
+    // encuadre global y enfocamos directamente esa sección (si el rol la ve).
+    const seccionFoco = props.seccionInicial;
+
+    await cargarCobertura(seccionFoco == null);
+
+    if (seccionFoco != null) {
+        const objetivo = features.value.find(
+            (f) => f.seccion_id === seccionFoco,
+        );
+
+        if (objetivo) {
+            seleccionar(objetivo);
+        }
+    }
 });
 
 onBeforeUnmount(() => {

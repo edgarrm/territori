@@ -20,7 +20,7 @@ class MapaController extends Controller
 {
     private const TOLERANCIA_SIMPLIFICACION = 0.0001;
 
-    public function index(): Response
+    public function index(Request $request): Response
     {
         $tenant = TenantContext::get();
         $municipio = $tenant?->municipio;
@@ -29,6 +29,8 @@ class MapaController extends Controller
             'municipio' => $municipio?->nombre,
             'estado' => $municipio?->entidad?->nombre,
             'totalSecciones' => $municipio ? Seccion::where('municipio_id', $municipio->id)->count() : 0,
+            // Sección a enfocar al abrir el mapa (deep-link desde otras vistas).
+            'seccionInicial' => $request->integer('seccion') ?: null,
         ]);
     }
 
