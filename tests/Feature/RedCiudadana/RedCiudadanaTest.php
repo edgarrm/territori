@@ -198,6 +198,33 @@ class RedCiudadanaTest extends TestCase
         $this->assertSame('5588887777', $fila['telefono']);
     }
 
+    public function test_registros_filtra_por_nombre(): void
+    {
+        [$enlaceUser, $enlace] = $this->miembro('enlace');
+        $red = $this->red($enlace);
+        $seccion = $this->seccion();
+
+        TenantContext::set($this->tenant);
+        foreach (['Ana Registro', 'Beto Registro'] as $nombre) {
+            Elector::factory()->create([
+                'tenant_id' => $this->tenant->id,
+                'seccion_id' => $seccion->id,
+                'membership_id' => $enlace->id,
+                'red_ciudadana_id' => $red->id,
+                'modo_captura' => 'red_ciudadana',
+                'aviso_privacidad_id' => $this->aviso->id,
+                'nombre' => $nombre,
+            ]);
+        }
+
+        $response = $this->actingAs($enlaceUser)->withSession(['tenant_id' => $this->tenant->id])
+            ->getJson(route('redes-ciudadanas.registros', $red->id).'?q=Ana');
+
+        $response->assertOk();
+        $response->assertJsonPath('total', 1);
+        $response->assertJsonPath('data.0.nombre', 'Ana Registro');
+    }
+
     public function test_enlace_no_ve_registros_de_red_ajena(): void
     {
         [$enlaceUser] = $this->miembro('enlace');

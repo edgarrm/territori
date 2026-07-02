@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
 import { computed, onMounted, ref } from 'vue';
+import ListaCapturados from '@/components/ListaCapturados.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { dashboard } from '@/routes';
 import { vigente as avisoVigente } from '@/routes/avisos';
 import { store as electoresStore } from '@/routes/electores';
 import { electores as loteriaElectores } from '@/routes/loterias';
+
+type ListaExpuesta = { recargar: () => void };
 
 defineOptions({
     layout: {
@@ -46,15 +49,14 @@ const mensaje = ref<{ tipo: 'ok' | 'error'; texto: string } | null>(null);
 const guardando = ref(false);
 
 // Lotería
-type Capturado = {
-    id: number;
-    nombre: string;
-    telefono: string | null;
-    capturado_en: string | null;
-};
-
 const loteriaId = ref<number | null>(props.loterias[0]?.id ?? null);
-const capturados = ref<Capturado[]>([]);
+const lista = ref<ListaExpuesta | null>(null);
+
+function urlCapturados(
+    query: Record<string, string | number[] | string[]>,
+): string {
+    return loteriaElectores.url(loteriaId.value!, { query });
+}
 
 // Formulario de captura
 const form = ref({
@@ -79,17 +81,6 @@ const eventoRequiereSeccion = computed(
         eventoSeleccionado.value !== null &&
         eventoSeleccionado.value.seccion_id === null,
 );
-
-function formatoHora(iso: string | null): string {
-    if (!iso) {
-        return '';
-    }
-
-    return new Date(iso).toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-    });
-}
 
 function csrf(): string {
     return (
@@ -125,27 +116,7 @@ onMounted(async () => {
         headers: { Accept: 'application/json' },
     });
     aviso.value = (await respAviso.json()).aviso;
-
-    if (loteriaId.value) {
-        await cargarCapturados();
-    }
 });
-
-async function cargarCapturados() {
-    if (!loteriaId.value) {
-        return;
-    }
-
-    const resp = await fetch(loteriaElectores.url(loteriaId.value), {
-        headers: { Accept: 'application/json' },
-    });
-    capturados.value = (await resp.json()).electores ?? [];
-}
-
-async function cambiarLoteria() {
-    capturados.value = [];
-    await cargarCapturados();
-}
 
 async function guardar() {
     if (!aviso.value) {
@@ -195,7 +166,7 @@ async function guardar() {
             mensaje.value = { tipo: 'ok', texto: 'Elector capturado.' };
 
             if (modo.value === 'loteria') {
-                await cargarCapturados();
+                lista.value?.recargar();
             }
 
             limpiarForm();
@@ -295,7 +266,6 @@ function ubicarme() {
                     v-model.number="loteriaId"
                     class="rounded border bg-background p-2"
                     dusk="loteria-select"
-                    @change="cambiarLoteria"
                 >
                     <option
                         v-for="loteria in loterias"
@@ -338,29 +308,19 @@ function ubicarme() {
                 </Button>
 
                 <div
-                    v-if="capturados.length"
-                    class="flex flex-col gap-1 border-t border-sidebar-border/70 pt-3 dark:border-sidebar-border"
+                    v-if="loteriaId"
+                    class="flex flex-col gap-2 border-t border-sidebar-border/70 pt-3 dark:border-sidebar-border"
                 >
                     <span class="text-sm font-medium"
                         >Capturados en esta lotería</span
                     >
-                    <ul class="flex flex-col gap-1" dusk="loteria-capturados">
-                        <li
-                            v-for="capturado in capturados"
-                            :key="capturado.id"
-                            class="flex items-center justify-between gap-2 rounded bg-muted/50 px-2 py-1 text-sm"
-                        >
-                            <span class="truncate">{{ capturado.nombre }}</span>
-                            <span
-                                class="flex shrink-0 items-center gap-2 text-xs text-muted-foreground"
-                            >
-                                <span v-if="capturado.telefono">{{
-                                    capturado.telefono
-                                }}</span>
-                                {{ formatoHora(capturado.capturado_en) }}
-                            </span>
-                        </li>
-                    </ul>
+                    <ListaCapturados
+                        ref="lista"
+                        :key="loteriaId"
+                        dusk="loteria-capturados"
+                        :build-url="urlCapturados"
+                        :secciones-catalogo="secciones"
+                    />
                 </div>
             </template>
         </section>

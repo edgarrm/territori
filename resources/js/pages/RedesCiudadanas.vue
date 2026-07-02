@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
 import { onMounted, reactive, ref } from 'vue';
+import ListaCapturados from '@/components/ListaCapturados.vue';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -16,6 +17,8 @@ import {
     registros as registrosRoute,
     store as redStore,
 } from '@/routes/redes-ciudadanas';
+
+type ListaExpuesta = { recargar: () => void };
 
 type Seccion = { id: number; numero: number };
 type EnlaceOpcion = { membership_id: number; nombre: string; rol: string };
@@ -33,20 +36,12 @@ type Red = {
     registros_count: number;
 };
 
-type Registro = {
-    id: number;
-    nombre: string;
-    telefono: string;
-    email: string | null;
-    seccion_id: number;
-    capturado_en: string | null;
-};
-
 type Aviso = { id: number; version: string; texto: string } | null;
 
 const props = defineProps<{
     redes: Red[];
     secciones: Seccion[];
+    seccionesFiltro: Seccion[];
     enlaces: EnlaceOpcion[];
     esGestion: boolean;
 }>();
@@ -106,21 +101,19 @@ function crearRed() {
     );
 }
 
-// --- Ver registros de una red ---
-const registrosPorRed = ref<Record<number, Registro[]>>({});
-const cargandoRegistros = ref<number | null>(null);
+// --- Registros por red (lista paginada estándar, expandible) ---
+const expandido = ref<Record<number, boolean>>({});
+const listaRefs = new Map<number, ListaExpuesta>();
 
-async function verRegistros(red: Red) {
-    cargandoRegistros.value = red.id;
+function verRegistros(red: Red) {
+    expandido.value[red.id] = !expandido.value[red.id];
+}
 
-    try {
-        const resp = await fetch(registrosRoute.url(red.id), {
-            headers: { Accept: 'application/json' },
-        });
-        const data = await resp.json();
-        registrosPorRed.value[red.id] = data.data ?? [];
-    } finally {
-        cargandoRegistros.value = null;
+function registrarLista(id: number, el: unknown) {
+    if (el) {
+        listaRefs.set(id, el as ListaExpuesta);
+    } else {
+        listaRefs.delete(id);
     }
 }
 
@@ -193,6 +186,7 @@ async function guardarRegistro() {
         if (resp.status === 201) {
             modalAbierto.value = false;
             limpiarForm();
+            listaRefs.get(redActiva.value.id)?.recargar();
             router.reload({ only: ['redes'] });
         } else if (resp.status === 409) {
             mensaje.value = {
@@ -313,47 +307,16 @@ async function guardarRegistro() {
                 </div>
             </div>
 
-            <div
-                v-if="cargandoRegistros === red.id"
-                class="text-sm text-muted-foreground"
-            >
-                Cargando registros…
-            </div>
-
-            <div v-else-if="registrosPorRed[red.id]" class="overflow-x-auto">
-                <p
-                    v-if="registrosPorRed[red.id].length === 0"
-                    class="text-sm text-muted-foreground"
-                >
-                    Esta red aún no tiene registros.
-                </p>
-                <table v-else class="w-full text-sm">
-                    <thead>
-                        <tr
-                            class="border-b text-left text-xs tracking-wide text-muted-foreground uppercase"
-                        >
-                            <th class="py-2 pr-4 font-medium">Nombre</th>
-                            <th class="py-2 pr-4 font-medium">Teléfono</th>
-                            <th class="py-2 font-medium">Sección</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-border">
-                        <tr
-                            v-for="registro in registrosPorRed[red.id]"
-                            :key="registro.id"
-                        >
-                            <td class="py-2 pr-4 font-medium">
-                                {{ registro.nombre }}
-                            </td>
-                            <td class="py-2 pr-4 tabular-nums">
-                                {{ registro.telefono }}
-                            </td>
-                            <td class="py-2 tabular-nums">
-                                {{ registro.seccion_id }}
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+            <div v-if="expandido[red.id]" class="border-t pt-3">
+                <ListaCapturados
+                    :ref="(el) => registrarLista(red.id, el)"
+                    :build-url="
+                        (query) => registrosRoute.url(red.id, { query })
+                    "
+                    :secciones-catalogo="secciones"
+                    :secciones-filtro="seccionesFiltro"
+                    unidad="registros"
+                />
             </div>
         </section>
 

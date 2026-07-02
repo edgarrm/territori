@@ -3,6 +3,7 @@ import { Head, Link, useForm } from '@inertiajs/vue3';
 import { ChevronDown } from '@lucide/vue';
 import { watchDebounced } from '@vueuse/core';
 import { onMounted, ref } from 'vue';
+import ListaCapturados from '@/components/ListaCapturados.vue';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -14,7 +15,10 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { dashboard, mapa } from '@/routes';
-import { data as eventosData } from '@/routes/eventos';
+import {
+    asistentes as eventosAsistentes,
+    data as eventosData,
+} from '@/routes/eventos';
 
 defineOptions({
     layout: {
@@ -122,25 +126,11 @@ function crear() {
     });
 }
 
-// --- Asistentes bajo demanda por evento ---
-const asistentes = ref<
-    Record<number, Array<{ id: number; nombre: string; seccion_id: number }>>
->({});
+// --- Asistentes por evento (lista paginada estándar, expandible) ---
+const expandido = ref<Record<number, boolean>>({});
 
-async function verAsistentes(id: number) {
-    if (asistentes.value[id]) {
-        delete asistentes.value[id];
-
-        return;
-    }
-
-    const res = await fetch(`/api/eventos/${id}/asistentes`, {
-        headers: { Accept: 'application/json' },
-    });
-
-    if (res.ok) {
-        asistentes.value[id] = (await res.json()).asistentes;
-    }
+function verAsistentes(id: number) {
+    expandido.value[id] = !expandido.value[id];
 }
 </script>
 
@@ -341,30 +331,20 @@ async function verAsistentes(id: number) {
                             {{ evento.asistentes_count ?? 0 }} asistentes
                         </Button>
                     </div>
-                    <ul
-                        v-if="asistentes[evento.id]"
-                        class="mt-2 flex flex-col gap-1 border-t pt-2 text-sm"
+                    <div
+                        v-if="expandido[evento.id]"
+                        class="mt-3 border-t pt-3"
                     >
-                        <li
-                            v-for="a in asistentes[evento.id]"
-                            :key="a.id"
-                            class="flex justify-between text-muted-foreground"
-                        >
-                            <a
-                                :href="`/electores/${a.id}`"
-                                class="hover:underline"
-                            >
-                                {{ a.nombre }}
-                            </a>
-                            <span>Sección {{ a.seccion_id }}</span>
-                        </li>
-                        <li
-                            v-if="asistentes[evento.id].length === 0"
-                            class="text-muted-foreground"
-                        >
-                            Sin asistentes capturados.
-                        </li>
-                    </ul>
+                        <ListaCapturados
+                            :build-url="
+                                (query) =>
+                                    eventosAsistentes.url(evento.id, { query })
+                            "
+                            :secciones-catalogo="secciones"
+                            :secciones-filtro="seccionesFiltro"
+                            unidad="asistentes"
+                        />
+                    </div>
                 </li>
             </ul>
 

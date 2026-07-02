@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Actions\RedesCiudadanas\CrearRedCiudadana;
+use App\Http\Controllers\Concerns\PresentaElectores;
 use App\Http\Requests\StoreRedCiudadanaRequest;
 use App\Models\Elector;
 use App\Models\Membership;
@@ -11,11 +12,14 @@ use App\Models\Seccion;
 use App\Support\Tenancy\TenantContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class RedCiudadanaController extends Controller
 {
+    use PresentaElectores;
+
     /**
      * Lista de redes: el enlace ve solo las suyas; gestión (coordinador/admin)
      * ve todas y puede crear nuevas asignando enlace.
@@ -63,6 +67,7 @@ class RedCiudadanaController extends Controller
         return Inertia::render('RedesCiudadanas', [
             'redes' => $redes,
             'secciones' => $secciones,
+            'seccionesFiltro' => $viewer?->seccionesDisponibles() ?? [],
             'enlaces' => $enlaces,
             'esGestion' => $esGestion,
         ]);
@@ -76,10 +81,11 @@ class RedCiudadanaController extends Controller
     }
 
     /**
-     * Registros (electores) capturados en una red. Solo su enlace o gestión
-     * pueden verlos; por eso todos se devuelven con la PII completa.
+     * Registros (electores) capturados en una red, como lista paginada estándar
+     * de capturados. Solo su enlace o gestión pueden verlos; el enmascarado de
+     * PII por fila lo resuelve el trait (el enlace y gestión ven la PII completa).
      */
-    public function registros(string $red): JsonResponse
+    public function registros(Request $request, string $red): JsonResponse
     {
         $modelo = RedCiudadana::query()->findOrFail($red);
         $viewer = $this->miMembership();
@@ -89,18 +95,12 @@ class RedCiudadanaController extends Controller
             403,
         );
 
-        $registros = Elector::query()
-            ->where('red_ciudadana_id', $modelo->id)
-            ->latest()
-            ->paginate(50)
-            ->through(fn (Elector $elector): array => [
-                'id' => $elector->id,
-                'nombre' => $elector->nombre,
-                'telefono' => $elector->telefono,
-                'email' => $elector->email,
-                'seccion_id' => $elector->seccion_id,
-                'capturado_en' => $elector->created_at?->toIso8601String(),
-            ]);
+        $registros = $this->paginarElectores(
+            Elector::query()->where('red_ciudadana_id', $modelo->id),
+            $request,
+            $viewer,
+            50,
+        );
 
         return response()->json($registros);
     }

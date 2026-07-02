@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
-import { watchDebounced } from '@vueuse/core';
 import { onMounted, reactive, ref } from 'vue';
+import ListaCapturados from '@/components/ListaCapturados.vue';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -19,7 +19,12 @@ import {
     resumen as resumenRoute,
 } from '@/routes/secciones';
 
-const props = defineProps<{ seccion: { id: number; numero: number } }>();
+type Modo = { valor: string; etiqueta: string };
+
+const props = defineProps<{
+    seccion: { id: number; numero: number };
+    modos: Modo[];
+}>();
 
 defineOptions({
     layout: {
@@ -47,23 +52,9 @@ type Resumen = {
     ultimo_registro: string | null;
 };
 
-type ElectorFila = {
-    id: number;
-    nombre: string;
-    telefono: string;
-    origen: string;
-};
-
-type Pagina = {
-    data: ElectorFila[];
-    current_page: number;
-    last_page: number;
-    total: number;
-    next_page_url: string | null;
-    prev_page_url: string | null;
-};
-
 type Aviso = { id: number; version: string; texto: string } | null;
+
+type ListaExpuesta = { recargar: () => void };
 
 // Escala de 5 buckets (cobertura de meta), idéntica a la del Mapa.
 const ESCALA = [
@@ -106,10 +97,8 @@ function tiempoRelativo(iso: string | null): string {
 }
 
 const resumen = ref<Resumen | null>(null);
-const pagina = ref<Pagina | null>(null);
-const cargandoLista = ref(false);
 const aviso = ref<Aviso>(null);
-const busqueda = ref('');
+const lista = ref<ListaExpuesta | null>(null);
 
 async function cargarResumen() {
     const resp = await fetch(resumenRoute.url(props.seccion.id), {
@@ -118,31 +107,8 @@ async function cargarResumen() {
     resumen.value = await resp.json();
 }
 
-async function cargarElectores(url?: string) {
-    cargandoLista.value = true;
-
-    // El teléfono está cifrado: la búsqueda es solo por nombre.
-    const base = electoresRoute.url(props.seccion.id, {
-        query: busqueda.value.trim() ? { q: busqueda.value.trim() } : {},
-    });
-
-    try {
-        const resp = await fetch(url ?? base, {
-            headers: { Accept: 'application/json' },
-        });
-        pagina.value = await resp.json();
-    } finally {
-        cargandoLista.value = false;
-    }
-}
-
-// Reinicia a la primera página al cambiar la búsqueda (debounce para no
-// disparar una petición por tecla).
-watchDebounced(busqueda, () => cargarElectores(), { debounce: 300 });
-
 onMounted(() => {
     cargarResumen();
-    cargarElectores();
 
     fetch(avisoVigente.url(), { headers: { Accept: 'application/json' } })
         .then((r) => r.json())
@@ -221,7 +187,8 @@ async function guardar() {
         if (resp.status === 201) {
             modalAbierto.value = false;
             limpiarForm();
-            await Promise.all([cargarElectores(), cargarResumen()]);
+            lista.value?.recargar();
+            await cargarResumen();
         } else if (resp.status === 409) {
             mensaje.value = {
                 tipo: 'error',
@@ -363,101 +330,17 @@ async function guardar() {
         <section
             class="rounded-xl border border-sidebar-border/70 bg-card p-4 dark:border-sidebar-border"
         >
-            <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <h2 class="text-base font-semibold">
-                    Electores
-                    <span v-if="pagina" class="text-muted-foreground"
-                        >({{ fmt(pagina.total) }})</span
-                    >
-                </h2>
-                <Input
-                    v-model="busqueda"
-                    type="search"
-                    placeholder="Buscar por nombre…"
-                    class="w-full sm:w-64"
-                />
-            </div>
+            <h2 class="mb-3 text-base font-semibold">Electores</h2>
 
-            <p
-                v-if="pagina && pagina.total === 0"
-                class="rounded-lg border border-dashed bg-background p-6 text-center text-sm text-muted-foreground"
-            >
-                {{
-                    busqueda.trim()
-                        ? 'Ningún elector coincide con la búsqueda.'
-                        : 'Esta sección aún no tiene electores capturados.'
-                }}
-            </p>
-
-            <div v-else-if="pagina" class="overflow-x-auto">
-                <table class="w-full text-sm">
-                    <thead>
-                        <tr
-                            class="border-b text-left text-xs tracking-wide text-muted-foreground uppercase"
-                        >
-                            <th class="py-2 pr-4 font-medium">Nombre</th>
-                            <th class="py-2 pr-4 font-medium">Teléfono</th>
-                            <th class="py-2 pr-4 font-medium">Origen</th>
-                            <th class="py-2 font-medium"></th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-border">
-                        <tr v-for="elector in pagina.data" :key="elector.id">
-                            <td class="py-2 pr-4 font-medium">
-                                {{ elector.nombre }}
-                            </td>
-                            <td class="py-2 pr-4 tabular-nums">
-                                {{ elector.telefono }}
-                            </td>
-                            <td class="py-2 pr-4">
-                                <span
-                                    class="inline-block rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground"
-                                >
-                                    {{ elector.origen }}
-                                </span>
-                            </td>
-                            <td class="py-2 text-right">
-                                <a
-                                    :href="`/electores/${elector.id}`"
-                                    class="font-medium text-primary hover:underline"
-                                >
-                                    Ver ficha
-                                </a>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-
-                <div
-                    v-if="pagina.last_page > 1"
-                    class="mt-3 flex items-center justify-between text-sm"
-                >
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        :disabled="!pagina.prev_page_url || cargandoLista"
-                        @click="cargarElectores(pagina.prev_page_url!)"
-                    >
-                        Anterior
-                    </Button>
-                    <span class="text-muted-foreground">
-                        Página {{ pagina.current_page }} de
-                        {{ pagina.last_page }}
-                    </span>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        :disabled="!pagina.next_page_url || cargandoLista"
-                        @click="cargarElectores(pagina.next_page_url!)"
-                    >
-                        Siguiente
-                    </Button>
-                </div>
-            </div>
-
-            <p v-else class="text-sm text-muted-foreground">
-                Cargando electores…
-            </p>
+            <ListaCapturados
+                ref="lista"
+                :build-url="
+                    (query) => electoresRoute.url(seccion.id, { query })
+                "
+                :secciones-catalogo="[seccion]"
+                :modos="modos"
+                unidad="electores"
+            />
         </section>
 
         <!-- Modal de alta -->

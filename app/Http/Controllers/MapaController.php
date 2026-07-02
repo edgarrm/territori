@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Actions\Metas\DefinirMetaSeccion;
+use App\Http\Controllers\Concerns\PresentaElectores;
 use App\Models\CoberturaSeccion;
 use App\Models\Elector;
 use App\Models\Membership;
@@ -18,6 +19,8 @@ use Inertia\Response;
 
 class MapaController extends Controller
 {
+    use PresentaElectores;
+
     private const TOLERANCIA_SIMPLIFICACION = 0.0001;
 
     public function index(Request $request): Response
@@ -101,6 +104,7 @@ class MapaController extends Controller
                 'id' => $seccion->id,
                 'numero' => $seccion->numero,
             ],
+            'modos' => $this->catalogoModos(),
         ]);
     }
 

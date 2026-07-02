@@ -61,6 +61,9 @@ class RedCiudadanaTest extends DuskTestCase
             $browser->loginAs($user)
                 ->visit('/redes-ciudadanas')
                 ->waitForText($red->nombre)
+                // Espera a que Vue hidrate antes de accionar el botón: waitForText
+                // solo garantiza el HTML de SSR, no que el handler esté montado.
+                ->pause(1000)
                 ->press('Agregar registro')
                 ->waitFor('[role=dialog]')
                 ->within('[role=dialog]', function (Browser $modal) {

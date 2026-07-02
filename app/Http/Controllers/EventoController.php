@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Actions\Eventos\CrearEvento;
+use App\Http\Controllers\Concerns\PresentaElectores;
 use App\Http\Requests\StoreEventoRequest;
 use App\Models\Elector;
 use App\Models\Evento;
@@ -17,6 +18,8 @@ use Inertia\Response;
 
 class EventoController extends Controller
 {
+    use PresentaElectores;
+
     public function index(): Response
     {
         $viewer = request()->user()?->membershipEn(TenantContext::get());
@@ -78,29 +81,21 @@ class EventoController extends Controller
     }
 
     /**
-     * Asistentes (electores capturados) de un evento. Resolución manual del
-     * modelo tenant-scoped (patrón anti-binding Sprint 4).
+     * Asistentes (electores capturados) de un evento, como lista paginada estándar
+     * de capturados. Resolución manual del modelo tenant-scoped (patrón
+     * anti-binding Sprint 4).
      */
-    public function asistentes(string $evento): JsonResponse
+    public function asistentes(Request $request, string $evento): JsonResponse
     {
         $modelo = Evento::query()->findOrFail($evento);
 
-        $asistentes = Elector::query()
-            ->where('evento_id', $modelo->id)
-            ->latest()
-            ->get()
-            ->map(fn (Elector $el): array => [
-                'id' => $el->id,
-                'nombre' => $el->nombre,
-                'seccion_id' => $el->seccion_id,
-                'capturado_en' => $el->created_at?->toIso8601String(),
-            ])
-            ->all();
+        $asistentes = $this->paginarElectores(
+            Elector::query()->where('evento_id', $modelo->id),
+            $request,
+            $request->user()?->membershipEn(TenantContext::get()),
+        );
 
-        return response()->json([
-            'evento' => $this->presentar($modelo),
-            'asistentes' => $asistentes,
-        ]);
+        return response()->json($asistentes);
     }
 
     /**

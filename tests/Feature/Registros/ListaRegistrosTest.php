@@ -111,6 +111,20 @@ class ListaRegistrosTest extends TestCase
         $this->assertSame('Juan Pérez', $resultado[0]['nombre']);
     }
 
+    public function test_filtra_por_tipo_de_captura(): void
+    {
+        TenantContext::set($this->tenant);
+        $evento = Evento::factory()->create(['tenant_id' => $this->tenant->id, 'nombre' => 'Mitin Central']);
+
+        $this->elector(['nombre' => 'Ana', 'modo_captura' => 'enlace_seccional']);
+        $this->elector(['nombre' => 'Beto', 'modo_captura' => 'evento', 'evento_id' => $evento->id]);
+
+        $resultado = $this->lista(['modos' => ['evento']]);
+
+        $this->assertCount(1, $resultado);
+        $this->assertSame('Beto', $resultado[0]['nombre']);
+    }
+
     public function test_paginacion_conserva_la_busqueda(): void
     {
         foreach (range(1, 30) as $i) {

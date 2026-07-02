@@ -189,7 +189,32 @@ class EventosTest extends TestCase
         $response = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
             ->getJson("/api/eventos/{$evento->id}/asistentes");
         $response->assertOk();
-        $this->assertCount(2, $response->json('asistentes'));
+        $response->assertJsonPath('total', 2);
+        $this->assertCount(2, $response->json('data'));
+    }
+
+    public function test_asistentes_filtra_por_nombre(): void
+    {
+        [$tenant, $user, $m, $municipio, $aviso] = $this->setupCampana();
+        $seccion = Seccion::query()->where('municipio_id', $municipio->id)->where('numero', 1)->first();
+        $evento = Evento::factory()->create(['tenant_id' => $tenant->id, 'seccion_id' => $seccion->id]);
+
+        Elector::factory()->create([
+            'tenant_id' => $tenant->id, 'seccion_id' => $seccion->id, 'membership_id' => $m->id,
+            'aviso_privacidad_id' => $aviso->id, 'evento_id' => $evento->id, 'modo_captura' => 'evento',
+            'nombre' => 'Ana Asistente',
+        ]);
+        Elector::factory()->create([
+            'tenant_id' => $tenant->id, 'seccion_id' => $seccion->id, 'membership_id' => $m->id,
+            'aviso_privacidad_id' => $aviso->id, 'evento_id' => $evento->id, 'modo_captura' => 'evento',
+            'nombre' => 'Beto Asistente',
+        ]);
+
+        $response = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->getJson("/api/eventos/{$evento->id}/asistentes?q=Ana");
+        $response->assertOk();
+        $response->assertJsonPath('total', 1);
+        $response->assertJsonPath('data.0.nombre', 'Ana Asistente');
     }
 
     public function test_evento_de_otro_tenant_da_404_en_asistentes(): void

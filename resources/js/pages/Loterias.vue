@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { onMounted, reactive, ref } from 'vue';
+import ListaCapturados from '@/components/ListaCapturados.vue';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -84,27 +85,21 @@ function crear() {
     });
 }
 
-// --- Capturados bajo demanda por lotería ---
-const capturados = ref<
-    Record<
-        number,
-        Array<{ id: number; nombre: string; telefono: string | null }>
-    >
->({});
+// --- Capturados por lotería (lista paginada estándar, expandible) ---
+type ListaExpuesta = { recargar: () => void };
 
-async function verCapturados(id: number) {
-    if (capturados.value[id]) {
-        delete capturados.value[id];
+const expandido = ref<Record<number, boolean>>({});
+const listaRefs = new Map<number, ListaExpuesta>();
 
-        return;
-    }
+function verCapturados(id: number) {
+    expandido.value[id] = !expandido.value[id];
+}
 
-    const res = await fetch(loteriaElectores.url(id), {
-        headers: { Accept: 'application/json' },
-    });
-
-    if (res.ok) {
-        capturados.value[id] = (await res.json()).electores;
+function registrarLista(id: number, el: unknown) {
+    if (el) {
+        listaRefs.set(id, el as ListaExpuesta);
+    } else {
+        listaRefs.delete(id);
     }
 }
 
@@ -169,7 +164,7 @@ async function guardarCaptura() {
         if (resp.status === 201) {
             limpiarCaptura();
             mensaje.value = { tipo: 'ok', texto: 'Elector capturado.' };
-            delete capturados.value[loteriaActiva.value.id];
+            listaRefs.get(loteriaActiva.value.id)?.recargar();
             router.reload({ only: ['loterias'] });
         } else if (resp.status === 409) {
             mensaje.value = {
@@ -341,27 +336,15 @@ async function guardarCaptura() {
                         </Button>
                     </div>
                 </div>
-                <ul
-                    v-if="capturados[loteria.id]"
-                    class="mt-2 flex flex-col gap-1 border-t pt-2 text-sm"
-                >
-                    <li
-                        v-for="c in capturados[loteria.id]"
-                        :key="c.id"
-                        class="flex justify-between text-muted-foreground"
-                    >
-                        <a :href="`/electores/${c.id}`" class="hover:underline">
-                            {{ c.nombre }}
-                        </a>
-                        <span v-if="c.telefono">{{ c.telefono }}</span>
-                    </li>
-                    <li
-                        v-if="capturados[loteria.id].length === 0"
-                        class="text-muted-foreground"
-                    >
-                        Sin capturados todavía.
-                    </li>
-                </ul>
+                <div v-if="expandido[loteria.id]" class="mt-3 border-t pt-3">
+                    <ListaCapturados
+                        :ref="(el) => registrarLista(loteria.id, el)"
+                        :build-url="
+                            (query) => loteriaElectores.url(loteria.id, { query })
+                        "
+                        :secciones-catalogo="secciones"
+                    />
+                </div>
             </li>
         </ul>
 

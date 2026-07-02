@@ -356,7 +356,7 @@ class LoteriaTest extends TestCase
 
         $response->assertOk();
         $response->assertJsonPath('total', 2);
-        $response->assertJsonCount(2, 'electores');
+        $response->assertJsonCount(2, 'data');
         $response->assertJsonFragment(['nombre' => 'Ana Capturada']);
         $response->assertJsonFragment(['nombre' => 'Beto Capturado']);
         // El brigadista que capturó ve el teléfono completo.
@@ -410,6 +410,6 @@ class LoteriaTest extends TestCase
 
         $response->assertOk();
         $response->assertJsonPath('total', 0);
-        $response->assertJsonCount(0, 'electores');
+        $response->assertJsonCount(0, 'data');
     }
 }

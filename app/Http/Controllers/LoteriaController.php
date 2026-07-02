@@ -3,20 +3,23 @@
 namespace App\Http\Controllers;
 
 use App\Actions\Loterias\CrearLoteria;
+use App\Http\Controllers\Concerns\PresentaElectores;
 use App\Http\Requests\StoreLoteriaRequest;
 use App\Models\Elector;
 use App\Models\Loteria;
 use App\Models\Membership;
 use App\Models\Seccion;
-use App\Support\Pii;
 use App\Support\Tenancy\TenantContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class LoteriaController extends Controller
 {
+    use PresentaElectores;
+
     /**
      * Lista de loterías: gestión (coordinador/admin) ve todas; el resto solo
      * las que creó o tiene asignadas.
@@ -83,30 +86,20 @@ class LoteriaController extends Controller
     }
 
     /**
-     * Electores capturados en una lotería (resolución manual tenant-scoped).
+     * Electores capturados en una lotería, como lista paginada estándar de
+     * capturados (resolución manual tenant-scoped).
      */
-    public function electores(string $loteria): JsonResponse
+    public function electores(Request $request, string $loteria): JsonResponse
     {
         $modelo = Loteria::query()->findOrFail($loteria);
-        $viewer = $this->membership();
 
-        $electores = Elector::query()
-            ->where('loteria_id', $modelo->id)
-            ->latest()
-            ->get()
-            ->map(fn (Elector $elector): array => [
-                'id' => $elector->id,
-                'nombre' => $elector->nombre,
-                'telefono' => $this->puedeVerPii($elector, $viewer)
-                    ? $elector->telefono
-                    : Pii::enmascararTelefono($elector->telefono),
-                'capturado_en' => $elector->created_at?->toIso8601String(),
-            ]);
+        $electores = $this->paginarElectores(
+            Elector::query()->where('loteria_id', $modelo->id),
+            $request,
+            $this->membership(),
+        );
 
-        return response()->json([
-            'electores' => $electores,
-            'total' => $electores->count(),
-        ]);
+        return response()->json($electores);
     }
 
     /**
@@ -123,19 +116,6 @@ class LoteriaController extends Controller
             'creador' => $loteria->creadaPor?->user?->name,
             'capturados_count' => $loteria->electores_count ?? 0,
         ];
-    }
-
-    /**
-     * Gestión (coordinador/admin) ve la PII completa; un brigadista solo la de
-     * los electores que él capturó. Espejo de ElectorController::puedeVerPii.
-     */
-    private function puedeVerPii(Elector $elector, Membership $viewer): bool
-    {
-        if ($viewer->esGestion()) {
-            return true;
-        }
-
-        return $elector->membership_id === $viewer->id;
     }
 
     private function membership(): Membership
