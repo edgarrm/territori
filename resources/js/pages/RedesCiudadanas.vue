@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
-import { reactive, ref } from 'vue';
+import { onMounted, reactive, ref } from 'vue';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -25,7 +25,11 @@ type Red = {
     nombre: string;
     descripcion: string | null;
     activa: boolean;
-    enlace: { membership_id: number; nombre: string | null; rol: string | null };
+    enlace: {
+        membership_id: number;
+        nombre: string | null;
+        rol: string | null;
+    };
     registros_count: number;
 };
 
@@ -49,16 +53,19 @@ const props = defineProps<{
 
 defineOptions({
     layout: {
-        breadcrumbs: [
-            { title: 'Redes ciudadanas', href: '/redes-ciudadanas' },
-        ],
+        breadcrumbs: [{ title: 'Redes ciudadanas', href: '/redes-ciudadanas' }],
     },
 });
 
+// La carga del aviso vive en onMounted (solo cliente): un fetch en el cuerpo de
+// setup se ejecuta también en SSR, donde fetch exige URL absoluta y una ruta
+// relativa revienta con ERR_INVALID_URL.
 const aviso = ref<Aviso>(null);
-fetch(avisoVigente.url(), { headers: { Accept: 'application/json' } })
-    .then((r) => r.json())
-    .then((d) => (aviso.value = d.aviso));
+onMounted(() => {
+    fetch(avisoVigente.url(), { headers: { Accept: 'application/json' } })
+        .then((r) => r.json())
+        .then((d) => (aviso.value = d.aviso));
+});
 
 function csrf(): string {
     return (
@@ -79,6 +86,7 @@ function crearRed() {
     if (!nuevaRed.nombre || !nuevaRed.enlace_membership_id) {
         return;
     }
+
     creandoRed.value = true;
     router.post(
         redStore.url(),
@@ -104,6 +112,7 @@ const cargandoRegistros = ref<number | null>(null);
 
 async function verRegistros(red: Red) {
     cargandoRegistros.value = red.id;
+
     try {
         const resp = await fetch(registrosRoute.url(red.id), {
             headers: { Accept: 'application/json' },
@@ -148,6 +157,7 @@ async function guardarRegistro() {
             tipo: 'error',
             texto: 'No hay aviso de privacidad vigente.',
         };
+
         return;
     }
 
@@ -217,7 +227,10 @@ async function guardarRegistro() {
         >
             <h2 class="text-base font-semibold">Nueva red ciudadana</h2>
             <div class="grid gap-2 sm:grid-cols-2">
-                <Input v-model="nuevaRed.nombre" placeholder="Nombre de la red" />
+                <Input
+                    v-model="nuevaRed.nombre"
+                    placeholder="Nombre de la red"
+                />
                 <select
                     v-model.number="nuevaRed.enlace_membership_id"
                     class="rounded border bg-background p-2 text-sm"
@@ -274,12 +287,18 @@ async function guardarRegistro() {
                     </p>
                     <p class="mt-1 text-xs text-muted-foreground">
                         Enlace: {{ red.enlace.nombre ?? '—' }}
-                        <span v-if="red.enlace.rol">({{ red.enlace.rol }})</span>
+                        <span v-if="red.enlace.rol"
+                            >({{ red.enlace.rol }})</span
+                        >
                         · {{ red.registros_count }} registros
                     </p>
                 </div>
                 <div class="flex shrink-0 gap-2">
-                    <Button variant="outline" size="sm" @click="verRegistros(red)">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        @click="verRegistros(red)"
+                    >
                         Ver registros
                     </Button>
                     <Button size="sm" @click="abrirModal(red)">
@@ -288,14 +307,14 @@ async function guardarRegistro() {
                 </div>
             </div>
 
-            <div v-if="cargandoRegistros === red.id" class="text-sm text-muted-foreground">
+            <div
+                v-if="cargandoRegistros === red.id"
+                class="text-sm text-muted-foreground"
+            >
                 Cargando registros…
             </div>
 
-            <div
-                v-else-if="registrosPorRed[red.id]"
-                class="overflow-x-auto"
-            >
+            <div v-else-if="registrosPorRed[red.id]" class="overflow-x-auto">
                 <p
                     v-if="registrosPorRed[red.id].length === 0"
                     class="text-sm text-muted-foreground"

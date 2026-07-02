@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, router, useForm } from '@inertiajs/vue3';
-import { reactive, ref } from 'vue';
+import { onMounted, reactive, ref } from 'vue';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -50,10 +50,15 @@ function seccionLabel(seccionId: number): string {
     return numero !== undefined ? `Sección ${numero}` : 'Sección';
 }
 
+// La carga del aviso vive en onMounted (solo cliente): un fetch en el cuerpo de
+// setup se ejecuta también en SSR, donde fetch exige URL absoluta y una ruta
+// relativa revienta con ERR_INVALID_URL.
 const aviso = ref<Aviso>(null);
-fetch(avisoVigente.url(), { headers: { Accept: 'application/json' } })
-    .then((r) => r.json())
-    .then((d) => (aviso.value = d.aviso));
+onMounted(() => {
+    fetch(avisoVigente.url(), { headers: { Accept: 'application/json' } })
+        .then((r) => r.json())
+        .then((d) => (aviso.value = d.aviso));
+});
 
 function csrf(): string {
     return (
