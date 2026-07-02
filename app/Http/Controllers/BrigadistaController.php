@@ -28,12 +28,13 @@ class BrigadistaController extends Controller
             ->get(['id', 'numero'])
             ->map(fn (Seccion $s): array => ['id' => $s->id, 'numero' => $s->numero]);
 
-        // Miembros que no son brigadistas (coordinadores, enlaces, admins): la
-        // tabla de brigadistas lleva ratios/zonas que no aplican a estos roles.
+        // Miembros que no son brigadistas (coordinadores, enlaces, admins,
+        // anfitriones): la tabla de brigadistas lleva ratios que no aplican a
+        // estos roles. El anfitrión sí lleva zonas (acotan sus loterías).
         $otrosMiembros = Membership::query()
             ->where('tenant_id', $tenant?->id)
             ->where('rol', '!=', 'brigadista')
-            ->with('user:id,name,email')
+            ->with(['user:id,name,email', 'secciones'])
             ->orderBy('rol')
             ->get()
             ->map(fn (Membership $m): array => [
@@ -42,6 +43,7 @@ class BrigadistaController extends Controller
                 'email' => $m->user->email,
                 'rol' => $m->rol,
                 'activo' => $m->activo,
+                'secciones_ids' => $m->esAnfitrion() ? $m->secciones->pluck('id')->all() : [],
             ])
             ->all();
 
@@ -104,14 +106,14 @@ class BrigadistaController extends Controller
 
     public function zonas(Request $request, string $membership, AsignarZonas $asignar): JsonResponse
     {
-        $brigadista = $this->resolverBrigadista($membership);
+        $miembro = $this->resolverConZonas($membership);
 
         $data = $request->validate([
             'seccion_ids' => ['present', 'array'],
             'seccion_ids.*' => ['integer'],
         ]);
 
-        $asignar->handle($brigadista, $data['seccion_ids']);
+        $asignar->handle($miembro, $data['seccion_ids']);
 
         return response()->json(['ok' => true]);
     }
@@ -133,6 +135,18 @@ class BrigadistaController extends Controller
         return Membership::query()
             ->where('tenant_id', TenantContext::get()?->id)
             ->where('rol', 'brigadista')
+            ->findOrFail($id);
+    }
+
+    /**
+     * Miembros con zonas asignables: brigadistas y anfitriones (las zonas
+     * acotan dónde capturan/crean loterías). Misma resolución tenant-scoped.
+     */
+    private function resolverConZonas(string $id): Membership
+    {
+        return Membership::query()
+            ->where('tenant_id', TenantContext::get()?->id)
+            ->whereIn('rol', ['brigadista', 'anfitrion'])
             ->findOrFail($id);
     }
 }

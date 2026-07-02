@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { Head, Link, usePage } from '@inertiajs/vue3';
-import L from 'leaflet';
+// Solo los tipos en la carga del módulo: Leaflet toca `window` al importarse y
+// rompería el render en servidor (SSR). El runtime se carga dinámicamente en
+// onMounted (solo en el cliente). Ver leaflet-src.js / SSR.
+import type * as L from 'leaflet';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import 'leaflet/dist/leaflet.css';
 import { dashboard } from '@/routes';
@@ -107,6 +110,9 @@ function colorFeature(p: FeatureProps): string {
     return bucket(p.cobertura).color;
 }
 
+// Módulo Leaflet en runtime (poblado en onMounted, solo en el cliente).
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports -- carga diferida (SSR)
+let leaflet: typeof import('leaflet');
 let mapa: L.Map | null = null;
 let capa: L.GeoJSON | null = null;
 
@@ -253,7 +259,7 @@ async function cargarCobertura() {
             );
         },
     };
-    capa = L.geoJSON(geojson, opciones).addTo(mapa as L.Map);
+    capa = leaflet.geoJSON(geojson, opciones).addTo(mapa as L.Map);
 
     const bounds = capa.getBounds();
 
@@ -325,35 +331,45 @@ function cambiarModo(nuevo: Modo) {
     capa?.setStyle(estiloFeature);
 }
 
-onMounted(() => {
-    mapa = L.map('mapa-cobertura', {
-        zoomControl: true,
-        attributionControl: true,
-    }).setView([23.6345, -106.42], 12);
-    L.tileLayer(
-        'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-        {
-            attribution: '&copy; OpenStreetMap, &copy; CARTO',
-            maxZoom: 19,
-        },
-    ).addTo(mapa);
+onMounted(async () => {
+    leaflet = await import('leaflet');
+
+    mapa = leaflet
+        .map('mapa-cobertura', {
+            zoomControl: true,
+            attributionControl: true,
+        })
+        .setView([23.6345, -106.42], 12);
+    leaflet
+        .tileLayer(
+            'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+            {
+                attribution: '&copy; OpenStreetMap, &copy; CARTO',
+                maxZoom: 19,
+            },
+        )
+        .addTo(mapa);
 
     // Capa de solo etiquetas (calles y colonias) en un pane por encima de los
     // polígonos de sección, para que los nombres queden legibles sobre el
     // relleno de la sección seleccionada. Sin capturar clics (pointer-events).
     mapa.createPane('etiquetas');
     const paneEtiquetas = mapa.getPane('etiquetas');
+
     if (paneEtiquetas) {
         paneEtiquetas.style.zIndex = '620';
         paneEtiquetas.style.pointerEvents = 'none';
     }
-    L.tileLayer(
-        'https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png',
-        {
-            pane: 'etiquetas',
-            maxZoom: 19,
-        },
-    ).addTo(mapa);
+
+    leaflet
+        .tileLayer(
+            'https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png',
+            {
+                pane: 'etiquetas',
+                maxZoom: 19,
+            },
+        )
+        .addTo(mapa);
 
     cargarCobertura();
 });

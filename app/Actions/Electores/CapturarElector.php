@@ -32,7 +32,7 @@ class CapturarElector
     public function handle(Membership $membership, array $datos): Elector
     {
         $modo = $datos['modo_captura'];
-        $loteria = $this->resolverLoteria($modo, $datos);
+        $loteria = $this->resolverLoteria($modo, $datos, $membership);
         $evento = $this->resolverEvento($modo, $datos);
         $red = $this->resolverRedCiudadana($modo, $datos, $membership);
         $seccion = $this->resolverSeccion($modo, $datos, $loteria, $evento, $membership);
@@ -73,9 +73,13 @@ class CapturarElector
     }
 
     /**
+     * Resuelve la lotería para el modo 'loteria'. Debe ser del tenant activo y
+     * solo pueden capturar en ella su encargado asignado, quien la creó o
+     * gestión (espejo del check de red ciudadana).
+     *
      * @param  array<string, mixed>  $datos
      */
-    private function resolverLoteria(string $modo, array $datos): ?Loteria
+    private function resolverLoteria(string $modo, array $datos, Membership $membership): ?Loteria
     {
         if ($modo !== 'loteria') {
             return null;
@@ -92,6 +96,15 @@ class CapturarElector
         if ($loteria === null) {
             throw ValidationException::withMessages([
                 'loteria_id' => 'La lotería no existe en esta campaña.',
+            ]);
+        }
+
+        $esSuya = $loteria->membership_id === $membership->id
+            || $loteria->creada_por_membership_id === $membership->id;
+
+        if (! $esSuya && ! $membership->esGestion()) {
+            throw ValidationException::withMessages([
+                'loteria_id' => 'No eres el encargado de esta lotería.',
             ]);
         }
 

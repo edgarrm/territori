@@ -38,7 +38,7 @@ class LoteriaTest extends TestCase
         return [$tenant, $user, $membership, $municipio, $aviso];
     }
 
-    public function test_crear_loteria_persiste_nombre_fecha_y_encargado(): void
+    public function test_crear_loteria_persiste_nombre_fecha_encargado_y_creador(): void
     {
         [$tenant, $user, $membership, $municipio] = $this->setupCampana();
         $seccion = Seccion::query()->where('municipio_id', $municipio->id)->where('numero', 1)->first();
@@ -53,9 +53,146 @@ class LoteriaTest extends TestCase
         $this->assertDatabaseHas('loterias', [
             'tenant_id' => $tenant->id,
             'membership_id' => $membership->id,
+            'creada_por_membership_id' => $membership->id,
             'seccion_id' => $seccion->id,
             'nombre' => 'Lotería Centro',
         ]);
+    }
+
+    public function test_gestion_crea_loteria_asignada_a_otro_miembro(): void
+    {
+        [$tenant, , $membership, $municipio] = $this->setupCampana();
+        $seccion = Seccion::query()->where('municipio_id', $municipio->id)->where('numero', 1)->first();
+
+        $coordinador = User::factory()->create();
+        $coordinadorM = Membership::create(['tenant_id' => $tenant->id, 'user_id' => $coordinador->id, 'rol' => 'coordinador']);
+
+        $this->actingAs($coordinador)->withSession(['tenant_id' => $tenant->id])
+            ->post('/loterias', [
+                'nombre' => 'Lotería Asignada',
+                'fecha' => now()->toDateString(),
+                'seccion_id' => $seccion->id,
+                'asignado_membership_id' => $membership->id,
+            ])->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('loterias', [
+            'tenant_id' => $tenant->id,
+            'membership_id' => $membership->id,
+            'creada_por_membership_id' => $coordinadorM->id,
+            'nombre' => 'Lotería Asignada',
+        ]);
+    }
+
+    public function test_brigadista_no_puede_asignar_a_otro_miembro(): void
+    {
+        [$tenant, $user, , $municipio] = $this->setupCampana();
+        $seccion = Seccion::query()->where('municipio_id', $municipio->id)->where('numero', 1)->first();
+
+        $otro = User::factory()->create();
+        $otroM = Membership::create(['tenant_id' => $tenant->id, 'user_id' => $otro->id, 'rol' => 'brigadista']);
+
+        $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->post('/loterias', [
+                'nombre' => 'Lotería Intrusa',
+                'fecha' => now()->toDateString(),
+                'seccion_id' => $seccion->id,
+                'asignado_membership_id' => $otroM->id,
+            ])->assertSessionHasErrors('asignado_membership_id');
+
+        TenantContext::set($tenant);
+        $this->assertSame(0, Loteria::query()->count());
+    }
+
+    public function test_gestion_no_puede_asignar_a_membership_de_otro_tenant(): void
+    {
+        [$tenant, , , $municipio] = $this->setupCampana();
+        $seccion = Seccion::query()->where('municipio_id', $municipio->id)->where('numero', 1)->first();
+
+        $coordinador = User::factory()->create();
+        Membership::create(['tenant_id' => $tenant->id, 'user_id' => $coordinador->id, 'rol' => 'coordinador']);
+
+        $otroTenant = Tenant::factory()->create(['municipio_id' => $municipio->id]);
+        $ajeno = User::factory()->create();
+        $ajenoM = Membership::create(['tenant_id' => $otroTenant->id, 'user_id' => $ajeno->id, 'rol' => 'brigadista']);
+
+        TenantContext::set($tenant);
+        $this->actingAs($coordinador)->withSession(['tenant_id' => $tenant->id])
+            ->post('/loterias', [
+                'nombre' => 'Lotería Cruzada',
+                'fecha' => now()->toDateString(),
+                'seccion_id' => $seccion->id,
+                'asignado_membership_id' => $ajenoM->id,
+            ])->assertSessionHasErrors('asignado_membership_id');
+    }
+
+    public function test_index_incluye_las_loterias_asignadas_aunque_no_las_creo(): void
+    {
+        [$tenant, $user, $membership, $municipio] = $this->setupCampana();
+        $seccion = Seccion::query()->where('municipio_id', $municipio->id)->where('numero', 1)->first();
+
+        $coordinador = User::factory()->create();
+        $coordinadorM = Membership::create(['tenant_id' => $tenant->id, 'user_id' => $coordinador->id, 'rol' => 'coordinador']);
+
+        // Asignada al brigadista pero creada por el coordinador.
+        Loteria::factory()->create([
+            'tenant_id' => $tenant->id,
+            'membership_id' => $membership->id,
+            'creada_por_membership_id' => $coordinadorM->id,
+            'seccion_id' => $seccion->id,
+        ]);
+
+        $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->get('/loterias')
+            ->assertInertia(fn ($page) => $page
+                ->component('Loterias')
+                ->has('loterias', 1)
+            );
+    }
+
+    public function test_index_limita_secciones_a_las_zonas_del_brigadista(): void
+    {
+        [$tenant, $user, $membership, $municipio] = $this->setupCampana();
+
+        // Deja al brigadista con una sola zona (setup le asigna todas).
+        $seccion = Seccion::query()->where('municipio_id', $municipio->id)->where('numero', 1)->first();
+        $membership->secciones()->sync([$seccion->id => ['tenant_id' => $tenant->id]]);
+
+        $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->get('/loterias')
+            ->assertInertia(fn ($page) => $page
+                ->component('Loterias')
+                ->has('secciones', 1)
+                ->where('secciones.0.id', $seccion->id)
+                ->where('esGestion', false)
+            );
+    }
+
+    public function test_captura_en_loteria_ajena_falla(): void
+    {
+        [$tenant, , $membership, $municipio, $aviso] = $this->setupCampana();
+        $seccion = Seccion::query()->where('municipio_id', $municipio->id)->where('numero', 1)->first();
+
+        $loteria = Loteria::factory()->create([
+            'tenant_id' => $tenant->id,
+            'membership_id' => $membership->id,
+            'creada_por_membership_id' => $membership->id,
+            'seccion_id' => $seccion->id,
+        ]);
+
+        // Otro brigadista (con la zona asignada) que NO es encargado ni creador.
+        $otro = User::factory()->create();
+        $otroM = Membership::create(['tenant_id' => $tenant->id, 'user_id' => $otro->id, 'rol' => 'brigadista']);
+        $otroM->secciones()->attach($seccion->id, ['tenant_id' => $tenant->id]);
+
+        $this->actingAs($otro)->withSession(['tenant_id' => $tenant->id])
+            ->postJson('/api/electores', [
+                'modo_captura' => 'loteria',
+                'loteria_id' => $loteria->id,
+                'nombre' => 'Intruso Lotería',
+                'telefono' => '5512345678',
+                'consentimiento' => true,
+                'aviso_privacidad_id' => $aviso->id,
+            ])->assertStatus(422);
     }
 
     public function test_crear_loteria_en_seccion_no_asignada_falla(): void

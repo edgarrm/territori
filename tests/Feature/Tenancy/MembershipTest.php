@@ -58,22 +58,24 @@ class MembershipTest extends TestCase
         $coordinador = (new Membership(['rol' => 'coordinador']));
         $brigadista = (new Membership(['rol' => 'brigadista']));
         $enlace = (new Membership(['rol' => 'enlace']));
+        $anfitrion = (new Membership(['rol' => 'anfitrion']));
 
         // El admin puede crear cualquier rol.
         $this->assertEqualsCanonicalizing(
-            ['admin', 'coordinador', 'brigadista', 'enlace'],
+            ['admin', 'coordinador', 'brigadista', 'enlace', 'anfitrion'],
             $admin->rolesQuePuedeAsignar(),
         );
 
-        // El coordinador solo puede crear brigadistas y enlaces.
+        // El coordinador solo puede crear brigadistas, enlaces y anfitriones.
         $this->assertEqualsCanonicalizing(
-            ['brigadista', 'enlace'],
+            ['brigadista', 'enlace', 'anfitrion'],
             $coordinador->rolesQuePuedeAsignar(),
         );
 
-        // Brigadista y enlace no pueden crear a nadie.
+        // Brigadista, enlace y anfitrión no pueden crear a nadie.
         $this->assertSame([], $brigadista->rolesQuePuedeAsignar());
         $this->assertSame([], $enlace->rolesQuePuedeAsignar());
+        $this->assertSame([], $anfitrion->rolesQuePuedeAsignar());
 
         $this->assertTrue($admin->puedeAsignarRol('coordinador'));
         $this->assertFalse($coordinador->puedeAsignarRol('admin'));
@@ -93,6 +95,20 @@ class MembershipTest extends TestCase
 
         $this->assertTrue($brigadista->puedeCapturarEnSeccion($seccionAsignada->id));
         $this->assertFalse($brigadista->puedeCapturarEnSeccion($seccionAjena->id));
+    }
+
+    public function test_anfitrion_solo_puede_capturar_en_sus_zonas_asignadas(): void
+    {
+        $tenant = $this->tenant();
+        $seccionAsignada = Seccion::create(['municipio_id' => $tenant->municipio_id, 'numero' => 1]);
+        $seccionAjena = Seccion::create(['municipio_id' => $tenant->municipio_id, 'numero' => 2]);
+
+        $user = User::factory()->create();
+        $anfitrion = Membership::create(['tenant_id' => $tenant->id, 'user_id' => $user->id, 'rol' => 'anfitrion']);
+        $anfitrion->secciones()->attach($seccionAsignada->id, ['tenant_id' => $tenant->id]);
+
+        $this->assertTrue($anfitrion->puedeCapturarEnSeccion($seccionAsignada->id));
+        $this->assertFalse($anfitrion->puedeCapturarEnSeccion($seccionAjena->id));
     }
 
     public function test_gestion_puede_capturar_en_cualquier_seccion(): void

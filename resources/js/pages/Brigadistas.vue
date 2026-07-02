@@ -4,7 +4,11 @@ import { ref } from 'vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { dashboard } from '@/routes';
-import { store, activo as activoRoute, zonas as zonasRoute } from '@/routes/brigadistas';
+import {
+    store,
+    activo as activoRoute,
+    zonas as zonasRoute,
+} from '@/routes/brigadistas';
 
 defineOptions({
     layout: {
@@ -35,6 +39,7 @@ type Miembro = {
     email: string | null;
     rol: string;
     activo: boolean;
+    secciones_ids: number[];
 };
 
 type Seccion = { id: number; numero: number };
@@ -44,7 +49,11 @@ const props = defineProps<{
     otrosMiembros: Miembro[];
     rolesAsignables: string[];
     secciones: Seccion[];
-    facturacion: { activos: number; limite: number | null; puede_activar: boolean };
+    facturacion: {
+        activos: number;
+        limite: number | null;
+        puede_activar: boolean;
+    };
 }>();
 
 const ETIQUETA_ROL: Record<string, string> = {
@@ -52,6 +61,7 @@ const ETIQUETA_ROL: Record<string, string> = {
     coordinador: 'Coordinador',
     brigadista: 'Brigadista',
     enlace: 'Enlace',
+    anfitrion: 'Anfitrión',
 };
 
 function etiquetaRol(rol: string): string {
@@ -68,11 +78,16 @@ const procesando = ref(false);
 
 function csrf(): string {
     return (
-        document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? ''
+        document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')
+            ?.content ?? ''
     );
 }
 
-async function enviar(url: string, method: string, body?: unknown): Promise<Response> {
+async function enviar(
+    url: string,
+    method: string,
+    body?: unknown,
+): Promise<Response> {
     return fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf() },
@@ -83,34 +98,48 @@ async function enviar(url: string, method: string, body?: unknown): Promise<Resp
 async function agregar() {
     errorAlta.value = null;
     procesando.value = true;
+
     try {
         const res = await enviar(store.url(), 'POST', alta.value);
+
         if (res.status === 422) {
-            errorAlta.value = (await res.json()).message ?? 'No se pudo agregar.';
+            errorAlta.value =
+                (await res.json()).message ?? 'No se pudo agregar.';
+
             return;
         }
+
         alta.value = { email: '', name: '', rol: rolInicial, meta_diaria: 0 };
-        router.reload({ only: ['brigadistas', 'otrosMiembros', 'facturacion'] });
+        router.reload({
+            only: ['brigadistas', 'otrosMiembros', 'facturacion'],
+        });
     } finally {
         procesando.value = false;
     }
 }
 
 async function alternarActivo(b: Brigadista) {
-    const res = await enviar(activoRoute.url(b.membership_id), 'PUT', { activo: !b.activo });
+    const res = await enviar(activoRoute.url(b.membership_id), 'PUT', {
+        activo: !b.activo,
+    });
+
     if (res.status === 422) {
         alert((await res.json()).message ?? 'Límite de brigadistas alcanzado.');
+
         return;
     }
+
     router.reload({ only: ['brigadistas', 'facturacion'] });
 }
 
+// Editor de zonas: aplica a brigadistas y anfitriones (sus zonas acotan
+// dónde capturan / crean loterías).
 const zonasAbiertas = ref<number | null>(null);
 const seleccion = ref<Set<number>>(new Set());
 
-function abrirZonas(b: Brigadista) {
-    zonasAbiertas.value = b.membership_id;
-    seleccion.value = new Set(b.secciones_ids);
+function abrirZonas(m: { membership_id: number; secciones_ids: number[] }) {
+    zonasAbiertas.value = m.membership_id;
+    seleccion.value = new Set(m.secciones_ids);
 }
 
 function toggleSeccion(id: number) {
@@ -119,6 +148,7 @@ function toggleSeccion(id: number) {
     } else {
         seleccion.value.add(id);
     }
+
     seleccion.value = new Set(seleccion.value);
 }
 
@@ -130,12 +160,12 @@ function vaciarSeleccion() {
     seleccion.value = new Set();
 }
 
-async function guardarZonas(b: Brigadista) {
-    await enviar(zonasRoute.url(b.membership_id), 'PUT', {
+async function guardarZonas(m: { membership_id: number }) {
+    await enviar(zonasRoute.url(m.membership_id), 'PUT', {
         seccion_ids: [...seleccion.value],
     });
     zonasAbiertas.value = null;
-    router.reload({ only: ['brigadistas'] });
+    router.reload({ only: ['brigadistas', 'otrosMiembros'] });
 }
 </script>
 
@@ -159,7 +189,10 @@ async function guardarZonas(b: Brigadista) {
                 {{ facturacion.limite ?? '∞' }}
                 brigadistas activos
             </span>
-            <span v-if="!facturacion.puede_activar" class="text-amber-700 dark:text-amber-400">
+            <span
+                v-if="!facturacion.puede_activar"
+                class="text-amber-700 dark:text-amber-400"
+            >
                 Alcanzaste el límite de tu plan. Actualiza para activar a más.
             </span>
         </div>
@@ -167,7 +200,12 @@ async function guardarZonas(b: Brigadista) {
         <form class="flex flex-wrap items-end gap-2" @submit.prevent="agregar">
             <div class="flex flex-col gap-1">
                 <label class="text-xs text-muted-foreground">Email</label>
-                <Input v-model="alta.email" type="email" required placeholder="miembro@x.com" />
+                <Input
+                    v-model="alta.email"
+                    type="email"
+                    required
+                    placeholder="miembro@x.com"
+                />
             </div>
             <div class="flex flex-col gap-1">
                 <label class="text-xs text-muted-foreground">Nombre</label>
@@ -179,17 +217,30 @@ async function guardarZonas(b: Brigadista) {
                     v-model="alta.rol"
                     class="h-9 rounded-md border border-input bg-background px-3 text-sm"
                 >
-                    <option v-for="rol in rolesAsignables" :key="rol" :value="rol">
+                    <option
+                        v-for="rol in rolesAsignables"
+                        :key="rol"
+                        :value="rol"
+                    >
                         {{ etiquetaRol(rol) }}
                     </option>
                 </select>
             </div>
             <div v-if="alta.rol === 'brigadista'" class="flex flex-col gap-1">
                 <label class="text-xs text-muted-foreground">Meta diaria</label>
-                <Input v-model="alta.meta_diaria" type="number" min="0" class="w-24" />
+                <Input
+                    v-model="alta.meta_diaria"
+                    type="number"
+                    min="0"
+                    class="w-24"
+                />
             </div>
-            <Button type="submit" :disabled="procesando || !alta.rol">Agregar miembro</Button>
-            <p v-if="errorAlta" class="w-full text-sm text-red-600">{{ errorAlta }}</p>
+            <Button type="submit" :disabled="procesando || !alta.rol"
+                >Agregar miembro</Button
+            >
+            <p v-if="errorAlta" class="w-full text-sm text-red-600">
+                {{ errorAlta }}
+            </p>
         </form>
 
         <h2 class="mt-2 text-base font-semibold">Brigadistas</h2>
@@ -218,15 +269,27 @@ async function guardarZonas(b: Brigadista) {
                     </tr>
                 </thead>
                 <tbody>
-                    <tr v-for="b in brigadistas" :key="b.membership_id" class="border-t align-top">
+                    <tr
+                        v-for="b in brigadistas"
+                        :key="b.membership_id"
+                        class="border-t align-top"
+                    >
                         <td class="p-2">
-                            <div class="font-medium">{{ b.nombre ?? b.email }}</div>
-                            <div class="text-xs text-muted-foreground">{{ b.email }}</div>
+                            <div class="font-medium">
+                                {{ b.nombre ?? b.email }}
+                            </div>
+                            <div class="text-xs text-muted-foreground">
+                                {{ b.email }}
+                            </div>
                         </td>
                         <td class="p-2">
                             <button
                                 class="rounded px-2 py-1 text-xs"
-                                :class="b.activo ? 'bg-emerald-500/20 text-emerald-700' : 'bg-muted text-muted-foreground'"
+                                :class="
+                                    b.activo
+                                        ? 'bg-emerald-500/20 text-emerald-700'
+                                        : 'bg-muted text-muted-foreground'
+                                "
                                 @click="alternarActivo(b)"
                             >
                                 {{ b.activo ? 'Activo' : 'Inactivo' }}
@@ -240,18 +303,26 @@ async function guardarZonas(b: Brigadista) {
                             <span v-else class="text-muted-foreground">—</span>
                         </td>
                         <td class="p-2">{{ b.capturas_total }}</td>
-                        <td class="p-2">{{ Math.round(b.pct_completos * 100) }}%</td>
                         <td class="p-2">
-                            <button class="text-xs underline" @click="abrirZonas(b)">
+                            {{ Math.round(b.pct_completos * 100) }}%
+                        </td>
+                        <td class="p-2">
+                            <button
+                                class="text-xs underline"
+                                @click="abrirZonas(b)"
+                            >
                                 {{ b.secciones_asignadas }} secciones
                             </button>
                             <div
                                 v-if="zonasAbiertas === b.membership_id"
                                 class="mt-2 w-56 rounded border bg-background p-2"
                             >
-                                <div class="mb-2 flex items-center justify-between gap-2">
+                                <div
+                                    class="mb-2 flex items-center justify-between gap-2"
+                                >
                                     <span class="text-xs text-muted-foreground">
-                                        {{ seleccion.size }} de {{ secciones.length }}
+                                        {{ seleccion.size }} de
+                                        {{ secciones.length }}
                                     </span>
                                     <div class="flex gap-1">
                                         <button
@@ -270,7 +341,9 @@ async function guardarZonas(b: Brigadista) {
                                         </button>
                                     </div>
                                 </div>
-                                <div class="max-h-48 overflow-auto rounded border bg-background p-2">
+                                <div
+                                    class="max-h-48 overflow-auto rounded border bg-background p-2"
+                                >
                                     <label
                                         v-for="s in secciones"
                                         :key="s.id"
@@ -284,7 +357,11 @@ async function guardarZonas(b: Brigadista) {
                                         {{ s.numero }}
                                     </label>
                                 </div>
-                                <Button class="mt-2 w-full" @click="guardarZonas(b)">Guardar zonas</Button>
+                                <Button
+                                    class="mt-2 w-full"
+                                    @click="guardarZonas(b)"
+                                    >Guardar zonas</Button
+                                >
                             </div>
                         </td>
                     </tr>
@@ -311,16 +388,90 @@ async function guardarZonas(b: Brigadista) {
                         <th class="p-2 text-left">Miembro</th>
                         <th class="p-2 text-left">Rol</th>
                         <th class="p-2 text-left">Activo</th>
+                        <th class="p-2 text-left">Zonas</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <tr v-for="m in otrosMiembros" :key="m.membership_id" class="border-t">
+                    <tr
+                        v-for="m in otrosMiembros"
+                        :key="m.membership_id"
+                        class="border-t align-top"
+                    >
                         <td class="p-2">
-                            <div class="font-medium">{{ m.nombre ?? m.email }}</div>
-                            <div class="text-xs text-muted-foreground">{{ m.email }}</div>
+                            <div class="font-medium">
+                                {{ m.nombre ?? m.email }}
+                            </div>
+                            <div class="text-xs text-muted-foreground">
+                                {{ m.email }}
+                            </div>
                         </td>
                         <td class="p-2">{{ etiquetaRol(m.rol) }}</td>
                         <td class="p-2">{{ m.activo ? 'Sí' : 'No' }}</td>
+                        <td class="p-2">
+                            <template v-if="m.rol === 'anfitrion'">
+                                <button
+                                    class="text-xs underline"
+                                    @click="abrirZonas(m)"
+                                >
+                                    {{ m.secciones_ids.length }} secciones
+                                </button>
+                                <div
+                                    v-if="zonasAbiertas === m.membership_id"
+                                    class="mt-2 w-56 rounded border bg-background p-2"
+                                >
+                                    <div
+                                        class="mb-2 flex items-center justify-between gap-2"
+                                    >
+                                        <span
+                                            class="text-xs text-muted-foreground"
+                                        >
+                                            {{ seleccion.size }} de
+                                            {{ secciones.length }}
+                                        </span>
+                                        <div class="flex gap-1">
+                                            <button
+                                                type="button"
+                                                class="rounded border px-2 py-0.5 text-xs hover:bg-muted"
+                                                @click="seleccionarTodas"
+                                            >
+                                                Todas
+                                            </button>
+                                            <button
+                                                type="button"
+                                                class="rounded border px-2 py-0.5 text-xs hover:bg-muted"
+                                                @click="vaciarSeleccion"
+                                            >
+                                                Vaciar
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div
+                                        class="max-h-48 overflow-auto rounded border bg-background p-2"
+                                    >
+                                        <label
+                                            v-for="s in secciones"
+                                            :key="s.id"
+                                            class="flex items-center gap-2 py-0.5 text-xs"
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                :checked="seleccion.has(s.id)"
+                                                @change="toggleSeccion(s.id)"
+                                            />
+                                            {{ s.numero }}
+                                        </label>
+                                    </div>
+                                    <Button
+                                        class="mt-2 w-full"
+                                        @click="guardarZonas(m)"
+                                        >Guardar zonas</Button
+                                    >
+                                </div>
+                            </template>
+                            <span v-else class="text-xs text-muted-foreground"
+                                >—</span
+                            >
+                        </td>
                     </tr>
                 </tbody>
             </table>

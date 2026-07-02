@@ -40,6 +40,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::post('redes-ciudadanas', [RedCiudadanaController::class, 'store'])->name('redes-ciudadanas.store');
         });
 
+        // --- Loterías: incluye al rol "anfitrion" (acceso restringido solo a
+        // sus loterías); el enlace queda fuera (403) ---
+        Route::middleware('rol:anfitrion,brigadista,coordinador,admin')->group(function () {
+            Route::get('loterias', [LoteriaController::class, 'index'])->name('loterias.index');
+            Route::post('loterias', [LoteriaController::class, 'store'])->name('loterias.store');
+            Route::get('api/loterias/{loteria}/electores', [LoteriaController::class, 'electores'])->name('loterias.electores');
+        });
+
         // --- Resto del dominio: el rol "enlace" queda fuera (403) ---
         Route::middleware('rol:brigadista,coordinador,admin')->group(function () {
             Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
@@ -75,10 +83,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
             // Captura de electores (brigadista/coordinador/admin; el 403 fino lo aplica el FormRequest/acción).
             Route::get('captura', [CapturaController::class, 'index'])->name('captura');
-
-            Route::get('loterias', [LoteriaController::class, 'index'])->name('loterias.index');
-            Route::post('loterias', [LoteriaController::class, 'store'])->name('loterias.store');
-            Route::get('api/loterias/{loteria}/electores', [LoteriaController::class, 'electores'])->name('loterias.electores');
 
             Route::get('api/electores/{elector}', [ElectorController::class, 'show'])->name('electores.show');
             Route::put('api/electores/{elector}', [ElectorController::class, 'update'])->name('electores.update');

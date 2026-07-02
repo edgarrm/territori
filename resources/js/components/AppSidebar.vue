@@ -32,8 +32,10 @@ const page = usePage<{ auth: { rol: string | null } }>();
 const esGestion = computed(() =>
     ['coordinador', 'admin'].includes(page.props.auth?.rol ?? ''),
 );
-// El rol "enlace" tiene acceso restringido: solo a sus redes ciudadanas.
+// Roles de acceso restringido: "enlace" solo ve sus redes ciudadanas y
+// "anfitrion" solo sus loterías.
 const esEnlace = computed(() => page.props.auth?.rol === 'enlace');
+const esAnfitrion = computed(() => page.props.auth?.rol === 'anfitrion');
 
 const redesItem: NavItem = {
     title: 'Redes ciudadanas',
@@ -41,9 +43,19 @@ const redesItem: NavItem = {
     icon: Network,
 };
 
+const loteriasItem: NavItem = {
+    title: 'Loterías',
+    href: '/loterias',
+    icon: Ticket,
+};
+
 const mainNavItems = computed<NavItem[]>(() => {
     if (esEnlace.value) {
         return [redesItem];
+    }
+
+    if (esAnfitrion.value) {
+        return [loteriasItem];
     }
 
     const items: NavItem[] = [
@@ -52,7 +64,7 @@ const mainNavItems = computed<NavItem[]>(() => {
         { title: 'Captura', href: '/captura', icon: ClipboardList },
         { title: 'Agenda', href: '/agenda', icon: CalendarCheck },
         { title: 'Eventos', href: '/eventos', icon: CalendarDays },
-        { title: 'Loterías', href: '/loterias', icon: Ticket },
+        loteriasItem,
         redesItem,
     ];
 

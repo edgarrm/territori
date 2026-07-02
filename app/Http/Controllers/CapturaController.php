@@ -35,12 +35,15 @@ class CapturaController extends Controller
                 'seccion_id' => $evento->seccion_id,
             ]);
 
-        // Loterías donde puede capturar: gestión ve todas; el brigadista las
-        // que él encabeza.
+        // Loterías donde puede capturar: gestión ve todas; el resto las que
+        // creó o tiene asignadas.
         $loterias = Loteria::query()
             ->when(
                 $membership !== null && ! $membership->esGestion(),
-                fn ($query) => $query->where('membership_id', $membership?->id),
+                fn ($query) => $query->where(
+                    fn ($q) => $q->where('membership_id', $membership?->id)
+                        ->orWhere('creada_por_membership_id', $membership?->id),
+                ),
             )
             ->orderByDesc('fecha')
             ->get(['id', 'nombre', 'fecha', 'seccion_id'])

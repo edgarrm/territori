@@ -4,6 +4,7 @@ namespace Tests\Feature\Brigadistas;
 
 use App\Models\Membership;
 use App\Models\Municipio;
+use App\Models\Seccion;
 use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -63,6 +64,33 @@ class GestionBrigadistasTest extends TestCase
         $this->actuandoEn($user, $tenant)
             ->putJson("/api/brigadistas/{$otro->id}/zonas", ['seccion_ids' => []])
             ->assertForbidden();
+    }
+
+    public function test_gestion_asigna_zonas_a_un_anfitrion(): void
+    {
+        [$tenant, $coord, $municipio] = $this->tenantConCoordinador();
+        $anfitrion = Membership::factory()->anfitrion()->create(['tenant_id' => $tenant->id]);
+        $seccion = Seccion::factory()->create(['municipio_id' => $municipio->id]);
+
+        $this->actuandoEn($coord, $tenant)
+            ->putJson("/api/brigadistas/{$anfitrion->id}/zonas", ['seccion_ids' => [$seccion->id]])
+            ->assertOk();
+
+        $this->assertDatabaseHas('brigadista_seccion', [
+            'tenant_id' => $tenant->id,
+            'membership_id' => $anfitrion->id,
+            'seccion_id' => $seccion->id,
+        ]);
+    }
+
+    public function test_zonas_no_aplica_a_un_coordinador(): void
+    {
+        [$tenant, $coord] = $this->tenantConCoordinador();
+        $otroCoordinador = Membership::factory()->coordinador()->create(['tenant_id' => $tenant->id]);
+
+        $this->actuandoEn($coord, $tenant)
+            ->putJson("/api/brigadistas/{$otroCoordinador->id}/zonas", ['seccion_ids' => []])
+            ->assertNotFound();
     }
 
     public function test_alta_crea_o_reusa_user(): void
@@ -147,8 +175,8 @@ class GestionBrigadistasTest extends TestCase
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Brigadistas')
-                // Coordinador solo puede asignar brigadista y enlace.
-                ->has('rolesAsignables', 2)
+                // Coordinador solo puede asignar brigadista, enlace y anfitrión.
+                ->has('rolesAsignables', 3)
                 // Otros miembros: el coordinador actual + el enlace (no brigadistas).
                 ->has('otrosMiembros', 2)
                 ->where('otrosMiembros', fn ($miembros) => collect($miembros)->pluck('rol')->contains('enlace'))

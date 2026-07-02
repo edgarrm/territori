@@ -11,12 +11,15 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 
 /**
- * Lotería: registro de captura masiva con nombre y fecha, ligado a una sección
- * y a cargo de un encargado (membership). Los electores capturados la referencian.
+ * Lotería: registro de captura masiva con nombre y fecha, ligado a una sección.
+ * membership_id es el encargado asignado; creada_por_membership_id quién la
+ * creó (gestión puede crear asignando a un tercero). Los electores capturados
+ * la referencian.
  *
  * @property int $id
  * @property int $tenant_id
  * @property int $membership_id
+ * @property int|null $creada_por_membership_id
  * @property int $seccion_id
  * @property string $nombre
  * @property Carbon $fecha
@@ -35,6 +38,7 @@ class Loteria extends Model
     protected $fillable = [
         'tenant_id',
         'membership_id',
+        'creada_por_membership_id',
         'seccion_id',
         'nombre',
         'fecha',
@@ -51,13 +55,23 @@ class Loteria extends Model
     }
 
     /**
-     * Encargado de la lotería.
+     * Encargado asignado de la lotería.
      *
      * @return BelongsTo<Membership, $this>
      */
     public function membership(): BelongsTo
     {
         return $this->belongsTo(Membership::class);
+    }
+
+    /**
+     * Quién creó la lotería (gestión puede crear asignando a un tercero).
+     *
+     * @return BelongsTo<Membership, $this>
+     */
+    public function creadaPor(): BelongsTo
+    {
+        return $this->belongsTo(Membership::class, 'creada_por_membership_id');
     }
 
     /**

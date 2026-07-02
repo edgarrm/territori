@@ -89,19 +89,24 @@ class Membership extends Model
         return $this->rol === 'enlace';
     }
 
+    public function esAnfitrion(): bool
+    {
+        return $this->rol === 'anfitrion';
+    }
+
     public function esGestion(): bool
     {
         return in_array($this->rol, ['coordinador', 'admin'], true);
     }
 
     /**
-     * ¿Puede capturar en esta sección? El brigadista está acotado a sus zonas
-     * asignadas (brigadista_seccion); sin zonas no puede capturar en ninguna.
-     * Gestión (coordinador/admin) y otros roles no dependen de zonas.
+     * ¿Puede capturar en esta sección? Brigadista y anfitrión están acotados a
+     * sus zonas asignadas (brigadista_seccion); sin zonas no pueden capturar en
+     * ninguna. Gestión (coordinador/admin) y otros roles no dependen de zonas.
      */
     public function puedeCapturarEnSeccion(int $seccionId): bool
     {
-        if (! $this->esBrigadista()) {
+        if (! $this->esBrigadista() && ! $this->esAnfitrion()) {
             return true;
         }
 
@@ -120,16 +125,17 @@ class Membership extends Model
 
     /**
      * Roles que esta membership puede asignar al invitar a otro miembro. El
-     * admin da de alta cualquier rol; el coordinador solo brigadistas y enlaces
-     * (nunca coordinadores ni admins, para evitar escalación de privilegios).
+     * admin da de alta cualquier rol; el coordinador solo brigadistas, enlaces
+     * y anfitriones (nunca coordinadores ni admins, para evitar escalación de
+     * privilegios).
      *
      * @return list<string>
      */
     public function rolesQuePuedeAsignar(): array
     {
         return match ($this->rol) {
-            'admin' => ['admin', 'coordinador', 'brigadista', 'enlace'],
-            'coordinador' => ['brigadista', 'enlace'],
+            'admin' => ['admin', 'coordinador', 'brigadista', 'enlace', 'anfitrion'],
+            'coordinador' => ['brigadista', 'enlace', 'anfitrion'],
             default => [],
         };
     }
@@ -140,12 +146,17 @@ class Membership extends Model
     }
 
     /**
-     * Ruta de aterrizaje según el rol: el enlace (acceso restringido) entra a
-     * sus redes ciudadanas; el resto al dashboard.
+     * Ruta de aterrizaje según el rol: los roles de acceso restringido entran
+     * directo a su área (enlace → redes, anfitrión → loterías); el resto al
+     * dashboard.
      */
     public function rutaInicial(): string
     {
-        return $this->esEnlace() ? 'redes-ciudadanas.index' : 'dashboard';
+        return match ($this->rol) {
+            'enlace' => 'redes-ciudadanas.index',
+            'anfitrion' => 'loterias.index',
+            default => 'dashboard',
+        };
     }
 
     public function activar(): void

@@ -12,20 +12,22 @@ use RuntimeException;
 class AsignarZonas
 {
     /**
-     * Asigna (reemplaza) las secciones de un brigadista. Idempotente vía sync.
-     * Valida que cada sección pertenezca al municipio del tenant activo y
-     * persiste el tenant_id en el pivote (memberships no tiene global scope).
+     * Asigna (reemplaza) las secciones de un brigadista o anfitrión (roles con
+     * zonas). Idempotente vía sync. Valida que cada sección pertenezca al
+     * municipio del tenant activo y persiste el tenant_id en el pivote
+     * (memberships no tiene global scope).
      *
      * @param  array<int, int>  $seccionIds
      *
      * @throws ValidationException si alguna sección no es del municipio del tenant.
      */
-    public function handle(Membership $brigadista, array $seccionIds): void
+    public function handle(Membership $miembro, array $seccionIds): void
     {
         $tenant = TenantContext::get();
+        $conZonas = $miembro->esBrigadista() || $miembro->esAnfitrion();
 
-        if ($tenant === null || $brigadista->tenant_id !== $tenant->id || ! $brigadista->esBrigadista()) {
-            throw new RuntimeException('La membresía no es un brigadista del tenant activo.');
+        if ($tenant === null || $miembro->tenant_id !== $tenant->id || ! $conZonas) {
+            throw new RuntimeException('La membresía no es un brigadista o anfitrión del tenant activo.');
         }
 
         $ids = collect($seccionIds)->map(fn ($id): int => (int) $id)->unique()->values();
@@ -41,7 +43,7 @@ class AsignarZonas
             ]);
         }
 
-        $brigadista->secciones()->sync($this->payloadConTenant($ids, $tenant->id));
+        $miembro->secciones()->sync($this->payloadConTenant($ids, $tenant->id));
     }
 
     /**

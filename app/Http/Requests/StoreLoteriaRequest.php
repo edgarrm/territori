@@ -26,6 +26,7 @@ class StoreLoteriaRequest extends FormRequest
     public function rules(): array
     {
         $tenant = TenantContext::get();
+        $membership = $tenant !== null ? $this->user()?->membershipEn($tenant) : null;
 
         return [
             'nombre' => ['required', 'string', 'max:160'],
@@ -34,6 +35,13 @@ class StoreLoteriaRequest extends FormRequest
                 'required',
                 'integer',
                 Rule::exists('secciones', 'id')->where('municipio_id', $tenant?->municipio_id),
+            ],
+            // Solo gestión puede asignar la lotería a otro miembro.
+            'asignado_membership_id' => [
+                'nullable',
+                'integer',
+                Rule::prohibitedIf(! ($membership?->esGestion() ?? false)),
+                Rule::exists('memberships', 'id')->where('tenant_id', $tenant?->id),
             ],
         ];
     }

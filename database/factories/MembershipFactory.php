@@ -44,4 +44,9 @@ class MembershipFactory extends Factory
     {
         return $this->state(['rol' => 'enlace']);
     }
+
+    public function anfitrion(): static
+    {
+        return $this->state(['rol' => 'anfitrion']);
+    }
 }

@@ -98,6 +98,7 @@ class DemoCapturasSeeder extends Seeder
             $loteriaId = DB::table('loterias')->insertGetId([
                 'tenant_id' => $tenant->id,
                 'membership_id' => $brigadista->id,
+                'creada_por_membership_id' => $brigadista->id,
                 'seccion_id' => $seccion->id,
                 'nombre' => "Lotería Sección {$seccion->numero}",
                 'fecha' => now()->subDays(random_int(0, 14)),
@@ -161,6 +162,10 @@ class DemoCapturasSeeder extends Seeder
             }
         });
 
+        // El reset de brigadista_seccion borró las zonas del anfitrión demo:
+        // se las devuelve y le deja una lotería asignada por gestión.
+        $this->anfitrionDemo($tenant, $secciones);
+
         // Recálculo canónico e idempotente de cobertura_seccion (capturados/meta, penetración).
         Artisan::call('territori:recalcular-cobertura', ['tenant' => $tenant->id]);
 
@@ -175,6 +180,50 @@ class DemoCapturasSeeder extends Seeder
             $interacciones,
             $eventos,
         ));
+    }
+
+    /**
+     * Zonas del anfitrión demo (las primeras 3 secciones) y una lotería
+     * asignada a él por el coordinador, para demostrar el flujo de asignación.
+     *
+     * @param  Collection<int, Seccion>  $secciones
+     */
+    private function anfitrionDemo(Tenant $tenant, Collection $secciones): void
+    {
+        $anfitrion = Membership::query()
+            ->where('tenant_id', $tenant->id)
+            ->where('rol', 'anfitrion')
+            ->first();
+
+        if (! $anfitrion) {
+            return;
+        }
+
+        $zonas = $secciones->take(3);
+
+        DB::table('brigadista_seccion')->insert(
+            $zonas->map(fn (Seccion $seccion): array => [
+                'tenant_id' => $tenant->id,
+                'membership_id' => $anfitrion->id,
+                'seccion_id' => $seccion->id,
+            ])->all(),
+        );
+
+        $coordinador = Membership::query()
+            ->where('tenant_id', $tenant->id)
+            ->where('rol', 'coordinador')
+            ->first();
+
+        DB::table('loterias')->insert([
+            'tenant_id' => $tenant->id,
+            'membership_id' => $anfitrion->id,
+            'creada_por_membership_id' => $coordinador->id ?? $anfitrion->id,
+            'seccion_id' => $zonas->first()->id,
+            'nombre' => 'Lotería del Anfitrión',
+            'fecha' => now()->addDays(3),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
     }
 
     /**

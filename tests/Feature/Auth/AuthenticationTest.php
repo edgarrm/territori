@@ -56,6 +56,23 @@ class AuthenticationTest extends TestCase
         $response->assertRedirect(route('redes-ciudadanas.index', absolute: false));
     }
 
+    public function test_usuarios_con_rol_anfitrion_son_redirigidos_a_loterias()
+    {
+        $user = User::factory()->create();
+        $entidadId = DB::table('entidades')->insertGetId(['clave' => 25, 'nombre' => 'Sinaloa', 'created_at' => now(), 'updated_at' => now()]);
+        $municipioId = DB::table('municipios')->insertGetId(['entidad_id' => $entidadId, 'clave' => 12, 'nombre' => 'Mazatlán', 'created_at' => now(), 'updated_at' => now()]);
+        $tenant = Tenant::create(['nombre' => 'T', 'municipio_id' => $municipioId]);
+        Membership::create(['tenant_id' => $tenant->id, 'user_id' => $user->id, 'rol' => 'anfitrion']);
+
+        $response = $this->post(route('login.store'), [
+            'email' => $user->email,
+            'password' => 'password',
+        ]);
+
+        $this->assertAuthenticated();
+        $response->assertRedirect(route('loterias.index', absolute: false));
+    }
+
     public function test_users_sin_membership_son_redirigidos_a_pantalla_de_aviso()
     {
         $user = User::factory()->create();

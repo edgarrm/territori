@@ -57,6 +57,7 @@ class DemoTenantSeeder extends Seeder
             'coordinador@demo.test' => 'coordinador',
             'brigadista@demo.test' => 'brigadista',
             'enlace@demo.test' => 'enlace',
+            'anfitrion@demo.test' => 'anfitrion',
         ];
 
         foreach ($roles as $email => $rol) {
@@ -97,6 +98,16 @@ class DemoTenantSeeder extends Seeder
 
         if ($brigadista && $seccionIds !== []) {
             (new AsignarZonas)->handle($brigadista, $seccionIds);
+        }
+
+        // El anfitrión demo también lleva zonas: acotan dónde crea loterías.
+        $anfitrion = Membership::query()
+            ->where('tenant_id', $tenant->id)
+            ->where('rol', 'anfitrion')
+            ->first();
+
+        if ($anfitrion && $seccionIds !== []) {
+            (new AsignarZonas)->handle($anfitrion, $seccionIds);
         }
 
         // Red ciudadana demo cuyo enlace es el usuario con rol "enlace".
