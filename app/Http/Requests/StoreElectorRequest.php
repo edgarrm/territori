@@ -38,6 +38,7 @@ class StoreElectorRequest extends FormRequest
 
         return [
             'modo_captura' => ['required', 'in:'.$modos],
+            'loteria_id' => ['nullable', 'integer'],
             'evento_id' => ['nullable', 'integer'],
             'red_ciudadana_id' => ['nullable', 'integer'],
             'nombre' => ['required', 'string', 'max:160'],

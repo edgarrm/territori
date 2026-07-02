@@ -22,7 +22,7 @@ class LoteriaTest extends TestCase
     use RefreshDatabase;
 
     /**
-     * @return array{0: Tenant, 1: User, 2: Municipio, 3: AvisoPrivacidad}
+     * @return array{0: Tenant, 1: User, 2: Membership, 3: Municipio, 4: AvisoPrivacidad}
      */
     private function setupCampana(): array
     {
@@ -35,95 +35,149 @@ class LoteriaTest extends TestCase
         TenantContext::set($tenant);
         $aviso = AvisoPrivacidad::factory()->create(['tenant_id' => $tenant->id]);
 
-        return [$tenant, $user, $municipio, $aviso];
+        return [$tenant, $user, $membership, $municipio, $aviso];
     }
 
-    public function test_abrir_loteria_devuelve_id_y_seccion(): void
+    public function test_crear_loteria_persiste_nombre_fecha_y_encargado(): void
     {
-        [$tenant, $user, $municipio] = $this->setupCampana();
+        [$tenant, $user, $membership, $municipio] = $this->setupCampana();
         $seccion = Seccion::query()->where('municipio_id', $municipio->id)->where('numero', 1)->first();
-
-        $response = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
-            ->postJson('/api/loterias', ['seccion_id' => $seccion->id]);
-
-        $response->assertCreated();
-        $response->assertJsonPath('seccion_id', $seccion->id);
-        $this->assertNotNull($response->json('loteria_id'));
-    }
-
-    public function test_abrir_segunda_loteria_devuelve_la_existente(): void
-    {
-        [$tenant, $user, $municipio] = $this->setupCampana();
-        $seccion = Seccion::query()->where('municipio_id', $municipio->id)->where('numero', 1)->first();
-        $otra = Seccion::query()->where('municipio_id', $municipio->id)->where('numero', 2)->first();
-
-        $primera = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
-            ->postJson('/api/loterias', ['seccion_id' => $seccion->id]);
-        $idPrimera = $primera->json('loteria_id');
-
-        $segunda = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
-            ->postJson('/api/loterias', ['seccion_id' => $otra->id]);
-
-        $this->assertSame($idPrimera, $segunda->json('loteria_id'));
-
-        TenantContext::set($tenant);
-        $this->assertSame(1, Loteria::query()->whereNull('cerrada_en')->count());
-    }
-
-    public function test_activa_devuelve_la_loteria_abierta(): void
-    {
-        [$tenant, $user, $municipio] = $this->setupCampana();
-        $seccion = Seccion::query()->where('municipio_id', $municipio->id)->where('numero', 1)->first();
-
-        $abierta = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
-            ->postJson('/api/loterias', ['seccion_id' => $seccion->id]);
-
-        $response = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
-            ->getJson('/api/loterias/activa');
-
-        $response->assertOk();
-        $response->assertJsonPath('loteria.loteria_id', $abierta->json('loteria_id'));
-    }
-
-    public function test_activa_devuelve_null_sin_loteria(): void
-    {
-        [$tenant, $user] = $this->setupCampana();
-
-        $response = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
-            ->getJson('/api/loterias/activa');
-
-        $response->assertOk();
-        $response->assertJsonPath('loteria', null);
-    }
-
-    public function test_cerrar_loteria(): void
-    {
-        [$tenant, $user, $municipio] = $this->setupCampana();
-        $seccion = Seccion::query()->where('municipio_id', $municipio->id)->where('numero', 1)->first();
-        $abierta = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
-            ->postJson('/api/loterias', ['seccion_id' => $seccion->id]);
 
         $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
-            ->postJson("/api/loterias/{$abierta->json('loteria_id')}/cerrar")
-            ->assertOk();
+            ->post('/loterias', [
+                'nombre' => 'Lotería Centro',
+                'fecha' => now()->toDateString(),
+                'seccion_id' => $seccion->id,
+            ])->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('loterias', [
+            'tenant_id' => $tenant->id,
+            'membership_id' => $membership->id,
+            'seccion_id' => $seccion->id,
+            'nombre' => 'Lotería Centro',
+        ]);
+    }
+
+    public function test_crear_loteria_en_seccion_no_asignada_falla(): void
+    {
+        [$tenant, , , $municipio] = $this->setupCampana();
+        $seccion = Seccion::query()->where('municipio_id', $municipio->id)->where('numero', 1)->first();
+
+        // Brigadista sin zonas asignadas: no puede crear lotería en ninguna sección.
+        $otro = User::factory()->create();
+        Membership::create(['tenant_id' => $tenant->id, 'user_id' => $otro->id, 'rol' => 'brigadista']);
+
+        $this->actingAs($otro)->withSession(['tenant_id' => $tenant->id])
+            ->post('/loterias', [
+                'nombre' => 'Lotería Ajena',
+                'fecha' => now()->toDateString(),
+                'seccion_id' => $seccion->id,
+            ])->assertSessionHasErrors('seccion_id');
 
         TenantContext::set($tenant);
-        $this->assertNotNull(Loteria::query()->find($abierta->json('loteria_id'))->cerrada_en);
+        $this->assertSame(0, Loteria::query()->count());
+    }
+
+    public function test_index_brigadista_solo_ve_sus_loterias(): void
+    {
+        [$tenant, $user, $membership, $municipio] = $this->setupCampana();
+        $seccion = Seccion::query()->where('municipio_id', $municipio->id)->where('numero', 1)->first();
+
+        Loteria::factory()->create([
+            'tenant_id' => $tenant->id,
+            'membership_id' => $membership->id,
+            'seccion_id' => $seccion->id,
+        ]);
+
+        // Lotería de otro brigadista del mismo tenant: no debe verla.
+        $otro = User::factory()->create();
+        $otroM = Membership::create(['tenant_id' => $tenant->id, 'user_id' => $otro->id, 'rol' => 'brigadista']);
+        Loteria::factory()->create([
+            'tenant_id' => $tenant->id,
+            'membership_id' => $otroM->id,
+            'seccion_id' => $seccion->id,
+        ]);
+
+        $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->get('/loterias')
+            ->assertInertia(fn ($page) => $page
+                ->component('Loterias')
+                ->has('loterias', 1)
+            );
+    }
+
+    public function test_captura_modo_loteria_hereda_seccion_y_loteria(): void
+    {
+        [$tenant, $user, $membership, $municipio, $aviso] = $this->setupCampana();
+        $seccion = Seccion::query()->where('municipio_id', $municipio->id)->where('numero', 2)->first();
+
+        $loteria = Loteria::factory()->create([
+            'tenant_id' => $tenant->id,
+            'membership_id' => $membership->id,
+            'seccion_id' => $seccion->id,
+        ]);
+
+        $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->postJson('/api/electores', [
+                'modo_captura' => 'loteria',
+                'loteria_id' => $loteria->id,
+                'nombre' => 'Voto Lotería',
+                'telefono' => '5512345678',
+                'consentimiento' => true,
+                'aviso_privacidad_id' => $aviso->id,
+            ])->assertCreated();
+
+        TenantContext::set($tenant);
+        $elector = Elector::query()->first();
+        $this->assertSame('loteria', $elector->modo_captura);
+        $this->assertSame($seccion->id, $elector->seccion_id);
+        $this->assertSame($loteria->id, $elector->loteria_id);
+    }
+
+    public function test_modo_loteria_sin_loteria_id_falla(): void
+    {
+        [$tenant, $user, , , $aviso] = $this->setupCampana();
+
+        $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->postJson('/api/electores', [
+                'modo_captura' => 'loteria',
+                'nombre' => 'Sin Lotería',
+                'telefono' => '5512345678',
+                'consentimiento' => true,
+                'aviso_privacidad_id' => $aviso->id,
+            ])->assertStatus(422);
+    }
+
+    public function test_modo_loteria_con_loteria_inexistente_falla(): void
+    {
+        [$tenant, $user, , , $aviso] = $this->setupCampana();
+
+        $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->postJson('/api/electores', [
+                'modo_captura' => 'loteria',
+                'loteria_id' => 999999,
+                'nombre' => 'Lotería Fantasma',
+                'telefono' => '5512345678',
+                'consentimiento' => true,
+                'aviso_privacidad_id' => $aviso->id,
+            ])->assertStatus(422);
     }
 
     public function test_electores_lista_los_capturados_de_la_loteria(): void
     {
-        [$tenant, $user, $municipio, $aviso] = $this->setupCampana();
+        [$tenant, $user, $membership, $municipio, $aviso] = $this->setupCampana();
         $seccion = Seccion::query()->where('municipio_id', $municipio->id)->where('numero', 1)->first();
-
-        $abierta = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
-            ->postJson('/api/loterias', ['seccion_id' => $seccion->id]);
-        $loteriaId = $abierta->json('loteria_id');
+        $loteria = Loteria::factory()->create([
+            'tenant_id' => $tenant->id,
+            'membership_id' => $membership->id,
+            'seccion_id' => $seccion->id,
+        ]);
 
         foreach (['Ana Capturada', 'Beto Capturado'] as $i => $nombre) {
             $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
                 ->postJson('/api/electores', [
                     'modo_captura' => 'loteria',
+                    'loteria_id' => $loteria->id,
                     'nombre' => $nombre,
                     'telefono' => '551234567'.$i,
                     'consentimiento' => true,
@@ -132,7 +186,7 @@ class LoteriaTest extends TestCase
         }
 
         $response = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
-            ->getJson("/api/loterias/{$loteriaId}/electores");
+            ->getJson("/api/loterias/{$loteria->id}/electores");
 
         $response->assertOk();
         $response->assertJsonPath('total', 2);
@@ -145,15 +199,18 @@ class LoteriaTest extends TestCase
 
     public function test_electores_enmascara_telefono_para_quien_no_capturo(): void
     {
-        [$tenant, $user, $municipio, $aviso] = $this->setupCampana();
+        [$tenant, $user, $membership, $municipio, $aviso] = $this->setupCampana();
         $seccion = Seccion::query()->where('municipio_id', $municipio->id)->where('numero', 1)->first();
-
-        $abierta = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
-            ->postJson('/api/loterias', ['seccion_id' => $seccion->id]);
+        $loteria = Loteria::factory()->create([
+            'tenant_id' => $tenant->id,
+            'membership_id' => $membership->id,
+            'seccion_id' => $seccion->id,
+        ]);
 
         $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
             ->postJson('/api/electores', [
                 'modo_captura' => 'loteria',
+                'loteria_id' => $loteria->id,
                 'nombre' => 'Carmen Capturada',
                 'telefono' => '5512345670',
                 'consentimiento' => true,
@@ -165,7 +222,7 @@ class LoteriaTest extends TestCase
         Membership::create(['tenant_id' => $tenant->id, 'user_id' => $otro->id, 'rol' => 'brigadista']);
 
         $response = $this->actingAs($otro)->withSession(['tenant_id' => $tenant->id])
-            ->getJson("/api/loterias/{$abierta->json('loteria_id')}/electores");
+            ->getJson("/api/loterias/{$loteria->id}/electores");
 
         $response->assertOk();
         $response->assertJsonFragment(['telefono' => '••••••5670']);
@@ -174,57 +231,19 @@ class LoteriaTest extends TestCase
 
     public function test_electores_solo_devuelve_los_de_su_loteria(): void
     {
-        [$tenant, $user, $municipio, $aviso] = $this->setupCampana();
+        [$tenant, $user, $membership, $municipio] = $this->setupCampana();
         $seccion = Seccion::query()->where('municipio_id', $municipio->id)->where('numero', 1)->first();
-
-        $abierta = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
-            ->postJson('/api/loterias', ['seccion_id' => $seccion->id]);
+        $loteria = Loteria::factory()->create([
+            'tenant_id' => $tenant->id,
+            'membership_id' => $membership->id,
+            'seccion_id' => $seccion->id,
+        ]);
 
         $response = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
-            ->getJson("/api/loterias/{$abierta->json('loteria_id')}/electores");
+            ->getJson("/api/loterias/{$loteria->id}/electores");
 
         $response->assertOk();
         $response->assertJsonPath('total', 0);
         $response->assertJsonCount(0, 'electores');
-    }
-
-    public function test_captura_modo_loteria_hereda_seccion_y_loteria(): void
-    {
-        [$tenant, $user, $municipio, $aviso] = $this->setupCampana();
-        $seccion = Seccion::query()->where('municipio_id', $municipio->id)->where('numero', 2)->first();
-
-        $abierta = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
-            ->postJson('/api/loterias', ['seccion_id' => $seccion->id]);
-
-        $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
-            ->postJson('/api/electores', [
-                'modo_captura' => 'loteria',
-                'nombre' => 'Voto Lotería',
-                'telefono' => '5512345678',
-                'consentimiento' => true,
-                'aviso_privacidad_id' => $aviso->id,
-            ])->assertCreated();
-
-        TenantContext::set($tenant);
-        $elector = Elector::query()->first();
-        $this->assertSame('loteria', $elector->modo_captura);
-        $this->assertSame($seccion->id, $elector->seccion_id);
-        $this->assertSame($abierta->json('loteria_id'), $elector->loteria_id);
-    }
-
-    public function test_modo_loteria_sin_sesion_abierta_falla(): void
-    {
-        [$tenant, $user, $municipio, $aviso] = $this->setupCampana();
-
-        $response = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
-            ->postJson('/api/electores', [
-                'modo_captura' => 'loteria',
-                'nombre' => 'Sin Sesión',
-                'telefono' => '5512345678',
-                'consentimiento' => true,
-                'aviso_privacidad_id' => $aviso->id,
-            ]);
-
-        $response->assertStatus(422);
     }
 }

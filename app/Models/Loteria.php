@@ -4,21 +4,22 @@ namespace App\Models;
 
 use App\Models\Concerns\BelongsToTenant;
 use Database\Factories\LoteriaFactory;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 
 /**
- * Sesión de captura masiva ("lotería"): sección fija, abierta por un brigadista.
+ * Lotería: registro de captura masiva con nombre y fecha, ligado a una sección
+ * y a cargo de un encargado (membership). Los electores capturados la referencian.
  *
  * @property int $id
  * @property int $tenant_id
  * @property int $membership_id
  * @property int $seccion_id
- * @property Carbon $abierta_en
- * @property Carbon|null $cerrada_en
+ * @property string $nombre
+ * @property Carbon $fecha
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
@@ -35,8 +36,8 @@ class Loteria extends Model
         'tenant_id',
         'membership_id',
         'seccion_id',
-        'abierta_en',
-        'cerrada_en',
+        'nombre',
+        'fecha',
     ];
 
     /**
@@ -45,25 +46,13 @@ class Loteria extends Model
     protected function casts(): array
     {
         return [
-            'abierta_en' => 'datetime',
-            'cerrada_en' => 'datetime',
+            'fecha' => 'datetime',
         ];
     }
 
     /**
-     * @param  Builder<Loteria>  $query
-     */
-    public function scopeAbiertas(Builder $query): void
-    {
-        $query->whereNull('cerrada_en');
-    }
-
-    public function cerrar(): void
-    {
-        $this->update(['cerrada_en' => now()]);
-    }
-
-    /**
+     * Encargado de la lotería.
+     *
      * @return BelongsTo<Membership, $this>
      */
     public function membership(): BelongsTo
@@ -77,5 +66,13 @@ class Loteria extends Model
     public function seccion(): BelongsTo
     {
         return $this->belongsTo(Seccion::class);
+    }
+
+    /**
+     * @return HasMany<Elector, $this>
+     */
+    public function electores(): HasMany
+    {
+        return $this->hasMany(Elector::class);
     }
 }

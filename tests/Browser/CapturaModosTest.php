@@ -3,6 +3,7 @@
 namespace Tests\Browser;
 
 use App\Models\Evento;
+use App\Models\Loteria;
 use App\Models\Seccion;
 use Laravel\Dusk\Browser;
 use Tests\DuskTestCase;
@@ -10,21 +11,26 @@ use Tests\DuskTestCase;
 class CapturaModosTest extends DuskTestCase
 {
     /**
-     * Modo Lotería: abrir sesión en una sección y capturar un elector.
+     * Modo Lotería: seleccionar una lotería existente y capturar un elector,
+     * que hereda su sección y queda ligado a ella.
      */
     public function test_captura_en_modo_loteria(): void
     {
-        [$tenant, $user, , $municipio] = $this->crearCampana('admin');
+        [$tenant, $user, $membership, $municipio] = $this->crearCampana('admin');
         $seccion = Seccion::query()->where('municipio_id', $municipio->id)->orderBy('numero')->firstOrFail();
+        $loteria = Loteria::factory()->create([
+            'tenant_id' => $tenant->id,
+            'membership_id' => $membership->id,
+            'seccion_id' => $seccion->id,
+            'nombre' => 'Lotería Captura',
+        ]);
 
-        $this->browse(function (Browser $browser) use ($user, $seccion) {
+        $this->browse(function (Browser $browser) use ($user, $loteria) {
             $browser->loginAs($user)
                 ->visit('/captura')
                 ->waitForText('Captura de electores')
-                ->waitFor('@loteria-seccion')
-                ->select('@loteria-seccion', (string) $seccion->id)
-                ->press('Abrir lotería')
-                ->waitForText('capturados:')
+                ->waitFor('@loteria-select')
+                ->select('@loteria-select', (string) $loteria->id)
                 ->type('input[placeholder="Nombre"]', 'Loteria Tester')
                 ->type('input[placeholder="Teléfono (10 dígitos)"]', '5511112222')
                 ->check('input[type=checkbox]')
@@ -36,6 +42,8 @@ class CapturaModosTest extends DuskTestCase
             'nombre' => 'Loteria Tester',
             'tenant_id' => $tenant->id,
             'modo_captura' => 'loteria',
+            'loteria_id' => $loteria->id,
+            'seccion_id' => $seccion->id,
         ]);
     }
 

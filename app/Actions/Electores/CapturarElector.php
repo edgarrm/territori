@@ -32,7 +32,7 @@ class CapturarElector
     public function handle(Membership $membership, array $datos): Elector
     {
         $modo = $datos['modo_captura'];
-        $loteria = $this->resolverLoteria($modo, $datos, $membership);
+        $loteria = $this->resolverLoteria($modo, $datos);
         $evento = $this->resolverEvento($modo, $datos);
         $red = $this->resolverRedCiudadana($modo, $datos, $membership);
         $seccion = $this->resolverSeccion($modo, $datos, $loteria, $evento, $membership);
@@ -75,21 +75,23 @@ class CapturarElector
     /**
      * @param  array<string, mixed>  $datos
      */
-    private function resolverLoteria(string $modo, array $datos, Membership $membership): ?Loteria
+    private function resolverLoteria(string $modo, array $datos): ?Loteria
     {
         if ($modo !== 'loteria') {
             return null;
         }
 
-        $loteria = Loteria::query()
-            ->where('membership_id', $membership->id)
-            ->whereNull('cerrada_en')
-            ->latest('abierta_en')
-            ->first();
+        if (empty($datos['loteria_id'])) {
+            throw ValidationException::withMessages([
+                'loteria_id' => 'Indica la lotería para capturar en este modo.',
+            ]);
+        }
+
+        $loteria = Loteria::query()->find((int) $datos['loteria_id']);
 
         if ($loteria === null) {
             throw ValidationException::withMessages([
-                'loteria_id' => 'No hay una lotería abierta para capturar en este modo.',
+                'loteria_id' => 'La lotería no existe en esta campaña.',
             ]);
         }
 

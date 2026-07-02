@@ -76,9 +76,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
             // Captura de electores (brigadista/coordinador/admin; el 403 fino lo aplica el FormRequest/acción).
             Route::get('captura', [CapturaController::class, 'index'])->name('captura');
 
-            Route::post('api/loterias', [LoteriaController::class, 'store'])->name('loterias.store');
-            Route::post('api/loterias/{loteria}/cerrar', [LoteriaController::class, 'cerrar'])->name('loterias.cerrar');
-            Route::get('api/loterias/activa', [LoteriaController::class, 'activa'])->name('loterias.activa');
+            Route::get('loterias', [LoteriaController::class, 'index'])->name('loterias.index');
+            Route::post('loterias', [LoteriaController::class, 'store'])->name('loterias.store');
             Route::get('api/loterias/{loteria}/electores', [LoteriaController::class, 'electores'])->name('loterias.electores');
 
             Route::get('api/electores/{elector}', [ElectorController::class, 'show'])->name('electores.show');

@@ -6,12 +6,7 @@ import { Input } from '@/components/ui/input';
 import { dashboard } from '@/routes';
 import { vigente as avisoVigente } from '@/routes/avisos';
 import { store as electoresStore } from '@/routes/electores';
-import {
-    activa as loteriaActiva,
-    cerrar as loteriaCerrar,
-    electores as loteriaElectores,
-    store as loteriaStore,
-} from '@/routes/loterias';
+import { electores as loteriaElectores } from '@/routes/loterias';
 
 defineOptions({
     layout: {
@@ -23,11 +18,26 @@ defineOptions({
 });
 
 type Seccion = { id: number; numero: number };
-type Evento = { id: number; nombre: string; fecha: string; seccion_id: number | null };
+type Evento = {
+    id: number;
+    nombre: string;
+    fecha: string;
+    seccion_id: number | null;
+};
+type Loteria = {
+    id: number;
+    nombre: string;
+    fecha: string;
+    seccion_id: number;
+};
 type Aviso = { id: number; version: string; texto: string } | null;
 type Modo = 'loteria' | 'enlace_seccional' | 'evento';
 
-const props = defineProps<{ secciones: Seccion[]; eventos: Evento[] }>();
+const props = defineProps<{
+    secciones: Seccion[];
+    eventos: Evento[];
+    loterias: Loteria[];
+}>();
 
 const modo = ref<Modo>('loteria');
 const eventoId = ref<number | null>(props.eventos[0]?.id ?? null);
@@ -43,9 +53,7 @@ type Capturado = {
     capturado_en: string | null;
 };
 
-const loteriaId = ref<number | null>(null);
-const seccionLoteria = ref<number | null>(null);
-const seccionSeleccionada = ref<number | null>(props.secciones[0]?.id ?? null);
+const loteriaId = ref<number | null>(props.loterias[0]?.id ?? null);
 const capturados = ref<Capturado[]>([]);
 
 // Formulario de captura
@@ -59,12 +67,6 @@ const form = ref({
     seccionId: null as number | null,
     ubicacion: null as { lat: number; lng: number } | null,
 });
-
-const numeroSeccionLoteria = computed(
-    () =>
-        props.secciones.find((s) => s.id === seccionLoteria.value)?.numero ??
-        null,
-);
 
 const eventoSeleccionado = computed(
     () => props.eventos.find((e) => e.id === eventoId.value) ?? null,
@@ -82,6 +84,7 @@ function formatoHora(iso: string | null): string {
     if (!iso) {
         return '';
     }
+
     return new Date(iso).toLocaleTimeString([], {
         hour: '2-digit',
         minute: '2-digit',
@@ -123,13 +126,7 @@ onMounted(async () => {
     });
     aviso.value = (await respAviso.json()).aviso;
 
-    const respActiva = await fetch(loteriaActiva.url(), {
-        headers: { Accept: 'application/json' },
-    });
-    const data = (await respActiva.json()).loteria;
-    if (data) {
-        loteriaId.value = data.loteria_id;
-        seccionLoteria.value = data.seccion_id;
+    if (loteriaId.value) {
         await cargarCapturados();
     }
 });
@@ -138,33 +135,16 @@ async function cargarCapturados() {
     if (!loteriaId.value) {
         return;
     }
+
     const resp = await fetch(loteriaElectores.url(loteriaId.value), {
         headers: { Accept: 'application/json' },
     });
     capturados.value = (await resp.json()).electores ?? [];
 }
 
-async function abrirLoteria() {
-    if (!seccionSeleccionada.value) {
-        return;
-    }
-    const resp = await postJson(loteriaStore.url(), {
-        seccion_id: seccionSeleccionada.value,
-    });
-    const data = await resp.json();
-    loteriaId.value = data.loteria_id;
-    seccionLoteria.value = data.seccion_id;
-    await cargarCapturados();
-}
-
-async function cerrarLoteria() {
-    if (!loteriaId.value) {
-        return;
-    }
-    await postJson(loteriaCerrar.url(loteriaId.value), {});
-    loteriaId.value = null;
-    seccionLoteria.value = null;
+async function cambiarLoteria() {
     capturados.value = [];
+    await cargarCapturados();
 }
 
 async function guardar() {
@@ -173,6 +153,7 @@ async function guardar() {
             tipo: 'error',
             texto: 'No hay aviso de privacidad vigente.',
         };
+
         return;
     }
 
@@ -188,6 +169,10 @@ async function guardar() {
         aviso_privacidad_id: aviso.value.id,
     };
 
+    if (modo.value === 'loteria') {
+        payload.loteria_id = loteriaId.value;
+    }
+
     if (modo.value === 'enlace_seccional') {
         payload.seccion_id = form.value.seccionId;
         payload.domicilio = form.value.domicilio || null;
@@ -197,6 +182,7 @@ async function guardar() {
 
     if (modo.value === 'evento') {
         payload.evento_id = eventoId.value;
+
         if (eventoRequiereSeccion.value) {
             payload.seccion_id = form.value.seccionId;
         }
@@ -207,9 +193,11 @@ async function guardar() {
 
         if (resp.status === 201) {
             mensaje.value = { tipo: 'ok', texto: 'Elector capturado.' };
+
             if (modo.value === 'loteria') {
                 await cargarCapturados();
             }
+
             limpiarForm();
         } else if (resp.status === 409) {
             mensaje.value = {
@@ -240,6 +228,7 @@ function ubicarme() {
     if (!navigator.geolocation) {
         return;
     }
+
     navigator.geolocation.getCurrentPosition((pos) => {
         form.value.ubicacion = {
             lat: pos.coords.latitude,
@@ -293,36 +282,29 @@ function ubicarme() {
             v-if="modo === 'loteria'"
             class="flex flex-col gap-3 rounded-xl border border-sidebar-border/70 p-4 dark:border-sidebar-border"
         >
-            <div v-if="!loteriaId" class="flex flex-col gap-2">
-                <label class="text-sm font-medium">Sección de la sesión</label>
+            <p
+                v-if="loterias.length === 0"
+                class="text-sm text-muted-foreground"
+            >
+                No hay loterías. Crea una en la sección
+                <a href="/loterias" class="underline">Loterías</a>.
+            </p>
+            <template v-else>
+                <label class="text-sm font-medium">Lotería</label>
                 <select
-                    v-model.number="seccionSeleccionada"
+                    v-model.number="loteriaId"
                     class="rounded border bg-background p-2"
-                    dusk="loteria-seccion"
+                    dusk="loteria-select"
+                    @change="cambiarLoteria"
                 >
                     <option
-                        v-for="seccion in secciones"
-                        :key="seccion.id"
-                        :value="seccion.id"
+                        v-for="loteria in loterias"
+                        :key="loteria.id"
+                        :value="loteria.id"
                     >
-                        Sección {{ seccion.numero }}
+                        {{ loteria.nombre }} · {{ loteria.fecha }}
                     </option>
                 </select>
-                <Button @click="abrirLoteria">Abrir lotería</Button>
-            </div>
-
-            <div v-else class="flex flex-col gap-3">
-                <div class="flex items-center justify-between">
-                    <span class="text-sm">
-                        Sección
-                        <strong>{{ numeroSeccionLoteria }}</strong> ·
-                        capturados:
-                        <strong>{{ capturados.length }}</strong>
-                    </span>
-                    <Button variant="outline" @click="cerrarLoteria">
-                        Cerrar
-                    </Button>
-                </div>
 
                 <Input v-model="form.nombre" placeholder="Nombre" />
                 <Input
@@ -341,7 +323,7 @@ function ubicarme() {
                     Acepta el aviso de privacidad
                 </label>
                 <Button
-                    :disabled="guardando || !form.consentimiento"
+                    :disabled="guardando || !form.consentimiento || !loteriaId"
                     @click="guardar"
                 >
                     Guardar y siguiente
@@ -351,7 +333,9 @@ function ubicarme() {
                     v-if="capturados.length"
                     class="flex flex-col gap-1 border-t border-sidebar-border/70 pt-3 dark:border-sidebar-border"
                 >
-                    <span class="text-sm font-medium">Capturados en esta sesión</span>
+                    <span class="text-sm font-medium"
+                        >Capturados en esta lotería</span
+                    >
                     <ul class="flex flex-col gap-1" dusk="loteria-capturados">
                         <li
                             v-for="capturado in capturados"
@@ -359,14 +343,18 @@ function ubicarme() {
                             class="flex items-center justify-between gap-2 rounded bg-muted/50 px-2 py-1 text-sm"
                         >
                             <span class="truncate">{{ capturado.nombre }}</span>
-                            <span class="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
-                                <span v-if="capturado.telefono">{{ capturado.telefono }}</span>
+                            <span
+                                class="flex shrink-0 items-center gap-2 text-xs text-muted-foreground"
+                            >
+                                <span v-if="capturado.telefono">{{
+                                    capturado.telefono
+                                }}</span>
                                 {{ formatoHora(capturado.capturado_en) }}
                             </span>
                         </li>
                     </ul>
                 </div>
-            </div>
+            </template>
         </section>
 
         <!-- ENLACE SECCIONAL -->
@@ -390,7 +378,11 @@ function ubicarme() {
                 </option>
             </select>
 
-            <Input v-model="form.nombre" placeholder="Nombre" dusk="captura-nombre" />
+            <Input
+                v-model="form.nombre"
+                placeholder="Nombre"
+                dusk="captura-nombre"
+            />
             <Input
                 v-model="form.telefono"
                 placeholder="Teléfono (10 dígitos)"
@@ -404,7 +396,10 @@ function ubicarme() {
                 inputmode="email"
                 dusk="captura-email"
             />
-            <Input v-model="form.domicilio" placeholder="Domicilio (opcional)" />
+            <Input
+                v-model="form.domicilio"
+                placeholder="Domicilio (opcional)"
+            />
             <Input
                 v-model="form.observaciones"
                 placeholder="Observaciones (opcional)"

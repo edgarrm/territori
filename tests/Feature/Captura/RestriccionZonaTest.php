@@ -125,13 +125,17 @@ class RestriccionZonaTest extends TestCase
         $this->assertSame(0, Elector::query()->count());
     }
 
-    public function test_brigadista_no_puede_abrir_loteria_fuera_de_su_zona(): void
+    public function test_brigadista_no_puede_crear_loteria_fuera_de_su_zona(): void
     {
         $this->asignarZona($this->seccion(1));
         $ajena = $this->seccion(2);
 
+        // /loterias es un endpoint Inertia (form): el rechazo redirige con errores.
         $this->actingAs($this->user)->withSession(['tenant_id' => $this->tenant->id])
-            ->postJson('/api/loterias', ['seccion_id' => $ajena->id])
-            ->assertStatus(422);
+            ->post('/loterias', [
+                'nombre' => 'Lotería Ajena',
+                'fecha' => now()->toDateString(),
+                'seccion_id' => $ajena->id,
+            ])->assertSessionHasErrors('seccion_id');
     }
 }

@@ -76,6 +76,7 @@ class DemoCapturasSeeder extends Seeder
         DB::table('solicitudes_arco')->where('tenant_id', $tenant->id)->delete();
         DB::table('interacciones')->where('tenant_id', $tenant->id)->delete();
         DB::table('electores')->where('tenant_id', $tenant->id)->delete();
+        DB::table('loterias')->where('tenant_id', $tenant->id)->delete();
         DB::table('eventos')->where('tenant_id', $tenant->id)->delete();
         DB::table('metas_seccion')->where('tenant_id', $tenant->id)->delete();
         DB::table('cobertura_seccion')->where('tenant_id', $tenant->id)->delete();
@@ -91,6 +92,18 @@ class DemoCapturasSeeder extends Seeder
         foreach ($secciones as $i => $seccion) {
             $brigadista = $brigadistas[$i % count($brigadistas)];
             $zonas[] = ['tenant_id' => $tenant->id, 'membership_id' => $brigadista->id, 'seccion_id' => $seccion->id];
+
+            // Una lotería por sección, a cargo del brigadista de la zona, para
+            // colgar de ella las capturas en modo lotería.
+            $loteriaId = DB::table('loterias')->insertGetId([
+                'tenant_id' => $tenant->id,
+                'membership_id' => $brigadista->id,
+                'seccion_id' => $seccion->id,
+                'nombre' => "Lotería Sección {$seccion->numero}",
+                'fecha' => now()->subDays(random_int(0, 14)),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
 
             $meta = $seccion->lista_nominal
                 ? max(12, (int) round($seccion->lista_nominal * 0.1))
@@ -108,6 +121,7 @@ class DemoCapturasSeeder extends Seeder
             for ($n = 0; $n < $cantidad; $n++) {
                 $sinTelefono = $n % 5 === 0;
                 $hoy = $n % 5 < 2;
+                $esLoteria = $n % 3 === 0;
                 $telefono = '669'.str_pad((string) random_int(100000, 9999999), 7, '0', STR_PAD_LEFT);
                 $ts = ($hoy
                     ? now()->copy()->subMinutes(random_int(0, max(1, $minutosHoy)))
@@ -118,8 +132,8 @@ class DemoCapturasSeeder extends Seeder
                     'tenant_id' => $tenant->id,
                     'seccion_id' => $seccion->id,
                     'membership_id' => $brigadista->id,
-                    'modo_captura' => $n % 3 === 0 ? 'loteria' : 'enlace_seccional',
-                    'loteria_id' => null,
+                    'modo_captura' => $esLoteria ? 'loteria' : 'enlace_seccional',
+                    'loteria_id' => $esLoteria ? $loteriaId : null,
                     'evento_id' => null,
                     'nombre' => $nombres[array_rand($nombres)],
                     'telefono' => Crypt::encryptString($telefono),

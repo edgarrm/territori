@@ -11,6 +11,7 @@ import {
     Network,
     ShieldCheck,
     Target,
+    Ticket,
     Users,
 } from '@lucide/vue';
 import { computed } from 'vue';
@@ -51,6 +52,7 @@ const mainNavItems = computed<NavItem[]>(() => {
         { title: 'Captura', href: '/captura', icon: ClipboardList },
         { title: 'Agenda', href: '/agenda', icon: CalendarCheck },
         { title: 'Eventos', href: '/eventos', icon: CalendarDays },
+        { title: 'Loterías', href: '/loterias', icon: Ticket },
         redesItem,
     ];
 
@@ -58,7 +60,11 @@ const mainNavItems = computed<NavItem[]>(() => {
         items.push(
             { title: 'Metas', href: '/metas', icon: Target },
             { title: 'Miembros', href: '/brigadistas', icon: Users },
-            { title: 'Solicitudes ARCO', href: '/solicitudes-arco', icon: ShieldCheck },
+            {
+                title: 'Solicitudes ARCO',
+                href: '/solicitudes-arco',
+                icon: ShieldCheck,
+            },
         );
     }
 

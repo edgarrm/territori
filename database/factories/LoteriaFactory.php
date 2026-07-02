@@ -22,13 +22,8 @@ class LoteriaFactory extends Factory
             'tenant_id' => Tenant::factory(),
             'membership_id' => Membership::factory(),
             'seccion_id' => Seccion::factory(),
-            'abierta_en' => now(),
-            'cerrada_en' => null,
+            'nombre' => 'Lotería '.$this->faker->streetName(),
+            'fecha' => now(),
         ];
-    }
-
-    public function cerrada(): static
-    {
-        return $this->state(['cerrada_en' => now()]);
     }
 }

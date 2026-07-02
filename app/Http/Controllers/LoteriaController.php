@@ -2,7 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use App\Actions\Loterias\AbrirLoteria;
+use App\Actions\Loterias\CrearLoteria;
+use App\Http\Requests\StoreLoteriaRequest;
 use App\Models\Elector;
 use App\Models\Loteria;
 use App\Models\Membership;
@@ -10,45 +11,60 @@ use App\Models\Seccion;
 use App\Support\Pii;
 use App\Support\Tenancy\TenantContext;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
+use Illuminate\Http\RedirectResponse;
+use Inertia\Inertia;
+use Inertia\Response;
 
 class LoteriaController extends Controller
 {
-    public function store(Request $request, AbrirLoteria $abrir): JsonResponse
+    /**
+     * Lista de loterías: gestión (coordinador/admin) ve todas; el brigadista
+     * solo las que él encabeza.
+     */
+    public function index(): Response
     {
-        $membership = $this->membership($request);
+        $viewer = $this->membership();
+        $esGestion = $viewer->esGestion();
 
-        $validado = $request->validate([
-            'seccion_id' => ['required', 'integer', 'exists:secciones,id'],
+        $loterias = Loteria::query()
+            ->with('membership.user')
+            ->withCount('electores')
+            ->when(! $esGestion, fn ($query) => $query->where('membership_id', $viewer->id))
+            ->orderByDesc('fecha')
+            ->get()
+            ->map(fn (Loteria $loteria): array => $this->presentar($loteria))
+            ->all();
+
+        $secciones = Seccion::query()
+            ->where('municipio_id', TenantContext::get()?->municipio_id)
+            ->orderBy('numero')
+            ->get(['id', 'numero'])
+            ->map(fn (Seccion $seccion): array => [
+                'id' => $seccion->id,
+                'numero' => $seccion->numero,
+            ])
+            ->all();
+
+        return Inertia::render('Loterias', [
+            'loterias' => $loterias,
+            'secciones' => $secciones,
         ]);
-
-        $seccion = Seccion::findOrFail((int) $validado['seccion_id']);
-        $loteria = $abrir->handle($membership, $seccion);
-
-        return response()->json([
-            'loteria_id' => $loteria->id,
-            'seccion_id' => $loteria->seccion_id,
-        ], 201);
     }
 
-    /**
-     * Resolución manual (tenant-scoped): ver nota en ElectorController::show.
-     */
-    public function cerrar(string $loteria): JsonResponse
+    public function store(StoreLoteriaRequest $request, CrearLoteria $crear): RedirectResponse
     {
-        $modelo = Loteria::query()->findOrFail($loteria);
-        $modelo->cerrar();
+        $crear->handle($this->membership(), $request->validated());
 
-        return response()->json(['cerrada_en' => $modelo->cerrada_en]);
+        return back();
     }
 
     /**
      * Electores capturados en una lotería (resolución manual tenant-scoped).
      */
-    public function electores(Request $request, string $loteria): JsonResponse
+    public function electores(string $loteria): JsonResponse
     {
         $modelo = Loteria::query()->findOrFail($loteria);
-        $viewer = $this->membership($request);
+        $viewer = $this->membership();
 
         $electores = Elector::query()
             ->where('loteria_id', $modelo->id)
@@ -70,41 +86,37 @@ class LoteriaController extends Controller
     }
 
     /**
+     * @return array<string, mixed>
+     */
+    private function presentar(Loteria $loteria): array
+    {
+        return [
+            'id' => $loteria->id,
+            'nombre' => $loteria->nombre,
+            'fecha' => $loteria->fecha->toIso8601String(),
+            'seccion_id' => $loteria->seccion_id,
+            'encargado' => $loteria->membership?->user?->name,
+            'capturados_count' => $loteria->electores_count ?? 0,
+        ];
+    }
+
+    /**
      * Gestión (coordinador/admin) ve la PII completa; un brigadista solo la de
      * los electores que él capturó. Espejo de ElectorController::puedeVerPii.
      */
     private function puedeVerPii(Elector $elector, Membership $viewer): bool
     {
-        if (in_array($viewer->rol, ['coordinador', 'admin'], true)) {
+        if ($viewer->esGestion()) {
             return true;
         }
 
         return $elector->membership_id === $viewer->id;
     }
 
-    public function activa(Request $request): JsonResponse
-    {
-        $membership = $this->membership($request);
-
-        $loteria = Loteria::query()
-            ->where('membership_id', $membership->id)
-            ->whereNull('cerrada_en')
-            ->latest('abierta_en')
-            ->first();
-
-        return response()->json([
-            'loteria' => $loteria === null ? null : [
-                'loteria_id' => $loteria->id,
-                'seccion_id' => $loteria->seccion_id,
-                'abierta_en' => $loteria->abierta_en,
-            ],
-        ]);
-    }
-
-    private function membership(Request $request): Membership
+    private function membership(): Membership
     {
         $tenant = TenantContext::get();
-        $membership = $tenant ? $request->user()?->membershipEn($tenant) : null;
+        $membership = $tenant ? request()->user()?->membershipEn($tenant) : null;
 
         abort_if($membership === null, 403);
 
