@@ -70,8 +70,11 @@ class VisibilidadPiiTest extends TestCase
     public function test_brigadista_ve_pii_enmascarada_de_elector_ajeno(): void
     {
         [$tenant, , $seccion, $aviso] = $this->setupCampana();
-        [$user] = $this->miembro($tenant, 'brigadista');
+        [$user, $membership] = $this->miembro($tenant, 'brigadista');
         [, $otro] = $this->miembro($tenant, 'brigadista');
+        // El viewer tiene la sección asignada (así puede acceder al elector), pero
+        // como no lo capturó él, ve su PII enmascarada.
+        $membership->secciones()->attach($seccion->id, ['tenant_id' => $tenant->id]);
         $elector = $this->elector($tenant, $otro, $seccion, $aviso, '5511112222', 'Calle Falsa 123');
 
         $response = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])

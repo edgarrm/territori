@@ -46,13 +46,19 @@ class ElectorController extends Controller
     public function show(string $elector): JsonResponse
     {
         $modelo = Elector::query()->findOrFail($elector);
+        $viewer = $this->miMembership();
 
-        return response()->json($this->presentar($modelo, $this->miMembership()));
+        abort_unless($viewer !== null && $viewer->puedeAccederElector($modelo), 403);
+
+        return response()->json($this->presentar($modelo, $viewer));
     }
 
     public function update(UpdateElectorRequest $request, string $elector, ActualizarElector $actualizar): JsonResponse
     {
         $modelo = Elector::query()->findOrFail($elector);
+        $viewer = $this->miMembership();
+
+        abort_unless($viewer !== null && $viewer->puedeAccederElector($modelo), 403);
 
         try {
             $actualizar->handle($modelo, $request->validated());
@@ -62,7 +68,7 @@ class ElectorController extends Controller
             ], 409);
         }
 
-        return response()->json($this->presentar($modelo->fresh(), $this->miMembership()));
+        return response()->json($this->presentar($modelo->fresh(), $viewer));
     }
 
     /**
@@ -83,10 +89,13 @@ class ElectorController extends Controller
      */
     public function page(string $elector): Response
     {
-        $modelo = Elector::query()->with('interacciones')->findOrFail($elector);
+        $modelo = Elector::query()->with(['interacciones', 'redCiudadana'])->findOrFail($elector);
+        $viewer = $this->miMembership();
+
+        abort_unless($viewer !== null && $viewer->puedeAccederElector($modelo), 403);
 
         return Inertia::render('Elector', [
-            'elector' => $this->presentar($modelo, $this->miMembership()),
+            'elector' => $this->presentar($modelo, $viewer),
             'interacciones' => $modelo->interacciones->map(fn ($i): array => [
                 'id' => $i->id,
                 'tipo' => $i->tipo,
@@ -143,6 +152,10 @@ class ElectorController extends Controller
     public function indexPorSeccion(Request $request, Seccion $seccion): JsonResponse
     {
         $viewer = $this->miMembership();
+
+        // La sección debe ser del municipio de la campaña activa (Seccion no está
+        // tenant-scoped). 404 para no revelar secciones de otros municipios.
+        abort_if($seccion->municipio_id !== TenantContext::get()?->municipio_id, 404);
 
         // El brigadista solo consulta electores de sus zonas asignadas.
         abort_if($viewer !== null && ! $viewer->puedeCapturarEnSeccion($seccion->id), 403);

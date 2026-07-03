@@ -11,6 +11,7 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { usePermisosCapturados } from '@/composables/usePermisosCapturados';
 import { mapa } from '@/routes';
 import { vigente as avisoVigente } from '@/routes/avisos';
 import { store as electoresStore } from '@/routes/electores';
@@ -45,6 +46,8 @@ const props = defineProps<{
     miembros: MiembroOpcion[];
     esGestion: boolean;
 }>();
+
+const { puedeVerMapa } = usePermisosCapturados();
 
 function seccionLabel(seccionId: number): string {
     const numero = props.secciones.find((s) => s.id === seccionId)?.numero;
@@ -295,6 +298,7 @@ async function guardarCaptura() {
                     <div class="flex flex-wrap items-center gap-2">
                         <span class="font-medium">{{ loteria.nombre }}</span>
                         <Link
+                            v-if="puedeVerMapa"
                             :href="
                                 mapa.url({
                                     query: { seccion: loteria.seccion_id },
@@ -304,6 +308,12 @@ async function guardarCaptura() {
                         >
                             {{ seccionLabel(loteria.seccion_id) }}
                         </Link>
+                        <span
+                            v-else
+                            class="rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-800 dark:bg-sky-900/40 dark:text-sky-200"
+                        >
+                            {{ seccionLabel(loteria.seccion_id) }}
+                        </span>
                         <span class="text-xs text-muted-foreground">
                             · {{ new Date(loteria.fecha).toLocaleDateString() }}
                             <template v-if="loteria.encargado">

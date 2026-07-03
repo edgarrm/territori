@@ -13,6 +13,7 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
+import { usePermisosCapturados } from '@/composables/usePermisosCapturados';
 import { mapa } from '@/routes';
 
 type Capturado = {
@@ -71,6 +72,8 @@ const props = withDefaults(
         dusk: null,
     },
 );
+
+const { puedeVerMapa, puedeVerFichaElector } = usePermisosCapturados();
 
 function modoLabel(valor: string): string {
     return MODO_ETIQUETAS[valor] ?? valor;
@@ -280,15 +283,17 @@ const hayFiltros = () =>
                         >
                             <td class="p-3">
                                 <a
+                                    v-if="puedeVerFichaElector"
                                     :href="`/electores/${c.id}`"
                                     class="font-medium hover:underline"
                                 >
                                     {{ c.nombre }}
                                 </a>
+                                <span v-else class="font-medium">{{ c.nombre }}</span>
                             </td>
                             <td class="p-3 text-muted-foreground">
                                 <Link
-                                    v-if="c.seccion_id !== null"
+                                    v-if="c.seccion_id !== null && puedeVerMapa"
                                     :href="
                                         mapa.url({
                                             query: { seccion: c.seccion_id },
@@ -299,6 +304,10 @@ const hayFiltros = () =>
                                     Sección
                                     {{ c.seccion_numero ?? seccionNumero(c.seccion_id) }}
                                 </Link>
+                                <span v-else-if="c.seccion_id !== null">
+                                    Sección
+                                    {{ c.seccion_numero ?? seccionNumero(c.seccion_id) }}
+                                </span>
                                 <span v-else>—</span>
                             </td>
                             <td class="p-3 text-muted-foreground">
@@ -321,6 +330,7 @@ const hayFiltros = () =>
                             </td>
                             <td class="p-3 text-right">
                                 <a
+                                    v-if="puedeVerFichaElector"
                                     :href="`/electores/${c.id}`"
                                     class="text-sm font-medium text-primary hover:underline"
                                 >

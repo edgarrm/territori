@@ -212,6 +212,10 @@ class MapaController extends Controller
      */
     private function asegurarAccesoSeccion(Seccion $seccion): void
     {
+        // La sección debe ser del municipio de la campaña activa (Seccion no está
+        // tenant-scoped). 404 para no revelar secciones de otros municipios.
+        abort_if($seccion->municipio_id !== TenantContext::get()?->municipio_id, 404);
+
         $viewer = $this->miMembership();
 
         abort_if(

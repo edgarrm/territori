@@ -24,6 +24,8 @@ class InteraccionController extends Controller
     {
         $modelo = Elector::query()->findOrFail($elector);
 
+        $this->asegurarAccesoElector($modelo);
+
         return response()->json(
             $modelo->interacciones()->get()->map(fn (Interaccion $i): array => $this->presentar($i))->all()
         );
@@ -33,6 +35,8 @@ class InteraccionController extends Controller
     {
         $modelo = Elector::query()->findOrFail($elector);
         $membership = $request->user()->membershipEn(TenantContext::get());
+
+        abort_unless($membership !== null && $membership->puedeAccederElector($modelo), 403);
 
         $interaccion = $registrar->handle($modelo, $request->validated(), $membership);
 
@@ -44,7 +48,9 @@ class InteraccionController extends Controller
      */
     public function atendido(string $interaccion): JsonResponse
     {
-        $modelo = Interaccion::query()->findOrFail($interaccion);
+        $modelo = Interaccion::query()->with('elector.redCiudadana')->findOrFail($interaccion);
+
+        $this->asegurarAccesoElector($modelo->elector);
 
         if ($modelo->atendido_en === null) {
             $modelo->update(['atendido_en' => now()]);
@@ -125,6 +131,27 @@ class InteraccionController extends Controller
                     'seccion_numero' => $i->elector->seccion?->numero,
                 ],
             ]);
+    }
+
+    /**
+     * Autoriza el acceso al timeline de un elector según las zonas/propiedad del
+     * viewer (misma regla que la ficha del elector). 403 si no le corresponde.
+     * El elector puede ser null si fue cancelado (ARCO, soft-delete): en ese caso
+     * solo gestión puede operar sobre sus interacciones huérfanas.
+     */
+    private function asegurarAccesoElector(?Elector $elector): void
+    {
+        $viewer = request()->user()?->membershipEn(TenantContext::get());
+
+        abort_if($viewer === null, 403);
+
+        if ($elector === null) {
+            abort_unless($viewer->esGestion(), 403);
+
+            return;
+        }
+
+        abort_unless($viewer->puedeAccederElector($elector), 403);
     }
 
     /**

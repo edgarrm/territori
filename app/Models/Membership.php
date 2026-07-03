@@ -114,6 +114,31 @@ class Membership extends Model
     }
 
     /**
+     * ¿Puede este miembro acceder a la ficha e interacciones de este elector?
+     * Gestión (coordinador/admin) ve todos; el enlace los de sus redes; quien lo
+     * capturó siempre; brigadista/anfitrión solo los de sus zonas asignadas.
+     * Superconjunto consistente con el acceso por zona (indexPorSeccion) y con la
+     * visibilidad de PII (PresentaElectores::puedeVerPii).
+     */
+    public function puedeAccederElector(Elector $elector): bool
+    {
+        if ($this->esGestion()) {
+            return true;
+        }
+
+        if ($elector->red_ciudadana_id !== null
+            && $elector->redCiudadana?->enlace_membership_id === $this->id) {
+            return true;
+        }
+
+        if ($elector->membership_id === $this->id) {
+            return true;
+        }
+
+        return $this->puedeCapturarEnSeccion($elector->seccion_id);
+    }
+
+    /**
      * Catálogo de secciones que esta membership puede ver y filtrar: gestión
      * (coordinador/admin) todas las del municipio de la campaña; el resto
      * (brigadista/anfitrión) solo sus zonas asignadas. Espejo del catálogo que
