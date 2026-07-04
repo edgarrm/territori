@@ -38,6 +38,37 @@ defineOptions({
 
 type Brigadista = { membership_id: number; nombre: string | null };
 
+type Electoral2024 = {
+    ganador_bloque: string;
+    ganador_partido: string | null;
+    margen_votos: number | null;
+    margen_pp: number;
+    total_votos: number | null;
+    participacion_pct: number;
+    pct_fuerza: number;
+    pct_morena_pvem: number;
+    pct_otros: number;
+} | null;
+
+type GrupoEdad = {
+    ln: number;
+    votos: number;
+    participacion: number;
+    abstencion: number;
+    potencial: number;
+};
+
+type Demografia = {
+    indice_oportunidad: number;
+    nivel_oportunidad: string;
+    grupo_dominante: string | null;
+    grupo_mayor_abstencion: string | null;
+    potencial_movilizacion: number | null;
+    tipo_composicion_edad: string | null;
+    recomendacion: string | null;
+    grupos_edad: Record<string, GrupoEdad> | null;
+} | null;
+
 type Resumen = {
     numero: number;
     tipo: number;
@@ -50,6 +81,8 @@ type Resumen = {
     penetracion: number;
     brigadistas_activos: Brigadista[];
     ultimo_registro: string | null;
+    electoral_2024: Electoral2024;
+    demografia: Demografia;
 };
 
 type Aviso = { id: number; version: string; texto: string } | null;
@@ -68,6 +101,29 @@ const ESCALA = [
 function bucket(valor: number) {
     return ESCALA.find((b) => valor >= b.min) ?? ESCALA[ESCALA.length - 1];
 }
+
+// Colores por bloque electoral, idénticos a la capa "Ganador 2024" del Mapa.
+const COLORES_BLOQUE: { contiene: string; color: string }[] = [
+    { contiene: 'morena', color: '#7c2d12' },
+    { contiene: 'fuerza', color: '#db2777' },
+];
+
+function colorBloque(bloque: string): string {
+    return (
+        COLORES_BLOQUE.find((b) => bloque.toLowerCase().includes(b.contiene))
+            ?.color ?? '#f59e0b'
+    );
+}
+
+// Mismos colores por nivel que la capa "Oportunidad" del Mapa.
+const COLORES_OPORTUNIDAD: Record<string, string> = {
+    Alta: '#ef4444',
+    Media: '#f59e0b',
+    Baja: '#84cc16',
+    Seguimiento: '#0ea5e9',
+};
+
+const GRUPOS_EDAD_ORDEN = ['18-29', '30-39', '40-49', '50-59', '60-79', '80+'];
 
 function fmt(n: number): string {
     return n.toLocaleString('es-MX');
@@ -324,6 +380,231 @@ async function guardar() {
                     </span>
                 </div>
             </div>
+        </section>
+
+        <!-- Elección 2024 -->
+        <section
+            v-if="resumen?.electoral_2024"
+            class="rounded-xl border border-sidebar-border/70 bg-card p-4 dark:border-sidebar-border"
+        >
+            <div class="flex items-center justify-between">
+                <h2 class="text-base font-semibold">Elección 2024</h2>
+                <span
+                    class="rounded-full px-2.5 py-0.5 text-xs font-semibold text-white"
+                    :style="{
+                        backgroundColor: colorBloque(
+                            resumen.electoral_2024.ganador_bloque,
+                        ),
+                    }"
+                >
+                    Ganó {{ resumen.electoral_2024.ganador_bloque }}
+                </span>
+            </div>
+
+            <!-- Barra apilada de % por bloque -->
+            <div class="mt-3 flex h-3 overflow-hidden rounded-full bg-muted">
+                <div
+                    class="h-full"
+                    :style="{
+                        width: `${resumen.electoral_2024.pct_fuerza}%`,
+                        backgroundColor: '#db2777',
+                    }"
+                />
+                <div
+                    class="h-full"
+                    :style="{
+                        width: `${resumen.electoral_2024.pct_morena_pvem}%`,
+                        backgroundColor: '#7c2d12',
+                    }"
+                />
+                <div
+                    class="h-full"
+                    :style="{
+                        width: `${resumen.electoral_2024.pct_otros}%`,
+                        backgroundColor: '#f59e0b',
+                    }"
+                />
+            </div>
+            <div
+                class="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground"
+            >
+                <span class="flex items-center gap-1">
+                    <span
+                        class="size-2 rounded-sm"
+                        style="background-color: #db2777"
+                    />
+                    Fuerza y Corazón
+                    {{ resumen.electoral_2024.pct_fuerza.toFixed(1) }}%
+                </span>
+                <span class="flex items-center gap-1">
+                    <span
+                        class="size-2 rounded-sm"
+                        style="background-color: #7c2d12"
+                    />
+                    Morena-PVEM
+                    {{ resumen.electoral_2024.pct_morena_pvem.toFixed(1) }}%
+                </span>
+                <span class="flex items-center gap-1">
+                    <span
+                        class="size-2 rounded-sm"
+                        style="background-color: #f59e0b"
+                    />
+                    Otros {{ resumen.electoral_2024.pct_otros.toFixed(1) }}%
+                </span>
+            </div>
+
+            <dl
+                class="mt-4 grid grid-cols-1 gap-x-8 divide-y divide-border text-sm sm:grid-cols-2 sm:divide-y-0"
+            >
+                <div class="flex justify-between py-1.5">
+                    <dt class="text-muted-foreground">Margen de victoria</dt>
+                    <dd class="font-medium tabular-nums">
+                        {{ resumen.electoral_2024.margen_pp.toFixed(1) }} pp
+                        <span
+                            v-if="resumen.electoral_2024.margen_votos !== null"
+                            class="text-muted-foreground"
+                        >
+                            ({{ fmt(resumen.electoral_2024.margen_votos) }}
+                            votos)
+                        </span>
+                    </dd>
+                </div>
+                <div class="flex justify-between py-1.5">
+                    <dt class="text-muted-foreground">Partido más votado</dt>
+                    <dd class="font-medium">
+                        {{ resumen.electoral_2024.ganador_partido ?? '—' }}
+                    </dd>
+                </div>
+                <div class="flex justify-between py-1.5">
+                    <dt class="text-muted-foreground">Participación</dt>
+                    <dd class="font-medium tabular-nums">
+                        {{ resumen.electoral_2024.participacion_pct.toFixed(1) }}%
+                    </dd>
+                </div>
+                <div class="flex justify-between py-1.5">
+                    <dt class="text-muted-foreground">Votos totales</dt>
+                    <dd class="font-medium tabular-nums">
+                        {{
+                            resumen.electoral_2024.total_votos !== null
+                                ? fmt(resumen.electoral_2024.total_votos)
+                                : '—'
+                        }}
+                    </dd>
+                </div>
+            </dl>
+        </section>
+
+        <!-- Perfil por edad -->
+        <section
+            v-if="resumen?.demografia"
+            class="rounded-xl border border-sidebar-border/70 bg-card p-4 dark:border-sidebar-border"
+        >
+            <div class="flex items-center justify-between">
+                <h2 class="text-base font-semibold">Perfil por edad (2024)</h2>
+                <span
+                    class="rounded-full px-2.5 py-0.5 text-xs font-semibold text-white"
+                    :style="{
+                        backgroundColor:
+                            COLORES_OPORTUNIDAD[
+                                resumen.demografia.nivel_oportunidad
+                            ] ?? '#9ca3af',
+                    }"
+                >
+                    Oportunidad {{ resumen.demografia.nivel_oportunidad }} ·
+                    {{ Math.round(resumen.demografia.indice_oportunidad) }}/100
+                </span>
+            </div>
+
+            <!-- Participación por grupo de edad -->
+            <div v-if="resumen.demografia.grupos_edad" class="mt-4 space-y-2">
+                <div
+                    v-for="grupo in GRUPOS_EDAD_ORDEN.filter(
+                        (g) => resumen?.demografia?.grupos_edad?.[g],
+                    )"
+                    :key="grupo"
+                    class="flex items-center gap-3 text-sm"
+                >
+                    <span class="w-12 shrink-0 text-muted-foreground">{{
+                        grupo
+                    }}</span>
+                    <div
+                        class="h-2.5 flex-1 overflow-hidden rounded-full bg-muted"
+                    >
+                        <div
+                            class="h-full rounded-full"
+                            :style="{
+                                width: `${Math.min(resumen.demografia.grupos_edad[grupo].participacion, 100)}%`,
+                                backgroundColor:
+                                    grupo ===
+                                    resumen.demografia.grupo_mayor_abstencion
+                                        ? '#ef4444'
+                                        : '#0ea5e9',
+                            }"
+                        />
+                    </div>
+                    <span
+                        class="w-24 shrink-0 text-right text-xs text-muted-foreground tabular-nums"
+                    >
+                        {{
+                            resumen.demografia.grupos_edad[
+                                grupo
+                            ].participacion.toFixed(0)
+                        }}% de
+                        {{ fmt(resumen.demografia.grupos_edad[grupo].ln) }}
+                    </span>
+                </div>
+                <p class="text-[0.7rem] text-muted-foreground">
+                    Participación 2024 por grupo de edad (barra roja: el grupo
+                    con mayor abstención).
+                </p>
+            </div>
+
+            <dl
+                class="mt-4 grid grid-cols-1 gap-x-8 divide-y divide-border text-sm sm:grid-cols-2 sm:divide-y-0"
+            >
+                <div class="flex justify-between py-1.5">
+                    <dt class="text-muted-foreground">
+                        Grupo dominante (votos)
+                    </dt>
+                    <dd class="font-medium">
+                        {{ resumen.demografia.grupo_dominante ?? '—' }}
+                    </dd>
+                </div>
+                <div class="flex justify-between py-1.5">
+                    <dt class="text-muted-foreground">Mayor abstención</dt>
+                    <dd class="font-medium">
+                        {{ resumen.demografia.grupo_mayor_abstencion ?? '—' }}
+                    </dd>
+                </div>
+                <div class="flex justify-between py-1.5">
+                    <dt class="text-muted-foreground">
+                        Potencial de movilización
+                    </dt>
+                    <dd class="font-medium tabular-nums">
+                        {{
+                            resumen.demografia.potencial_movilizacion !== null
+                                ? `${fmt(resumen.demografia.potencial_movilizacion)} votos`
+                                : '—'
+                        }}
+                    </dd>
+                </div>
+                <div class="flex justify-between py-1.5">
+                    <dt class="text-muted-foreground">Composición por edad</dt>
+                    <dd class="font-medium">
+                        {{ resumen.demografia.tipo_composicion_edad ?? '—' }}
+                    </dd>
+                </div>
+            </dl>
+
+            <p
+                v-if="resumen.demografia.recomendacion"
+                class="mt-3 rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground"
+            >
+                <span class="font-semibold text-foreground"
+                    >Recomendación del análisis:</span
+                >
+                {{ resumen.demografia.recomendacion }}
+            </p>
         </section>
 
         <!-- Lista de electores -->

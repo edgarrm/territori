@@ -34,7 +34,14 @@ const page = usePage<{
     auth: { tenant: string | null };
 }>();
 
-type Modo = 'cobertura' | 'penetracion' | 'tipo';
+type Modo =
+    | 'cobertura'
+    | 'penetracion'
+    | 'tipo'
+    | 'ganador'
+    | 'competitividad'
+    | 'oportunidad'
+    | 'prioridad';
 
 type FeatureProps = {
     seccion_id: number;
@@ -47,13 +54,31 @@ type FeatureProps = {
     cobertura: number;
     penetracion: number;
     lista_nominal: number | null;
+    // Estadística pública 2024 (null cuando la sección no tiene dato importado).
+    ganador_bloque: string | null;
+    margen_pp: number | null;
+    pct_fuerza: number | null;
+    pct_morena_pvem: number | null;
+    participacion_2024: number | null;
+    indice_oportunidad: number | null;
+    nivel_oportunidad: string | null;
+    potencial_movilizacion: number | null;
 };
 
 type Brigadista = { membership_id: number; nombre: string | null };
 
+type LeyendaItem = { key: string | number; label: string; color: string };
+
+type Demografia = {
+    grupo_dominante: string | null;
+    grupo_mayor_abstencion: string | null;
+    recomendacion: string | null;
+} | null;
+
 type SeccionSel = FeatureProps & {
     brigadistas_activos: Brigadista[];
     ultimo_registro: string | null;
+    demografia: Demografia;
     cargando: boolean;
 };
 
@@ -83,6 +108,44 @@ const TIPOS = [
     { key: 3, label: 'Mixta', color: '#f59e0b' },
 ] as const;
 
+const SIN_DATOS = { key: 'sin_datos', label: 'Sin datos', color: '#9ca3af' };
+
+// Elección 2024: ganador por bloque (categórico).
+const GANADORES = [
+    { key: 'fuerza', label: 'Fuerza y Corazón', color: '#db2777' },
+    { key: 'morena', label: 'Morena-PVEM', color: '#7c2d12' },
+    { key: 'otros', label: 'Otros', color: '#f59e0b' },
+] as const;
+
+// Competitividad = margen 2024 en puntos porcentuales: margen chico = sección
+// en disputa (caliente), margen grande = sección definida (fría).
+const ESCALA_COMPETITIVIDAD = [
+    { key: 'dominada', label: 'Dominada (≥20pp)', color: '#0ea5e9', min: 20 },
+    { key: 'clara', label: 'Clara (10–20pp)', color: '#16a34a', min: 10 },
+    { key: 'competida', label: 'Competida (5–10pp)', color: '#84cc16', min: 5 },
+    { key: 'cerrada', label: 'Cerrada (2–5pp)', color: '#f59e0b', min: 2 },
+    { key: 'muy_cerrada', label: 'Muy cerrada (<2pp)', color: '#ef4444', min: 0 },
+] as const;
+
+// Oportunidad de movilización: nivel calculado en el análisis por edad
+// (abstencionismo recuperable). Alta = donde más votos se pueden sumar.
+const NIVELES_OPORTUNIDAD = [
+    { key: 'Alta', label: 'Oportunidad alta', color: '#ef4444' },
+    { key: 'Media', label: 'Oportunidad media', color: '#f59e0b' },
+    { key: 'Baja', label: 'Oportunidad baja', color: '#84cc16' },
+    { key: 'Seguimiento', label: 'Seguimiento', color: '#0ea5e9' },
+] as const;
+
+// Prioridad 0-100 (misma fórmula que la vista de prioridades, neutral):
+// 40% competitividad + 40% oportunidad de movilización + 20% cobertura pendiente.
+const ESCALA_PRIORIDAD = [
+    { key: 'muy_alta', label: 'Muy alta (≥80)', color: '#ef4444', min: 80 },
+    { key: 'alta', label: 'Alta (65–80)', color: '#f97316', min: 65 },
+    { key: 'media', label: 'Media (50–65)', color: '#f59e0b', min: 50 },
+    { key: 'baja', label: 'Baja (35–50)', color: '#84cc16', min: 35 },
+    { key: 'muy_baja', label: 'Muy baja (<35)', color: '#0ea5e9', min: 0 },
+] as const;
+
 function bucket(valor: number) {
     return ESCALA.find((b) => valor >= b.min) ?? ESCALA[ESCALA.length - 1];
 }
@@ -94,21 +157,87 @@ function bucketPenetracion(valor: number) {
     );
 }
 
+function bucketGanador(p: FeatureProps) {
+    if (!p.ganador_bloque) {
+        return SIN_DATOS;
+    }
+
+    if (p.ganador_bloque.toLowerCase().includes('morena')) {
+        return GANADORES[1];
+    }
+
+    if (p.ganador_bloque.toLowerCase().includes('fuerza')) {
+        return GANADORES[0];
+    }
+
+    return GANADORES[2];
+}
+
+function bucketCompetitividad(margen: number | null) {
+    if (margen === null) {
+        return SIN_DATOS;
+    }
+
+    return (
+        ESCALA_COMPETITIVIDAD.find((b) => margen >= b.min) ??
+        ESCALA_COMPETITIVIDAD[ESCALA_COMPETITIVIDAD.length - 1]
+    );
+}
+
+function bucketOportunidad(nivel: string | null) {
+    return NIVELES_OPORTUNIDAD.find((n) => n.key === nivel) ?? SIN_DATOS;
+}
+
+function prioridad(p: FeatureProps): number | null {
+    if (p.margen_pp === null && p.indice_oportunidad === null) {
+        return null;
+    }
+
+    const competitividad =
+        p.margen_pp !== null ? 100 - Math.min(p.margen_pp, 25) * 4 : 0;
+    const oportunidad = p.indice_oportunidad ?? 0;
+    const coberturaPendiente = 100 - Math.min(p.cobertura, 1) * 100;
+
+    return (
+        0.4 * competitividad + 0.4 * oportunidad + 0.2 * coberturaPendiente
+    );
+}
+
+function bucketPrioridad(p: FeatureProps) {
+    const valor = prioridad(p);
+
+    if (valor === null) {
+        return SIN_DATOS;
+    }
+
+    return (
+        ESCALA_PRIORIDAD.find((b) => valor >= b.min) ??
+        ESCALA_PRIORIDAD[ESCALA_PRIORIDAD.length - 1]
+    );
+}
+
 const modo = ref<Modo>('cobertura');
 const seccionSel = ref<SeccionSel | null>(null);
 const busqueda = ref('');
 const features = ref<FeatureProps[]>([]);
 
 function colorFeature(p: FeatureProps): string {
-    if (modo.value === 'tipo') {
-        return TIPOS.find((t) => t.key === p.tipo)?.color ?? '#94a3b8';
+    switch (modo.value) {
+        case 'tipo':
+            return TIPOS.find((t) => t.key === p.tipo)?.color ?? '#94a3b8';
+        case 'penetracion':
+            return bucketPenetracion(p.penetracion).color;
+        case 'ganador':
+            return bucketGanador(p).color;
+        case 'competitividad':
+            return bucketCompetitividad(p.margen_pp).color;
+        case 'oportunidad':
+            return bucketOportunidad(p.nivel_oportunidad).color;
+        case 'prioridad':
+            return bucketPrioridad(p).color;
+        default:
+            return bucket(p.cobertura).color;
     }
-
-    if (modo.value === 'penetracion') {
-        return bucketPenetracion(p.penetracion).color;
-    }
-
-    return bucket(p.cobertura).color;
 }
 
 // Módulo Leaflet en runtime (poblado en onMounted, solo en el cliente).
@@ -148,15 +277,22 @@ const subtitulo = computed(() => {
 const brandColor = computed(() => page.props.marca?.color ?? '#1d4ed8');
 
 function claveEstatus(p: FeatureProps): string | number {
-    if (modo.value === 'tipo') {
-        return p.tipo;
+    switch (modo.value) {
+        case 'tipo':
+            return p.tipo;
+        case 'penetracion':
+            return bucketPenetracion(p.penetracion).key;
+        case 'ganador':
+            return bucketGanador(p).key;
+        case 'competitividad':
+            return bucketCompetitividad(p.margen_pp).key;
+        case 'oportunidad':
+            return bucketOportunidad(p.nivel_oportunidad).key;
+        case 'prioridad':
+            return bucketPrioridad(p).key;
+        default:
+            return bucket(p.cobertura).key;
     }
-
-    if (modo.value === 'penetracion') {
-        return bucketPenetracion(p.penetracion).key;
-    }
-
-    return bucket(p.cobertura).key;
 }
 
 const conteosPorEstatus = computed(() => {
@@ -182,25 +318,55 @@ const leyenda = computed(() => {
         }));
     }
 
-    const escala = modo.value === 'penetracion' ? ESCALA_PENETRACION : ESCALA;
+    const escalas: Record<Exclude<Modo, 'tipo'>, readonly LeyendaItem[]> = {
+        cobertura: ESCALA,
+        penetracion: ESCALA_PENETRACION,
+        ganador: GANADORES,
+        competitividad: ESCALA_COMPETITIVIDAD,
+        oportunidad: NIVELES_OPORTUNIDAD,
+        prioridad: ESCALA_PRIORIDAD,
+    };
 
-    return escala.map((b) => ({
+    const items = escalas[modo.value].map((b) => ({
         key: b.key,
         label: b.label,
         color: b.color,
         count: conteos.get(b.key) ?? 0,
     }));
+
+    // En los modos 2024 puede haber secciones sin estadística importada.
+    const sinDatos = conteos.get(SIN_DATOS.key) ?? 0;
+
+    if (sinDatos > 0) {
+        items.push({ ...SIN_DATOS, count: sinDatos });
+    }
+
+    return items;
 });
 
 const totalSeccionesMostradas = computed(() => features.value.length);
 
-const tituloLeyenda = computed(() =>
-    modo.value === 'tipo'
-        ? 'Tipo de sección'
-        : modo.value === 'penetracion'
-          ? 'Penetración'
-          : 'Cobertura de meta',
-);
+const MODOS: { key: Modo; label: string }[] = [
+    { key: 'cobertura', label: 'Cobertura' },
+    { key: 'penetracion', label: 'Penetración' },
+    { key: 'tipo', label: 'Tipo' },
+    { key: 'ganador', label: 'Ganador 2024' },
+    { key: 'competitividad', label: 'Competitividad' },
+    { key: 'oportunidad', label: 'Oportunidad' },
+    { key: 'prioridad', label: 'Prioridad' },
+];
+
+const TITULOS_LEYENDA: Record<Modo, string> = {
+    cobertura: 'Cobertura de meta',
+    penetracion: 'Penetración',
+    tipo: 'Tipo de sección',
+    ganador: 'Ganador 2024 por bloque',
+    competitividad: 'Competitividad 2024 (margen)',
+    oportunidad: 'Oportunidad de movilización',
+    prioridad: 'Prioridad de esfuerzos',
+};
+
+const tituloLeyenda = computed(() => TITULOS_LEYENDA[modo.value]);
 
 function fmt(n: number): string {
     return n.toLocaleString('es-MX');
@@ -335,6 +501,7 @@ async function seleccionar(p: FeatureProps) {
         ...p,
         brigadistas_activos: [],
         ultimo_registro: null,
+        demografia: null,
         cargando: true,
     };
     capa?.setStyle(estiloFeature);
@@ -349,6 +516,7 @@ async function seleccionar(p: FeatureProps) {
             ...seccionSel.value,
             brigadistas_activos: resumen.brigadistas_activos ?? [],
             ultimo_registro: resumen.ultimo_registro ?? null,
+            demografia: resumen.demografia ?? null,
             cargando: false,
         };
     }
@@ -465,24 +633,20 @@ onBeforeUnmount(() => {
 
             <div class="flex flex-col gap-3 px-4 pb-4">
                 <!-- Toggle de modo -->
-                <div class="flex gap-1 rounded-lg bg-muted p-1 text-sm">
+                <div class="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1 text-sm">
                     <button
-                        v-for="opcion in [
-                            'cobertura',
-                            'penetracion',
-                            'tipo',
-                        ] as Modo[]"
-                        :key="opcion"
+                        v-for="opcion in MODOS"
+                        :key="opcion.key"
                         type="button"
-                        class="flex-1 rounded-md px-2 py-1.5 font-medium capitalize transition-colors"
+                        class="rounded-md px-2 py-1.5 font-medium transition-colors"
                         :class="
-                            modo === opcion
+                            modo === opcion.key
                                 ? 'bg-background text-foreground shadow-sm'
                                 : 'text-muted-foreground hover:text-foreground'
                         "
-                        @click="cambiarModo(opcion)"
+                        @click="cambiarModo(opcion.key)"
                     >
-                        {{ opcion }}
+                        {{ opcion.label }}
                     </button>
                 </div>
 
@@ -710,6 +874,131 @@ onBeforeUnmount(() => {
                         </div>
                     </dl>
 
+                    <!-- Estadística electoral/demográfica 2024 (si fue importada) -->
+                    <div
+                        v-if="seccionSel.ganador_bloque || seccionSel.nivel_oportunidad"
+                        class="mt-3 border-t pt-3"
+                    >
+                        <div
+                            class="text-[0.7rem] font-medium tracking-wide text-muted-foreground uppercase"
+                        >
+                            Elección 2024
+                        </div>
+                        <dl class="mt-1 divide-y divide-border text-sm">
+                            <div
+                                v-if="seccionSel.ganador_bloque"
+                                class="flex justify-between py-1.5"
+                            >
+                                <dt class="text-muted-foreground">Ganador</dt>
+                                <dd class="flex items-center gap-1.5 font-medium">
+                                    <span
+                                        class="size-2.5 rounded-sm"
+                                        :style="{
+                                            backgroundColor:
+                                                bucketGanador(seccionSel).color,
+                                        }"
+                                    />
+                                    {{ seccionSel.ganador_bloque }}
+                                </dd>
+                            </div>
+                            <div
+                                v-if="seccionSel.margen_pp !== null"
+                                class="flex justify-between py-1.5"
+                            >
+                                <dt class="text-muted-foreground">Margen</dt>
+                                <dd class="font-medium tabular-nums">
+                                    {{ seccionSel.margen_pp.toFixed(1) }} pp ·
+                                    {{
+                                        bucketCompetitividad(
+                                            seccionSel.margen_pp,
+                                        ).label.split(' (')[0]
+                                    }}
+                                </dd>
+                            </div>
+                            <div
+                                v-if="seccionSel.participacion_2024 !== null"
+                                class="flex justify-between py-1.5"
+                            >
+                                <dt class="text-muted-foreground">
+                                    Participación 2024
+                                </dt>
+                                <dd class="font-medium tabular-nums">
+                                    {{ seccionSel.participacion_2024.toFixed(1) }}%
+                                </dd>
+                            </div>
+                            <div
+                                v-if="seccionSel.nivel_oportunidad"
+                                class="flex justify-between py-1.5"
+                            >
+                                <dt class="text-muted-foreground">
+                                    Oportunidad
+                                </dt>
+                                <dd class="flex items-center gap-1.5 font-medium">
+                                    <span
+                                        class="size-2.5 rounded-sm"
+                                        :style="{
+                                            backgroundColor: bucketOportunidad(
+                                                seccionSel.nivel_oportunidad,
+                                            ).color,
+                                        }"
+                                    />
+                                    {{ seccionSel.nivel_oportunidad }}
+                                    <span
+                                        v-if="
+                                            seccionSel.indice_oportunidad !==
+                                            null
+                                        "
+                                        class="text-muted-foreground tabular-nums"
+                                    >
+                                        ({{
+                                            Math.round(
+                                                seccionSel.indice_oportunidad,
+                                            )
+                                        }}/100)
+                                    </span>
+                                </dd>
+                            </div>
+                            <div
+                                v-if="seccionSel.potencial_movilizacion !== null"
+                                class="flex justify-between py-1.5"
+                            >
+                                <dt class="text-muted-foreground">
+                                    Potencial de movilización
+                                </dt>
+                                <dd class="font-medium tabular-nums">
+                                    {{ fmt(seccionSel.potencial_movilizacion) }}
+                                    votos
+                                </dd>
+                            </div>
+                            <div
+                                v-if="prioridad(seccionSel) !== null"
+                                class="flex justify-between py-1.5"
+                            >
+                                <dt class="text-muted-foreground">Prioridad</dt>
+                                <dd class="flex items-center gap-1.5 font-medium tabular-nums">
+                                    <span
+                                        class="size-2.5 rounded-sm"
+                                        :style="{
+                                            backgroundColor:
+                                                bucketPrioridad(seccionSel)
+                                                    .color,
+                                        }"
+                                    />
+                                    {{ Math.round(prioridad(seccionSel) ?? 0) }}/100
+                                </dd>
+                            </div>
+                        </dl>
+                        <p
+                            v-if="seccionSel.demografia?.recomendacion"
+                            class="mt-2 rounded-md bg-muted px-2.5 py-2 text-xs leading-relaxed text-muted-foreground"
+                        >
+                            <span class="font-semibold text-foreground"
+                                >Recomendación:</span
+                            >
+                            {{ seccionSel.demografia.recomendacion }}
+                        </p>
+                    </div>
+
                     <div
                         v-if="seccionSel.brigadistas_activos.length"
                         class="mt-1 flex flex-wrap gap-1"
@@ -744,7 +1033,8 @@ onBeforeUnmount(() => {
                     class="px-1 text-[0.7rem] leading-relaxed text-muted-foreground"
                 >
                     Cobertura calculada sobre capturas reales del tenant.
-                    Cartografía: INE, Marco Geográfico Seccional.
+                    Cartografía: INE, Marco Geográfico Seccional. Resultados y
+                    demografía 2024: cómputos oficiales por sección.
                 </p>
             </div>
         </aside>

@@ -60,6 +60,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
             Route::get('mapa', [MapaController::class, 'index'])->name('mapa');
             Route::get('api/cobertura.geojson', [MapaController::class, 'cobertura'])->name('mapa.cobertura');
+            Route::get('prioridades', [MapaController::class, 'prioridades'])->name('prioridades');
             Route::get('api/secciones/{seccion}/resumen', [MapaController::class, 'resumenSeccion'])->name('secciones.resumen');
 
             Route::middleware('rol:coordinador,admin')->group(function () {

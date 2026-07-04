@@ -10,6 +10,7 @@ import {
     LayoutGrid,
     Map,
     Network,
+    Crosshair,
     ShieldCheck,
     Target,
     Ticket,
@@ -62,6 +63,7 @@ const mainNavItems = computed<NavItem[]>(() => {
     const items: NavItem[] = [
         { title: 'Dashboard', href: dashboard(), icon: LayoutGrid },
         { title: 'Mapa', href: '/mapa', icon: Map },
+        { title: 'Prioridades', href: '/prioridades', icon: Crosshair },
         { title: 'Captura', href: '/captura', icon: ClipboardList },
         { title: 'Agenda', href: '/agenda', icon: CalendarCheck },
         { title: 'Eventos', href: '/eventos', icon: CalendarDays },

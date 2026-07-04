@@ -47,6 +47,7 @@ class MapaController extends Controller
                 $join->on('secciones.id', '=', 'cobertura_seccion.seccion_id')
                     ->where('cobertura_seccion.tenant_id', '=', $tenant?->id);
             })
+            ->leftJoin('estadisticas_seccion', 'secciones.id', '=', 'estadisticas_seccion.seccion_id')
             ->where('secciones.municipio_id', $tenant?->municipio_id)
             // El brigadista solo ve sus zonas asignadas; gestión ve todas.
             ->when(
@@ -64,6 +65,16 @@ class MapaController extends Controller
                 DB::raw('COALESCE(cobertura_seccion.meta, 0) as meta'),
                 DB::raw('COALESCE(cobertura_seccion.cobertura, 0) as cobertura'),
                 DB::raw('COALESCE(cobertura_seccion.penetracion, 0) as penetracion'),
+                // Estadística pública 2024 (solo escalares chicos; el desglose
+                // jsonb vive en el endpoint de resumen para no inflar el GeoJSON).
+                'estadisticas_seccion.ganador_bloque',
+                'estadisticas_seccion.margen_pp',
+                'estadisticas_seccion.pct_fuerza',
+                'estadisticas_seccion.pct_morena_pvem',
+                'estadisticas_seccion.participacion_pct as participacion_2024',
+                'estadisticas_seccion.indice_oportunidad',
+                'estadisticas_seccion.nivel_oportunidad',
+                'estadisticas_seccion.potencial_movilizacion',
                 DB::raw('ST_AsGeoJSON(ST_SimplifyPreserveTopology(secciones.geom, '.self::TOLERANCIA_SIMPLIFICACION.')) as geom_json'),
             ])
             ->get();
@@ -82,6 +93,14 @@ class MapaController extends Controller
                 'cobertura' => (float) $fila->cobertura,
                 'penetracion' => (float) $fila->penetracion,
                 'lista_nominal' => $fila->lista_nominal,
+                'ganador_bloque' => $fila->ganador_bloque,
+                'margen_pp' => $fila->margen_pp !== null ? (float) $fila->margen_pp : null,
+                'pct_fuerza' => $fila->pct_fuerza !== null ? (float) $fila->pct_fuerza : null,
+                'pct_morena_pvem' => $fila->pct_morena_pvem !== null ? (float) $fila->pct_morena_pvem : null,
+                'participacion_2024' => $fila->participacion_2024 !== null ? (float) $fila->participacion_2024 : null,
+                'indice_oportunidad' => $fila->indice_oportunidad !== null ? (float) $fila->indice_oportunidad : null,
+                'nivel_oportunidad' => $fila->nivel_oportunidad,
+                'potencial_movilizacion' => $fila->potencial_movilizacion,
             ],
         ])->values();
 
@@ -122,6 +141,8 @@ class MapaController extends Controller
             ->where('seccion_id', $seccion->id)
             ->max('created_at');
 
+        $estadistica = $seccion->estadistica;
+
         return response()->json([
             'numero' => $seccion->numero,
             'tipo' => $seccion->tipo,
@@ -134,6 +155,27 @@ class MapaController extends Controller
             'penetracion' => $cobertura !== null ? (float) $cobertura->penetracion : 0,
             'brigadistas_activos' => $this->brigadistasActivosEn($seccion, $tenant),
             'ultimo_registro' => $ultimoRegistro,
+            'electoral_2024' => $estadistica?->ganador_bloque === null ? null : [
+                'ganador_bloque' => $estadistica->ganador_bloque,
+                'ganador_partido' => $estadistica->ganador_partido,
+                'margen_votos' => $estadistica->margen_votos,
+                'margen_pp' => (float) $estadistica->margen_pp,
+                'total_votos' => $estadistica->total_votos,
+                'participacion_pct' => (float) $estadistica->participacion_pct,
+                'pct_fuerza' => (float) $estadistica->pct_fuerza,
+                'pct_morena_pvem' => (float) $estadistica->pct_morena_pvem,
+                'pct_otros' => (float) $estadistica->pct_otros,
+            ],
+            'demografia' => $estadistica?->nivel_oportunidad === null ? null : [
+                'indice_oportunidad' => (float) $estadistica->indice_oportunidad,
+                'nivel_oportunidad' => $estadistica->nivel_oportunidad,
+                'grupo_dominante' => $estadistica->grupo_dominante,
+                'grupo_mayor_abstencion' => $estadistica->grupo_mayor_abstencion,
+                'potencial_movilizacion' => $estadistica->potencial_movilizacion,
+                'tipo_composicion_edad' => $estadistica->tipo_composicion_edad,
+                'recomendacion' => $estadistica->recomendacion,
+                'grupos_edad' => $estadistica->grupos_edad,
+            ],
         ]);
     }
 
@@ -158,6 +200,87 @@ class MapaController extends Controller
                 'nombre' => $row->nombre,
             ])
             ->all();
+    }
+
+    /**
+     * Ranking de secciones para enfocar esfuerzos: cruza la estadística pública
+     * 2024 (competitividad + oportunidad de movilización) con la cobertura del
+     * tenant. El brigadista solo ve sus zonas asignadas (mismo criterio que el mapa).
+     */
+    public function prioridades(): Response
+    {
+        $tenant = TenantContext::get();
+        $viewer = $this->miMembership();
+
+        $filas = DB::table('secciones')
+            ->leftJoin('cobertura_seccion', function ($join) use ($tenant) {
+                $join->on('secciones.id', '=', 'cobertura_seccion.seccion_id')
+                    ->where('cobertura_seccion.tenant_id', '=', $tenant?->id);
+            })
+            ->leftJoin('estadisticas_seccion', 'secciones.id', '=', 'estadisticas_seccion.seccion_id')
+            ->where('secciones.municipio_id', $tenant?->municipio_id)
+            ->when(
+                $viewer?->esBrigadista(),
+                fn ($query) => $query->whereIn('secciones.id', $viewer->secciones()->pluck('secciones.id')),
+            )
+            ->orderBy('secciones.numero')
+            ->select([
+                'secciones.id as seccion_id',
+                'secciones.numero',
+                'secciones.lista_nominal',
+                DB::raw('COALESCE(cobertura_seccion.capturados, 0) as capturados'),
+                DB::raw('COALESCE(cobertura_seccion.meta, 0) as meta'),
+                DB::raw('COALESCE(cobertura_seccion.cobertura, 0) as cobertura'),
+                'estadisticas_seccion.ganador_bloque',
+                'estadisticas_seccion.margen_pp',
+                'estadisticas_seccion.indice_oportunidad',
+                'estadisticas_seccion.nivel_oportunidad',
+                'estadisticas_seccion.potencial_movilizacion',
+                'estadisticas_seccion.grupo_dominante',
+            ])
+            ->get();
+
+        $secciones = $filas->map(fn ($fila) => [
+            'seccion_id' => $fila->seccion_id,
+            'numero' => $fila->numero,
+            'lista_nominal' => $fila->lista_nominal,
+            'capturados' => (int) $fila->capturados,
+            'meta' => (int) $fila->meta,
+            'cobertura' => (float) $fila->cobertura,
+            'ganador_bloque' => $fila->ganador_bloque,
+            'margen_pp' => $fila->margen_pp !== null ? (float) $fila->margen_pp : null,
+            'indice_oportunidad' => $fila->indice_oportunidad !== null ? (float) $fila->indice_oportunidad : null,
+            'nivel_oportunidad' => $fila->nivel_oportunidad,
+            'potencial_movilizacion' => $fila->potencial_movilizacion,
+            'grupo_dominante' => $fila->grupo_dominante,
+            'prioridad' => self::calcularPrioridad(
+                $fila->margen_pp !== null ? (float) $fila->margen_pp : null,
+                $fila->indice_oportunidad !== null ? (float) $fila->indice_oportunidad : null,
+                (float) $fila->cobertura,
+            ),
+        ])->values();
+
+        return Inertia::render('Prioridades', ['secciones' => $secciones]);
+    }
+
+    /**
+     * Índice de prioridad 0-100 (neutral, sin perspectiva de bloque): pesa la
+     * competitividad (margen chico = cada voto vale más), la oportunidad de
+     * movilización por edad y la cobertura propia pendiente. Sin ningún dato
+     * estadístico regresa null (la sección se muestra como "sin datos"); si
+     * falta una parte, esa componente aporta 0.
+     */
+    public static function calcularPrioridad(?float $margenPp, ?float $indiceOportunidad, float $cobertura): ?float
+    {
+        if ($margenPp === null && $indiceOportunidad === null) {
+            return null;
+        }
+
+        $competitividad = $margenPp !== null ? 100 - min($margenPp, 25.0) * 4 : 0.0;
+        $oportunidad = $indiceOportunidad ?? 0.0;
+        $coberturaPendiente = 100 - min($cobertura, 1.0) * 100;
+
+        return round(0.4 * $competitividad + 0.4 * $oportunidad + 0.2 * $coberturaPendiente, 1);
     }
 
     public function metas(): Response

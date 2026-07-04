@@ -6,6 +6,7 @@ use Database\Factories\SeccionFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use MatanYadaev\EloquentSpatial\Objects\MultiPolygon;
 use MatanYadaev\EloquentSpatial\Traits\HasSpatial;
 
@@ -44,5 +45,13 @@ class Seccion extends Model
     public function municipio(): BelongsTo
     {
         return $this->belongsTo(Municipio::class);
+    }
+
+    /**
+     * @return HasOne<EstadisticaSeccion, $this>
+     */
+    public function estadistica(): HasOne
+    {
+        return $this->hasOne(EstadisticaSeccion::class);
     }
 }
