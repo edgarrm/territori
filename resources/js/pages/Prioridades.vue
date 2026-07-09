@@ -27,9 +27,52 @@ type SeccionPrioridad = {
     potencial_movilizacion: number | null;
     grupo_dominante: string | null;
     prioridad: number | null;
+    // F2: competitividad y tipo de sección desde la perspectiva del partido del tenant.
+    competitividad: string;
+    diferencia_votos: number | null;
+    tipo_seccion: string | null;
 };
 
-const props = defineProps<{ secciones: SeccionPrioridad[] }>();
+const props = defineProps<{
+    secciones: SeccionPrioridad[];
+    mostrarCompetitividad: boolean;
+    mostrarTipoSeccion: boolean;
+    mostrarIndiceNeutral: boolean;
+    mostrarOportunidad: boolean;
+}>();
+
+const ESTATUS_COMPETITIVIDAD: Record<string, { label: string; color: string }> = {
+    ganada_franca: { label: 'Ganada franca', color: '#15803d' },
+    competida: { label: 'Competida', color: '#f59e0b' },
+    empatada: { label: 'Empatada', color: '#6b7280' },
+    perdida: { label: 'Perdida', color: '#dc2626' },
+    sin_datos: { label: 'Sin datos', color: '#9ca3af' },
+};
+
+const TIPOS_SECCION: Record<string, { label: string; color: string }> = {
+    alfa: { label: 'α Alfa', color: '#7c3aed' },
+    beta: { label: 'β Beta', color: '#2563eb' },
+    gama: { label: 'γ Gama', color: '#0d9488' },
+};
+
+// Orden por defecto pedido en el spec: tipo (Alfa→Beta→Gama), dentro estatus
+// (GanadaFranca→Competida→Empatada→Perdida→SinDatos).
+const ORDEN_TIPO: Record<string, number> = { alfa: 0, beta: 1, gama: 2 };
+const ORDEN_ESTATUS: Record<string, number> = {
+    ganada_franca: 0,
+    competida: 1,
+    empatada: 2,
+    perdida: 3,
+    sin_datos: 4,
+};
+
+function ordenTipo(tipo: string | null): number {
+    return tipo !== null ? (ORDEN_TIPO[tipo] ?? 99) : 99;
+}
+
+function ordenEstatus(estatus: string): number {
+    return ORDEN_ESTATUS[estatus] ?? 99;
+}
 
 // Colores consistentes con las capas del Mapa.
 const COLORES_BLOQUE: { contiene: string; color: string }[] = [
@@ -65,12 +108,16 @@ type CampoOrden =
     | 'margen_pp'
     | 'indice_oportunidad'
     | 'potencial_movilizacion'
-    | 'cobertura';
+    | 'cobertura'
+    | 'tipo_seccion';
 
-const orden = ref<CampoOrden>('prioridad');
-const descendente = ref(true);
+// Default: tipo (Alfa→Beta→Gama) y dentro, estatus (GanadaFranca→...→SinDatos).
+const orden = ref<CampoOrden>('tipo_seccion');
+const descendente = ref(false);
 const filtroNivel = ref('');
 const filtroGanador = ref('');
+const filtroTipo = ref('');
+const filtroEstatus = ref('');
 const busqueda = ref('');
 
 function ordenarPor(campo: CampoOrden) {
@@ -78,9 +125,12 @@ function ordenarPor(campo: CampoOrden) {
         descendente.value = !descendente.value;
     } else {
         orden.value = campo;
-        // El margen se explora de menor a mayor (cerradas primero); el resto,
-        // de mayor a menor.
-        descendente.value = campo !== 'margen_pp' && campo !== 'numero';
+        // El margen se explora de menor a mayor (cerradas primero); tipo/estatus
+        // de menor a mayor (Alfa/GanadaFranca primero); el resto, de mayor a menor.
+        descendente.value =
+            campo !== 'margen_pp' &&
+            campo !== 'numero' &&
+            campo !== 'tipo_seccion';
     }
 }
 
@@ -105,6 +155,14 @@ const seccionesVisibles = computed(() => {
         lista = lista.filter((s) => s.ganador_bloque === filtroGanador.value);
     }
 
+    if (filtroTipo.value) {
+        lista = lista.filter((s) => s.tipo_seccion === filtroTipo.value);
+    }
+
+    if (filtroEstatus.value) {
+        lista = lista.filter((s) => s.competitividad === filtroEstatus.value);
+    }
+
     const numero = Number.parseInt(busqueda.value.trim(), 10);
 
     if (!Number.isNaN(numero)) {
@@ -113,6 +171,16 @@ const seccionesVisibles = computed(() => {
 
     const campo = orden.value;
     const factor = descendente.value ? -1 : 1;
+
+    if (campo === 'tipo_seccion') {
+        return [...lista].sort((a, b) => {
+            const cmp =
+                (ordenTipo(a.tipo_seccion) - ordenTipo(b.tipo_seccion)) ||
+                (ordenEstatus(a.competitividad) - ordenEstatus(b.competitividad));
+
+            return cmp * factor;
+        });
+    }
 
     return [...lista].sort((a, b) => {
         const va = a[campo];
@@ -186,6 +254,30 @@ function flecha(campo: CampoOrden): string {
                         {{ g }}
                     </option>
                 </select>
+                <select
+                    v-if="mostrarTipoSeccion"
+                    v-model="filtroTipo"
+                    class="rounded-lg border bg-background px-2 py-1.5 text-sm"
+                >
+                    <option value="">Tipo: todos</option>
+                    <option value="alfa">Alfa</option>
+                    <option value="beta">Beta</option>
+                    <option value="gama">Gama</option>
+                </select>
+                <select
+                    v-if="mostrarCompetitividad"
+                    v-model="filtroEstatus"
+                    class="rounded-lg border bg-background px-2 py-1.5 text-sm"
+                >
+                    <option value="">Estatus: todos</option>
+                    <option
+                        v-for="(info, clave) in ESTATUS_COMPETITIVIDAD"
+                        :key="clave"
+                        :value="clave"
+                    >
+                        {{ info.label }}
+                    </option>
+                </select>
             </div>
         </div>
 
@@ -210,6 +302,17 @@ function flecha(campo: CampoOrden): string {
                             Sección{{ flecha('numero') }}
                         </th>
                         <th
+                            v-if="mostrarTipoSeccion"
+                            class="cursor-pointer p-2 text-left select-none"
+                            @click="ordenarPor('tipo_seccion')"
+                        >
+                            Tipo{{ flecha('tipo_seccion') }}
+                        </th>
+                        <th v-if="mostrarCompetitividad" class="p-2 text-left">
+                            Estatus
+                        </th>
+                        <th
+                            v-if="mostrarIndiceNeutral"
                             class="cursor-pointer p-2 text-left select-none"
                             @click="ordenarPor('prioridad')"
                         >
@@ -223,12 +326,14 @@ function flecha(campo: CampoOrden): string {
                             Margen (pp){{ flecha('margen_pp') }}
                         </th>
                         <th
+                            v-if="mostrarOportunidad"
                             class="cursor-pointer p-2 text-right select-none"
                             @click="ordenarPor('indice_oportunidad')"
                         >
                             Oportunidad{{ flecha('indice_oportunidad') }}
                         </th>
                         <th
+                            v-if="mostrarOportunidad"
                             class="cursor-pointer p-2 text-right select-none"
                             @click="ordenarPor('potencial_movilizacion')"
                         >
@@ -257,7 +362,51 @@ function flecha(campo: CampoOrden): string {
                                 {{ seccion.numero }}
                             </Link>
                         </td>
-                        <td class="p-2">
+                        <td v-if="mostrarTipoSeccion" class="p-2">
+                            <span
+                                v-if="seccion.tipo_seccion"
+                                class="rounded-md px-2 py-0.5 text-xs font-semibold text-white"
+                                :style="{
+                                    backgroundColor:
+                                        TIPOS_SECCION[seccion.tipo_seccion]
+                                            ?.color,
+                                }"
+                            >
+                                {{ TIPOS_SECCION[seccion.tipo_seccion]?.label }}
+                            </span>
+                            <span v-else class="text-xs text-muted-foreground"
+                                >—</span
+                            >
+                        </td>
+                        <td v-if="mostrarCompetitividad" class="p-2">
+                            <span
+                                class="inline-flex items-center gap-1.5 text-xs font-medium"
+                            >
+                                <span
+                                    class="size-2.5 shrink-0 rounded-sm"
+                                    :style="{
+                                        backgroundColor:
+                                            ESTATUS_COMPETITIVIDAD[
+                                                seccion.competitividad
+                                            ]?.color,
+                                    }"
+                                />
+                                {{
+                                    ESTATUS_COMPETITIVIDAD[
+                                        seccion.competitividad
+                                    ]?.label
+                                }}
+                                <span
+                                    v-if="seccion.diferencia_votos !== null"
+                                    class="text-muted-foreground tabular-nums"
+                                >
+                                    ({{ seccion.diferencia_votos >= 0 ? '+' : '−' }}{{
+                                        fmt(Math.abs(seccion.diferencia_votos))
+                                    }})
+                                </span>
+                            </span>
+                        </td>
+                        <td v-if="mostrarIndiceNeutral" class="p-2">
                             <span
                                 v-if="seccion.prioridad !== null"
                                 class="rounded-full px-2.5 py-0.5 text-xs font-semibold text-white tabular-nums"
@@ -297,7 +446,7 @@ function flecha(campo: CampoOrden): string {
                                     : '—'
                             }}
                         </td>
-                        <td class="p-2 text-right">
+                        <td v-if="mostrarOportunidad" class="p-2 text-right">
                             <span
                                 v-if="seccion.nivel_oportunidad"
                                 class="inline-flex items-center gap-1.5 tabular-nums"
@@ -319,7 +468,7 @@ function flecha(campo: CampoOrden): string {
                             </span>
                             <span v-else class="text-muted-foreground">—</span>
                         </td>
-                        <td class="p-2 text-right tabular-nums">
+                        <td v-if="mostrarOportunidad" class="p-2 text-right tabular-nums">
                             {{
                                 seccion.potencial_movilizacion !== null
                                     ? fmt(seccion.potencial_movilizacion)

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3';
+import { Head, usePage } from '@inertiajs/vue3';
 import { onMounted, reactive, ref } from 'vue';
 import ListaCapturados from '@/components/ListaCapturados.vue';
 import { Button } from '@/components/ui/button';
@@ -48,6 +48,12 @@ type Electoral2024 = {
     pct_fuerza: number;
     pct_morena_pvem: number;
     pct_otros: number;
+    // F2: competitividad desde la perspectiva del partido del tenant.
+    competitividad: string;
+    diferencia_votos: number | null;
+    votos_bloque_propio: number | null;
+    votos_mejor_rival: number | null;
+    bloque_propio: string | null;
 } | null;
 
 type GrupoEdad = {
@@ -81,6 +87,7 @@ type Resumen = {
     penetracion: number;
     brigadistas_activos: Brigadista[];
     ultimo_registro: string | null;
+    tipo_seccion: string | null;
     electoral_2024: Electoral2024;
     demografia: Demografia;
 };
@@ -122,6 +129,24 @@ const COLORES_OPORTUNIDAD: Record<string, string> = {
     Baja: '#84cc16',
     Seguimiento: '#0ea5e9',
 };
+
+// F2: mismos colores/etiquetas que Mapa.vue y Prioridades.vue.
+const ESTATUS_COMPETITIVIDAD: Record<string, { label: string; color: string }> = {
+    ganada_franca: { label: 'Ganada franca', color: '#15803d' },
+    competida: { label: 'Competida', color: '#f59e0b' },
+    empatada: { label: 'Empatada', color: '#6b7280' },
+    perdida: { label: 'Perdida', color: '#dc2626' },
+    sin_datos: { label: 'Sin datos', color: '#9ca3af' },
+};
+
+const TIPOS_SECCION: Record<string, string> = { alfa: 'α', beta: 'β', gama: 'γ' };
+
+const page = usePage<{
+    campana: {
+        partido: { id: number; siglas: string; nombre: string; color: string } | null;
+        indicadores: { competitividad: boolean; tipo_seccion: boolean };
+    } | null;
+}>();
 
 const GRUPOS_EDAD_ORDEN = ['18-29', '30-39', '40-49', '50-59', '60-79', '80+'];
 
@@ -276,7 +301,18 @@ async function guardar() {
 
     <div class="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-4 p-4">
         <div class="flex items-center justify-between">
-            <h1 class="text-xl font-semibold">Sección {{ seccion.numero }}</h1>
+            <h1 class="flex items-center gap-1.5 text-xl font-semibold">
+                Sección {{ seccion.numero }}
+                <span
+                    v-if="
+                        page.props.campana?.indicadores.tipo_seccion &&
+                        resumen?.tipo_seccion
+                    "
+                    class="rounded-md bg-muted px-1.5 py-0.5 text-xs font-bold text-foreground"
+                >
+                    {{ TIPOS_SECCION[resumen.tipo_seccion] }}
+                </span>
+            </h1>
             <Button @click="abrirModal">Agregar elector</Button>
         </div>
 
@@ -390,6 +426,29 @@ async function guardar() {
             <div class="flex items-center justify-between">
                 <h2 class="text-base font-semibold">Elección 2024</h2>
                 <span
+                    v-if="
+                        page.props.campana?.indicadores.competitividad &&
+                        page.props.campana?.partido &&
+                        resumen.electoral_2024.competitividad !== 'sin_datos'
+                    "
+                    class="flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold text-white"
+                    :style="{
+                        backgroundColor:
+                            ESTATUS_COMPETITIVIDAD[
+                                resumen.electoral_2024.competitividad
+                            ]?.color,
+                    }"
+                >
+                    {{ ESTATUS_COMPETITIVIDAD[resumen.electoral_2024.competitividad]?.label }}
+                    <span v-if="resumen.electoral_2024.diferencia_votos !== null">
+                        · {{ resumen.electoral_2024.diferencia_votos >= 0 ? '+' : '−' }}{{
+                            fmt(Math.abs(resumen.electoral_2024.diferencia_votos))
+                        }}
+                        votos
+                    </span>
+                </span>
+                <span
+                    v-else
                     class="rounded-full px-2.5 py-0.5 text-xs font-semibold text-white"
                     :style="{
                         backgroundColor: colorBloque(

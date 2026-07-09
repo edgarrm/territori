@@ -29,9 +29,23 @@ const props = defineProps<{
     seccionInicial?: number | null;
 }>();
 
+type Campana = {
+    partido: { id: number; siglas: string; nombre: string; color: string } | null;
+    umbral_ganada_franca: number;
+    umbral_alfa: number;
+    umbral_beta: number;
+    indicadores: {
+        competitividad: boolean;
+        tipo_seccion: boolean;
+        indice_neutral: boolean;
+        oportunidad: boolean;
+    };
+} | null;
+
 const page = usePage<{
     marca: { nombre: string; color: string };
     auth: { tenant: string | null };
+    campana: Campana;
 }>();
 
 type Modo =
@@ -40,6 +54,7 @@ type Modo =
     | 'tipo'
     | 'ganador'
     | 'competitividad'
+    | 'tipo_seccion'
     | 'oportunidad'
     | 'prioridad';
 
@@ -63,11 +78,16 @@ type FeatureProps = {
     indice_oportunidad: number | null;
     nivel_oportunidad: string | null;
     potencial_movilizacion: number | null;
+    // F2: competitividad y tipo de sección desde la perspectiva del partido del tenant.
+    competitividad: string;
+    diferencia_votos: number | null;
+    tipo_seccion: string | null;
 };
 
 type Brigadista = { membership_id: number; nombre: string | null };
 
 type LeyendaItem = { key: string | number; label: string; color: string };
+type LeyendaItemConCuenta = LeyendaItem & { count: number };
 
 type Demografia = {
     grupo_dominante: string | null;
@@ -117,14 +137,30 @@ const GANADORES = [
     { key: 'otros', label: 'Otros', color: '#f59e0b' },
 ] as const;
 
-// Competitividad = margen 2024 en puntos porcentuales: margen chico = sección
-// en disputa (caliente), margen grande = sección definida (fría).
+// Competitividad neutral (fallback cuando el tenant no tiene partido
+// configurado): margen 2024 en puntos porcentuales entre bloques fijos.
 const ESCALA_COMPETITIVIDAD = [
     { key: 'dominada', label: 'Dominada (≥20pp)', color: '#0ea5e9', min: 20 },
     { key: 'clara', label: 'Clara (10–20pp)', color: '#16a34a', min: 10 },
     { key: 'competida', label: 'Competida (5–10pp)', color: '#84cc16', min: 5 },
     { key: 'cerrada', label: 'Cerrada (2–5pp)', color: '#f59e0b', min: 2 },
     { key: 'muy_cerrada', label: 'Muy cerrada (<2pp)', color: '#ef4444', min: 0 },
+] as const;
+
+// Competitividad desde la perspectiva del partido del tenant (F2): estatus ya
+// calculado en el backend (App\Enums\CompetitividadSeccion).
+const ESTATUS_COMPETITIVIDAD = [
+    { key: 'ganada_franca', label: 'Ganada franca', color: '#15803d' },
+    { key: 'competida', label: 'Competida', color: '#f59e0b' },
+    { key: 'empatada', label: 'Empatada', color: '#6b7280' },
+    { key: 'perdida', label: 'Perdida', color: '#dc2626' },
+] as const;
+
+// Tipo de sección por lista nominal (F2): App\Enums\TipoSeccion.
+const TIPOS_SECCION = [
+    { key: 'alfa', label: 'Alfa', color: '#7c3aed' },
+    { key: 'beta', label: 'Beta', color: '#2563eb' },
+    { key: 'gama', label: 'Gama', color: '#0d9488' },
 ] as const;
 
 // Oportunidad de movilización: nivel calculado en el análisis por edad
@@ -184,6 +220,23 @@ function bucketCompetitividad(margen: number | null) {
     );
 }
 
+// Si el tenant no tiene partido configurado, el modo competitividad cae al
+// margen neutral (comportamiento previo a F2).
+const partidoConfigurado = computed(() => page.props.campana?.partido != null);
+
+function bucketEstatusPartido(p: FeatureProps) {
+    return (
+        ESTATUS_COMPETITIVIDAD.find((b) => b.key === p.competitividad) ??
+        SIN_DATOS
+    );
+}
+
+function bucketTipoSeccion(p: FeatureProps) {
+    return (
+        TIPOS_SECCION.find((t) => t.key === p.tipo_seccion) ?? SIN_DATOS
+    );
+}
+
 function bucketOportunidad(nivel: string | null) {
     return NIVELES_OPORTUNIDAD.find((n) => n.key === nivel) ?? SIN_DATOS;
 }
@@ -230,7 +283,11 @@ function colorFeature(p: FeatureProps): string {
         case 'ganador':
             return bucketGanador(p).color;
         case 'competitividad':
-            return bucketCompetitividad(p.margen_pp).color;
+            return partidoConfigurado.value
+                ? bucketEstatusPartido(p).color
+                : bucketCompetitividad(p.margen_pp).color;
+        case 'tipo_seccion':
+            return bucketTipoSeccion(p).color;
         case 'oportunidad':
             return bucketOportunidad(p.nivel_oportunidad).color;
         case 'prioridad':
@@ -285,7 +342,11 @@ function claveEstatus(p: FeatureProps): string | number {
         case 'ganador':
             return bucketGanador(p).key;
         case 'competitividad':
-            return bucketCompetitividad(p.margen_pp).key;
+            return partidoConfigurado.value
+                ? bucketEstatusPartido(p).key
+                : bucketCompetitividad(p.margen_pp).key;
+        case 'tipo_seccion':
+            return bucketTipoSeccion(p).key;
         case 'oportunidad':
             return bucketOportunidad(p.nivel_oportunidad).key;
         case 'prioridad':
@@ -318,14 +379,52 @@ const leyenda = computed(() => {
         }));
     }
 
-    const escalas: Record<Exclude<Modo, 'tipo'>, readonly LeyendaItem[]> = {
+    if (modo.value === 'tipo_seccion') {
+        const items: LeyendaItemConCuenta[] = TIPOS_SECCION.map((t) => ({
+            key: t.key,
+            label: t.label,
+            color: t.color,
+            count: conteos.get(t.key) ?? 0,
+        }));
+        const sinDatos = conteos.get(SIN_DATOS.key) ?? 0;
+
+        if (sinDatos > 0) {
+            items.push({ ...SIN_DATOS, count: sinDatos });
+        }
+
+        return items;
+    }
+
+    const escalas: Record<
+        Exclude<Modo, 'tipo' | 'tipo_seccion' | 'competitividad'>,
+        readonly LeyendaItem[]
+    > = {
         cobertura: ESCALA,
         penetracion: ESCALA_PENETRACION,
         ganador: GANADORES,
-        competitividad: ESCALA_COMPETITIVIDAD,
         oportunidad: NIVELES_OPORTUNIDAD,
         prioridad: ESCALA_PRIORIDAD,
     };
+
+    if (modo.value === 'competitividad') {
+        const escala: readonly { key: string; label: string; color: string }[] =
+            partidoConfigurado.value
+                ? ESTATUS_COMPETITIVIDAD
+                : ESCALA_COMPETITIVIDAD;
+        const items: LeyendaItemConCuenta[] = escala.map((b) => ({
+            key: b.key,
+            label: b.label,
+            color: b.color,
+            count: conteos.get(b.key) ?? 0,
+        }));
+        const sinDatos = conteos.get(SIN_DATOS.key) ?? 0;
+
+        if (sinDatos > 0) {
+            items.push({ ...SIN_DATOS, count: sinDatos });
+        }
+
+        return items;
+    }
 
     const items = escalas[modo.value].map((b) => ({
         key: b.key,
@@ -346,27 +445,50 @@ const leyenda = computed(() => {
 
 const totalSeccionesMostradas = computed(() => features.value.length);
 
-const MODOS: { key: Modo; label: string }[] = [
+// Modos base: siempre visibles. Modos F2/F3 se filtran por los toggles de
+// `indicadores` del tenant (campana compartida por Inertia).
+const MODOS_BASE: { key: Modo; label: string }[] = [
     { key: 'cobertura', label: 'Cobertura' },
     { key: 'penetracion', label: 'Penetración' },
-    { key: 'tipo', label: 'Tipo' },
+    { key: 'tipo', label: 'Tipo INE' },
     { key: 'ganador', label: 'Ganador 2024' },
-    { key: 'competitividad', label: 'Competitividad' },
-    { key: 'oportunidad', label: 'Oportunidad' },
-    { key: 'prioridad', label: 'Prioridad' },
 ];
+
+const modos = computed(() => {
+    const indicadores = page.props.campana?.indicadores;
+    const opcionales: { key: Modo; label: string; activo: boolean }[] = [
+        { key: 'competitividad', label: 'Competitividad', activo: indicadores?.competitividad ?? true },
+        { key: 'tipo_seccion', label: 'Alfa / Beta / Gama', activo: indicadores?.tipo_seccion ?? true },
+        { key: 'prioridad', label: 'Prioridad', activo: indicadores?.indice_neutral ?? true },
+        { key: 'oportunidad', label: 'Oportunidad', activo: indicadores?.oportunidad ?? true },
+    ];
+
+    return [
+        ...MODOS_BASE,
+        ...opcionales.filter((o) => o.activo).map(({ key, label }) => ({ key, label })),
+    ];
+});
 
 const TITULOS_LEYENDA: Record<Modo, string> = {
     cobertura: 'Cobertura de meta',
     penetracion: 'Penetración',
-    tipo: 'Tipo de sección',
+    tipo: 'Tipo INE de sección',
     ganador: 'Ganador 2024 por bloque',
-    competitividad: 'Competitividad 2024 (margen)',
+    competitividad: 'Competitividad',
+    tipo_seccion: 'Tipo de sección (α/β/γ)',
     oportunidad: 'Oportunidad de movilización',
     prioridad: 'Prioridad de esfuerzos',
 };
 
-const tituloLeyenda = computed(() => TITULOS_LEYENDA[modo.value]);
+const tituloLeyenda = computed(() => {
+    if (modo.value === 'competitividad') {
+        return partidoConfigurado.value
+            ? 'Competitividad (mi partido)'
+            : 'Competitividad 2024 (margen)';
+    }
+
+    return TITULOS_LEYENDA[modo.value];
+});
 
 function fmt(n: number): string {
     return n.toLocaleString('es-MX');
@@ -635,7 +757,7 @@ onBeforeUnmount(() => {
                 <!-- Toggle de modo -->
                 <div class="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1 text-sm">
                     <button
-                        v-for="opcion in MODOS"
+                        v-for="opcion in modos"
                         :key="opcion.key"
                         type="button"
                         class="rounded-md px-2 py-1.5 font-medium transition-colors"
@@ -649,6 +771,18 @@ onBeforeUnmount(() => {
                         {{ opcion.label }}
                     </button>
                 </div>
+
+                <!-- Aviso: modo competitividad sin partido configurado -->
+                <p
+                    v-if="modo === 'competitividad' && !partidoConfigurado"
+                    class="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200"
+                >
+                    Configura el partido de tu campaña para ver la
+                    competitividad desde tu perspectiva.
+                    <Link href="/settings/campana" class="font-semibold underline">
+                        Ir a configuración →
+                    </Link>
+                </p>
 
                 <!-- Stats globales -->
                 <div class="grid grid-cols-2 gap-2">
@@ -769,11 +903,28 @@ onBeforeUnmount(() => {
                     class="rounded-xl border bg-background p-4"
                 >
                     <div class="flex items-center justify-between">
-                        <h2 class="text-base font-semibold">
+                        <h2 class="flex items-center gap-1.5 text-base font-semibold">
                             Sección {{ seccionSel.numero }}
+                            <span
+                                v-if="
+                                    page.props.campana?.indicadores
+                                        .tipo_seccion && seccionSel.tipo_seccion
+                                "
+                                class="rounded-md px-1.5 py-0.5 text-[0.65rem] font-bold text-white"
+                                :style="{
+                                    backgroundColor: bucketTipoSeccion(seccionSel)
+                                        .color,
+                                }"
+                            >
+                                {{
+                                    { alfa: 'α', beta: 'β', gama: 'γ' }[
+                                        seccionSel.tipo_seccion
+                                    ]
+                                }}
+                            </span>
                         </h2>
                         <span
-                            v-if="modo !== 'tipo'"
+                            v-if="modo !== 'tipo' && modo !== 'tipo_seccion'"
                             class="rounded-full px-2.5 py-0.5 text-xs font-semibold text-white"
                             :style="{
                                 backgroundColor: bucket(seccionSel.cobertura)
@@ -899,6 +1050,37 @@ onBeforeUnmount(() => {
                                         }"
                                     />
                                     {{ seccionSel.ganador_bloque }}
+                                </dd>
+                            </div>
+                            <div
+                                v-if="
+                                    page.props.campana?.indicadores
+                                        .competitividad &&
+                                    partidoConfigurado &&
+                                    seccionSel.competitividad !== 'sin_datos'
+                                "
+                                class="flex justify-between py-1.5"
+                            >
+                                <dt class="text-muted-foreground">Estatus</dt>
+                                <dd class="flex items-center gap-1.5 font-medium tabular-nums">
+                                    <span
+                                        class="size-2.5 rounded-sm"
+                                        :style="{
+                                            backgroundColor:
+                                                bucketEstatusPartido(seccionSel)
+                                                    .color,
+                                        }"
+                                    />
+                                    {{ bucketEstatusPartido(seccionSel).label }}
+                                    <span
+                                        v-if="seccionSel.diferencia_votos !== null"
+                                        class="text-muted-foreground"
+                                    >
+                                        ({{ seccionSel.diferencia_votos >= 0 ? '+' : '−' }}{{
+                                            fmt(Math.abs(seccionSel.diferencia_votos))
+                                        }}
+                                        votos)
+                                    </span>
                                 </dd>
                             </div>
                             <div

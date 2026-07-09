@@ -2,8 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Actions\Estadisticas\CalcularCompetitividadSeccion;
 use App\Actions\Metas\DefinirMetaSeccion;
+use App\Enums\CompetitividadSeccion;
+use App\Enums\TipoSeccion;
 use App\Http\Controllers\Concerns\PresentaElectores;
+use App\Models\Coalicion;
 use App\Models\CoberturaSeccion;
 use App\Models\Elector;
 use App\Models\Membership;
@@ -13,6 +17,7 @@ use App\Models\Tenant;
 use App\Support\Tenancy\TenantContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -41,6 +46,7 @@ class MapaController extends Controller
     {
         $tenant = TenantContext::get();
         $viewer = $this->miMembership();
+        $config = $this->configuracionCompetitividad($tenant);
 
         $filas = DB::table('secciones')
             ->leftJoin('cobertura_seccion', function ($join) use ($tenant) {
@@ -75,34 +81,42 @@ class MapaController extends Controller
                 'estadisticas_seccion.indice_oportunidad',
                 'estadisticas_seccion.nivel_oportunidad',
                 'estadisticas_seccion.potencial_movilizacion',
+                'estadisticas_seccion.votos_partidos',
                 DB::raw('ST_AsGeoJSON(ST_SimplifyPreserveTopology(secciones.geom, '.self::TOLERANCIA_SIMPLIFICACION.')) as geom_json'),
             ])
             ->get();
 
-        $features = $filas->map(fn ($fila) => [
-            'type' => 'Feature',
-            'geometry' => $fila->geom_json ? json_decode($fila->geom_json) : null,
-            'properties' => [
-                'seccion_id' => $fila->seccion_id,
-                'numero' => $fila->numero,
-                'tipo' => $fila->tipo,
-                'distrito_local' => $fila->distrito_local,
-                'distrito_federal' => $fila->distrito_federal,
-                'capturados' => (int) $fila->capturados,
-                'meta' => (int) $fila->meta,
-                'cobertura' => (float) $fila->cobertura,
-                'penetracion' => (float) $fila->penetracion,
-                'lista_nominal' => $fila->lista_nominal,
-                'ganador_bloque' => $fila->ganador_bloque,
-                'margen_pp' => $fila->margen_pp !== null ? (float) $fila->margen_pp : null,
-                'pct_fuerza' => $fila->pct_fuerza !== null ? (float) $fila->pct_fuerza : null,
-                'pct_morena_pvem' => $fila->pct_morena_pvem !== null ? (float) $fila->pct_morena_pvem : null,
-                'participacion_2024' => $fila->participacion_2024 !== null ? (float) $fila->participacion_2024 : null,
-                'indice_oportunidad' => $fila->indice_oportunidad !== null ? (float) $fila->indice_oportunidad : null,
-                'nivel_oportunidad' => $fila->nivel_oportunidad,
-                'potencial_movilizacion' => $fila->potencial_movilizacion,
-            ],
-        ])->values();
+        $features = $filas->map(function ($fila) use ($config) {
+            $competitividad = $this->calcularCompetitividad($fila->votos_partidos, $config);
+
+            return [
+                'type' => 'Feature',
+                'geometry' => $fila->geom_json ? json_decode($fila->geom_json) : null,
+                'properties' => [
+                    'seccion_id' => $fila->seccion_id,
+                    'numero' => $fila->numero,
+                    'tipo' => $fila->tipo,
+                    'distrito_local' => $fila->distrito_local,
+                    'distrito_federal' => $fila->distrito_federal,
+                    'capturados' => (int) $fila->capturados,
+                    'meta' => (int) $fila->meta,
+                    'cobertura' => (float) $fila->cobertura,
+                    'penetracion' => (float) $fila->penetracion,
+                    'lista_nominal' => $fila->lista_nominal,
+                    'ganador_bloque' => $fila->ganador_bloque,
+                    'margen_pp' => $fila->margen_pp !== null ? (float) $fila->margen_pp : null,
+                    'pct_fuerza' => $fila->pct_fuerza !== null ? (float) $fila->pct_fuerza : null,
+                    'pct_morena_pvem' => $fila->pct_morena_pvem !== null ? (float) $fila->pct_morena_pvem : null,
+                    'participacion_2024' => $fila->participacion_2024 !== null ? (float) $fila->participacion_2024 : null,
+                    'indice_oportunidad' => $fila->indice_oportunidad !== null ? (float) $fila->indice_oportunidad : null,
+                    'nivel_oportunidad' => $fila->nivel_oportunidad,
+                    'potencial_movilizacion' => $fila->potencial_movilizacion,
+                    'competitividad' => $competitividad['estatus']->value,
+                    'diferencia_votos' => $competitividad['diferencia_votos'],
+                    'tipo_seccion' => $this->calcularTipoSeccion($fila->lista_nominal, $config)?->value,
+                ],
+            ];
+        })->values();
 
         return response()->json([
             'type' => 'FeatureCollection',
@@ -142,6 +156,8 @@ class MapaController extends Controller
             ->max('created_at');
 
         $estadistica = $seccion->estadistica;
+        $config = $this->configuracionCompetitividad($tenant);
+        $competitividad = $this->calcularCompetitividad($estadistica?->votos_partidos, $config);
 
         return response()->json([
             'numero' => $seccion->numero,
@@ -155,6 +171,7 @@ class MapaController extends Controller
             'penetracion' => $cobertura !== null ? (float) $cobertura->penetracion : 0,
             'brigadistas_activos' => $this->brigadistasActivosEn($seccion, $tenant),
             'ultimo_registro' => $ultimoRegistro,
+            'tipo_seccion' => $this->calcularTipoSeccion($seccion->lista_nominal, $config)?->value,
             'electoral_2024' => $estadistica?->ganador_bloque === null ? null : [
                 'ganador_bloque' => $estadistica->ganador_bloque,
                 'ganador_partido' => $estadistica->ganador_partido,
@@ -165,6 +182,11 @@ class MapaController extends Controller
                 'pct_fuerza' => (float) $estadistica->pct_fuerza,
                 'pct_morena_pvem' => (float) $estadistica->pct_morena_pvem,
                 'pct_otros' => (float) $estadistica->pct_otros,
+                'competitividad' => $competitividad['estatus']->value,
+                'diferencia_votos' => $competitividad['diferencia_votos'],
+                'votos_bloque_propio' => $competitividad['votos_bloque_propio'],
+                'votos_mejor_rival' => $competitividad['votos_mejor_rival'],
+                'bloque_propio' => $competitividad['bloque_propio'],
             ],
             'demografia' => $estadistica?->nivel_oportunidad === null ? null : [
                 'indice_oportunidad' => (float) $estadistica->indice_oportunidad,
@@ -211,6 +233,7 @@ class MapaController extends Controller
     {
         $tenant = TenantContext::get();
         $viewer = $this->miMembership();
+        $config = $this->configuracionCompetitividad($tenant);
 
         $filas = DB::table('secciones')
             ->leftJoin('cobertura_seccion', function ($join) use ($tenant) {
@@ -237,30 +260,44 @@ class MapaController extends Controller
                 'estadisticas_seccion.nivel_oportunidad',
                 'estadisticas_seccion.potencial_movilizacion',
                 'estadisticas_seccion.grupo_dominante',
+                'estadisticas_seccion.votos_partidos',
             ])
             ->get();
 
-        $secciones = $filas->map(fn ($fila) => [
-            'seccion_id' => $fila->seccion_id,
-            'numero' => $fila->numero,
-            'lista_nominal' => $fila->lista_nominal,
-            'capturados' => (int) $fila->capturados,
-            'meta' => (int) $fila->meta,
-            'cobertura' => (float) $fila->cobertura,
-            'ganador_bloque' => $fila->ganador_bloque,
-            'margen_pp' => $fila->margen_pp !== null ? (float) $fila->margen_pp : null,
-            'indice_oportunidad' => $fila->indice_oportunidad !== null ? (float) $fila->indice_oportunidad : null,
-            'nivel_oportunidad' => $fila->nivel_oportunidad,
-            'potencial_movilizacion' => $fila->potencial_movilizacion,
-            'grupo_dominante' => $fila->grupo_dominante,
-            'prioridad' => self::calcularPrioridad(
-                $fila->margen_pp !== null ? (float) $fila->margen_pp : null,
-                $fila->indice_oportunidad !== null ? (float) $fila->indice_oportunidad : null,
-                (float) $fila->cobertura,
-            ),
-        ])->values();
+        $secciones = $filas->map(function ($fila) use ($config) {
+            $competitividad = $this->calcularCompetitividad($fila->votos_partidos, $config);
 
-        return Inertia::render('Prioridades', ['secciones' => $secciones]);
+            return [
+                'seccion_id' => $fila->seccion_id,
+                'numero' => $fila->numero,
+                'lista_nominal' => $fila->lista_nominal,
+                'capturados' => (int) $fila->capturados,
+                'meta' => (int) $fila->meta,
+                'cobertura' => (float) $fila->cobertura,
+                'ganador_bloque' => $fila->ganador_bloque,
+                'margen_pp' => $fila->margen_pp !== null ? (float) $fila->margen_pp : null,
+                'indice_oportunidad' => $fila->indice_oportunidad !== null ? (float) $fila->indice_oportunidad : null,
+                'nivel_oportunidad' => $fila->nivel_oportunidad,
+                'potencial_movilizacion' => $fila->potencial_movilizacion,
+                'grupo_dominante' => $fila->grupo_dominante,
+                'prioridad' => self::calcularPrioridad(
+                    $fila->margen_pp !== null ? (float) $fila->margen_pp : null,
+                    $fila->indice_oportunidad !== null ? (float) $fila->indice_oportunidad : null,
+                    (float) $fila->cobertura,
+                ),
+                'competitividad' => $competitividad['estatus']->value,
+                'diferencia_votos' => $competitividad['diferencia_votos'],
+                'tipo_seccion' => $this->calcularTipoSeccion($fila->lista_nominal, $config)?->value,
+            ];
+        })->values();
+
+        return Inertia::render('Prioridades', [
+            'secciones' => $secciones,
+            'mostrarCompetitividad' => $config['indicadores']['competitividad'],
+            'mostrarTipoSeccion' => $config['indicadores']['tipo_seccion'],
+            'mostrarIndiceNeutral' => $config['indicadores']['indice_neutral'],
+            'mostrarOportunidad' => $config['indicadores']['oportunidad'],
+        ]);
     }
 
     /**
@@ -356,5 +393,58 @@ class MapaController extends Controller
         $tenant = TenantContext::get();
 
         return ($user !== null && $tenant !== null) ? $user->membershipEn($tenant) : null;
+    }
+
+    /**
+     * Config de competitividad/tipo resuelta una sola vez por request (F2):
+     * partido + coaliciones 2024 + umbrales, para no repetir queries en el
+     * loop de secciones.
+     *
+     * @return array{partidoSiglas: string|null, coaliciones: Collection<int, Coalicion>, umbral: int, umbralAlfa: int, umbralBeta: int, indicadores: array<string, bool>}
+     */
+    private function configuracionCompetitividad(?Tenant $tenant): array
+    {
+        $configuracion = $tenant?->configuracion();
+
+        return [
+            'partidoSiglas' => $tenant?->partido?->siglas,
+            'coaliciones' => Coalicion::where('anio', 2024)->get(),
+            'umbral' => $configuracion['umbral_ganada_franca'] ?? 30,
+            'umbralAlfa' => $configuracion['umbral_alfa'] ?? 1000,
+            'umbralBeta' => $configuracion['umbral_beta'] ?? 500,
+            'indicadores' => $configuracion['indicadores'] ?? [
+                'competitividad' => true,
+                'tipo_seccion' => true,
+                'indice_neutral' => true,
+                'oportunidad' => true,
+            ],
+        ];
+    }
+
+    /**
+     * @param  array<string, int>|string|null  $votosPartidos  array (cast Eloquent) o string jsonb crudo (DB::table)
+     * @param  array{partidoSiglas: string|null, coaliciones: Collection<int, Coalicion>, umbral: int, umbralAlfa: int, umbralBeta: int, indicadores: array<string, bool>}  $config
+     * @return array{estatus: CompetitividadSeccion, diferencia_votos: int|null, votos_bloque_propio: int|null, votos_mejor_rival: int|null, bloque_propio: string|null}
+     */
+    private function calcularCompetitividad(array|string|null $votosPartidos, array $config): array
+    {
+        if (is_string($votosPartidos)) {
+            $votosPartidos = json_decode($votosPartidos, true);
+        }
+
+        return (new CalcularCompetitividadSeccion)->handle(
+            $votosPartidos,
+            $config['partidoSiglas'],
+            $config['coaliciones'],
+            $config['umbral'],
+        );
+    }
+
+    /**
+     * @param  array{umbralAlfa: int, umbralBeta: int}  $config
+     */
+    private function calcularTipoSeccion(?int $listaNominal, array $config): ?TipoSeccion
+    {
+        return TipoSeccion::desdeListaNominal($listaNominal, $config['umbralAlfa'], $config['umbralBeta']);
     }
 }
