@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Actions\Estadisticas\DesglosarVotosSeccion;
 use App\Models\EstadisticaSeccion;
 use App\Models\Municipio;
 use App\Models\Seccion;
@@ -15,12 +16,8 @@ class ImportarEstadisticasCommand extends Command
 {
     private const GRUPOS_EDAD = ['18-29', '30-39', '40-49', '50-59', '60-79', '80+'];
 
-    private const COLUMNAS_PARTIDOS = [
-        'PAN', 'PRI', 'PRD', 'PT', 'PVEM', 'MC', 'PAS', 'MORENA', 'PES',
-        'PVEM_MORENA', 'PAN_PRI_PRD_PAS', 'PAN_PRI_PRD', 'PAN_PRI_PAS', 'PAN_PRD_PAS',
-        'PRI_PRD_PAS', 'PAN_PRI', 'PAN_PRD', 'PAN_PAS', 'PRI_PRD', 'PRI_PAS', 'PRD_PAS',
-        'CAND_IND1', 'CAND_IND2', 'CAND_IND3',
-    ];
+    /** Mismo catálogo que consume F3 para completar opciones en 0 votos. */
+    private const COLUMNAS_PARTIDOS = DesglosarVotosSeccion::OPCIONES_BOLETA_2024;
 
     /**
      * Execute the console command.

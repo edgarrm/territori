@@ -11,6 +11,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * Estadística pública 2024 por sección: resultados por bloque electoral y
  * perfil demográfico por grupos de edad. Global (no tenant-scoped), 1:1 con
  * secciones. Se pobla con territori:importar-estadisticas.
+ *
+ * @property array<string, int>|null $votos_partidos
+ * @property array<string, array{ln: int, votos: int, participacion: float, abstencion: float, potencial: int}>|null $grupos_edad
  */
 class EstadisticaSeccion extends Model
 {

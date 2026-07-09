@@ -11,6 +11,7 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { fmt, pct } from '@/lib/formato';
 import { dashboard } from '@/routes';
 import { vigente as avisoVigente } from '@/routes/avisos';
 import { store as electoresStore } from '@/routes/electores';
@@ -64,6 +65,23 @@ type GrupoEdad = {
     potencial: number;
 };
 
+type OpcionBoleta = { clave: string; siglas: string[]; votos: number };
+
+type BloqueVotos = {
+    nombre: string;
+    siglas: string[];
+    color: string;
+    total: number;
+    es_bloque_propio: boolean;
+    opciones: OpcionBoleta[];
+};
+
+type Desglose2024 = {
+    total_votos: number | null;
+    votos_nulos?: number;
+    bloques: BloqueVotos[];
+} | null;
+
 type Demografia = {
     indice_oportunidad: number;
     nivel_oportunidad: string;
@@ -89,6 +107,7 @@ type Resumen = {
     ultimo_registro: string | null;
     tipo_seccion: string | null;
     electoral_2024: Electoral2024;
+    desglose_2024: Desglose2024;
     demografia: Demografia;
 };
 
@@ -131,31 +150,49 @@ const COLORES_OPORTUNIDAD: Record<string, string> = {
 };
 
 // F2: mismos colores/etiquetas que Mapa.vue y Prioridades.vue.
-const ESTATUS_COMPETITIVIDAD: Record<string, { label: string; color: string }> = {
-    ganada_franca: { label: 'Ganada franca', color: '#15803d' },
-    competida: { label: 'Competida', color: '#f59e0b' },
-    empatada: { label: 'Empatada', color: '#6b7280' },
-    perdida: { label: 'Perdida', color: '#dc2626' },
-    sin_datos: { label: 'Sin datos', color: '#9ca3af' },
-};
+const ESTATUS_COMPETITIVIDAD: Record<string, { label: string; color: string }> =
+    {
+        ganada_franca: { label: 'Ganada franca', color: '#15803d' },
+        competida: { label: 'Competida', color: '#f59e0b' },
+        empatada: { label: 'Empatada', color: '#6b7280' },
+        perdida: { label: 'Perdida', color: '#dc2626' },
+        sin_datos: { label: 'Sin datos', color: '#9ca3af' },
+    };
 
-const TIPOS_SECCION: Record<string, string> = { alfa: 'α', beta: 'β', gama: 'γ' };
+const TIPOS_SECCION: Record<string, string> = {
+    alfa: 'α',
+    beta: 'β',
+    gama: 'γ',
+};
 
 const page = usePage<{
     campana: {
-        partido: { id: number; siglas: string; nombre: string; color: string } | null;
+        partido: {
+            id: number;
+            siglas: string;
+            nombre: string;
+            color: string;
+        } | null;
         indicadores: { competitividad: boolean; tipo_seccion: boolean };
     } | null;
 }>();
 
 const GRUPOS_EDAD_ORDEN = ['18-29', '30-39', '40-49', '50-59', '60-79', '80+'];
 
-function fmt(n: number): string {
-    return n.toLocaleString('es-MX');
+function sumaOpciones(desglose: Desglose2024): number {
+    return (desglose?.bloques ?? []).reduce((acc, b) => acc + b.total, 0);
 }
 
-function pct(v: number): string {
-    return `${Math.round(v * 100)}%`;
+// Etiqueta legible de una opción de boleta: partidos individuales por sus
+// siglas, combinaciones de coalición unidas con "+", independientes aparte.
+function etiquetaOpcion(opcion: OpcionBoleta): string {
+    const independiente = opcion.clave.match(/^CAND_IND(\d+)$/);
+
+    if (independiente) {
+        return `Candidato independiente ${independiente[1]}`;
+    }
+
+    return opcion.siglas.join(' + ');
 }
 
 function tiempoRelativo(iso: string | null): string {
@@ -313,7 +350,6 @@ async function guardar() {
                     {{ TIPOS_SECCION[resumen.tipo_seccion] }}
                 </span>
             </h1>
-            <Button @click="abrirModal">Agregar elector</Button>
         </div>
 
         <!-- Estadísticas -->
@@ -439,10 +475,25 @@ async function guardar() {
                             ]?.color,
                     }"
                 >
-                    {{ ESTATUS_COMPETITIVIDAD[resumen.electoral_2024.competitividad]?.label }}
-                    <span v-if="resumen.electoral_2024.diferencia_votos !== null">
-                        · {{ resumen.electoral_2024.diferencia_votos >= 0 ? '+' : '−' }}{{
-                            fmt(Math.abs(resumen.electoral_2024.diferencia_votos))
+                    {{
+                        ESTATUS_COMPETITIVIDAD[
+                            resumen.electoral_2024.competitividad
+                        ]?.label
+                    }}
+                    <span
+                        v-if="resumen.electoral_2024.diferencia_votos !== null"
+                    >
+                        ·
+                        {{
+                            resumen.electoral_2024.diferencia_votos >= 0
+                                ? '+'
+                                : '−'
+                        }}{{
+                            fmt(
+                                Math.abs(
+                                    resumen.electoral_2024.diferencia_votos,
+                                ),
+                            )
                         }}
                         votos
                     </span>
@@ -537,7 +588,9 @@ async function guardar() {
                 <div class="flex justify-between py-1.5">
                     <dt class="text-muted-foreground">Participación</dt>
                     <dd class="font-medium tabular-nums">
-                        {{ resumen.electoral_2024.participacion_pct.toFixed(1) }}%
+                        {{
+                            resumen.electoral_2024.participacion_pct.toFixed(1)
+                        }}%
                     </dd>
                 </div>
                 <div class="flex justify-between py-1.5">
@@ -551,6 +604,108 @@ async function guardar() {
                     </dd>
                 </div>
             </dl>
+        </section>
+
+        <!-- Votos por partido y coalición 2024 (F3) -->
+        <section
+            v-if="resumen?.desglose_2024"
+            class="rounded-xl border border-sidebar-border/70 bg-card p-4 dark:border-sidebar-border"
+        >
+            <h2 class="text-base font-semibold">
+                Votos por partido y coalición (2024)
+            </h2>
+
+            <div class="mt-4 space-y-5">
+                <div
+                    v-for="bloque in resumen.desglose_2024.bloques"
+                    :key="bloque.nombre"
+                >
+                    <div class="flex items-center justify-between gap-2">
+                        <div class="flex min-w-0 items-center gap-2">
+                            <span
+                                class="size-2.5 shrink-0 rounded-sm"
+                                :style="{ backgroundColor: bloque.color }"
+                            />
+                            <span class="truncate text-sm font-medium">
+                                {{ bloque.nombre }}
+                            </span>
+                            <span
+                                v-if="bloque.es_bloque_propio"
+                                class="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[0.65rem] font-semibold text-foreground"
+                            >
+                                Tu bloque
+                            </span>
+                        </div>
+                        <span
+                            class="shrink-0 text-sm font-semibold tabular-nums"
+                        >
+                            {{ fmt(bloque.total) }}
+                            <span
+                                v-if="resumen.desglose_2024.total_votos"
+                                class="text-xs font-normal text-muted-foreground"
+                            >
+                                ({{
+                                    pct(
+                                        bloque.total /
+                                            resumen.desglose_2024.total_votos,
+                                    )
+                                }})
+                            </span>
+                        </span>
+                    </div>
+
+                    <div
+                        class="mt-1.5 h-2 overflow-hidden rounded-full bg-muted"
+                    >
+                        <div
+                            class="h-full rounded-full"
+                            :style="{
+                                width: `${resumen.desglose_2024.total_votos ? (bloque.total / resumen.desglose_2024.total_votos) * 100 : 0}%`,
+                                backgroundColor: bloque.color,
+                            }"
+                        />
+                    </div>
+
+                    <div class="mt-2 space-y-1 pl-4">
+                        <div
+                            v-for="opcion in bloque.opciones"
+                            :key="opcion.clave"
+                            class="flex items-center gap-2 text-xs"
+                        >
+                            <span
+                                class="w-32 shrink-0 truncate text-muted-foreground"
+                            >
+                                {{ etiquetaOpcion(opcion) }}
+                            </span>
+                            <div
+                                class="h-1.5 flex-1 overflow-hidden rounded-full bg-muted"
+                            >
+                                <div
+                                    class="h-full rounded-full opacity-60"
+                                    :style="{
+                                        width: `${bloque.total > 0 ? (opcion.votos / bloque.total) * 100 : 0}%`,
+                                        backgroundColor: bloque.color,
+                                    }"
+                                />
+                            </div>
+                            <span
+                                class="w-10 shrink-0 text-right font-medium tabular-nums"
+                            >
+                                {{ fmt(opcion.votos) }}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <p
+                v-if="resumen.desglose_2024.total_votos !== null"
+                class="mt-4 text-[0.7rem] text-muted-foreground"
+            >
+                Suma de opciones:
+                {{ fmt(sumaOpciones(resumen.desglose_2024)) }} de
+                {{ fmt(resumen.desglose_2024.total_votos) }} votos.
+            </p>
         </section>
 
         <!-- Perfil por edad -->
@@ -670,7 +825,10 @@ async function guardar() {
         <section
             class="rounded-xl border border-sidebar-border/70 bg-card p-4 dark:border-sidebar-border"
         >
-            <h2 class="mb-3 text-base font-semibold">Electores</h2>
+            <div class="mb-3 flex items-center justify-between">
+                <h2 class="text-base font-semibold">Electores</h2>
+                <Button @click="abrirModal">Agregar elector</Button>
+            </div>
 
             <ListaCapturados
                 ref="lista"

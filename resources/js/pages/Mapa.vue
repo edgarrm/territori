@@ -6,6 +6,7 @@ import { Head, Link, usePage } from '@inertiajs/vue3';
 import type * as L from 'leaflet';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import 'leaflet/dist/leaflet.css';
+import { fmt, pct } from '@/lib/formato';
 import { dashboard } from '@/routes';
 import { cobertura as coberturaRoute } from '@/routes/mapa';
 import {
@@ -30,7 +31,12 @@ const props = defineProps<{
 }>();
 
 type Campana = {
-    partido: { id: number; siglas: string; nombre: string; color: string } | null;
+    partido: {
+        id: number;
+        siglas: string;
+        nombre: string;
+        color: string;
+    } | null;
     umbral_ganada_franca: number;
     umbral_alfa: number;
     umbral_beta: number;
@@ -95,10 +101,24 @@ type Demografia = {
     recomendacion: string | null;
 } | null;
 
+// F3: versión compacta del desglose de votos (solo bloques, sin opciones).
+type BloqueVotos = {
+    nombre: string;
+    color: string;
+    total: number;
+    es_bloque_propio: boolean;
+};
+
+type Desglose2024 = {
+    total_votos: number | null;
+    bloques: BloqueVotos[];
+} | null;
+
 type SeccionSel = FeatureProps & {
     brigadistas_activos: Brigadista[];
     ultimo_registro: string | null;
     demografia: Demografia;
+    desglose_2024: Desglose2024;
     cargando: boolean;
 };
 
@@ -144,7 +164,12 @@ const ESCALA_COMPETITIVIDAD = [
     { key: 'clara', label: 'Clara (10–20pp)', color: '#16a34a', min: 10 },
     { key: 'competida', label: 'Competida (5–10pp)', color: '#84cc16', min: 5 },
     { key: 'cerrada', label: 'Cerrada (2–5pp)', color: '#f59e0b', min: 2 },
-    { key: 'muy_cerrada', label: 'Muy cerrada (<2pp)', color: '#ef4444', min: 0 },
+    {
+        key: 'muy_cerrada',
+        label: 'Muy cerrada (<2pp)',
+        color: '#ef4444',
+        min: 0,
+    },
 ] as const;
 
 // Competitividad desde la perspectiva del partido del tenant (F2): estatus ya
@@ -232,9 +257,7 @@ function bucketEstatusPartido(p: FeatureProps) {
 }
 
 function bucketTipoSeccion(p: FeatureProps) {
-    return (
-        TIPOS_SECCION.find((t) => t.key === p.tipo_seccion) ?? SIN_DATOS
-    );
+    return TIPOS_SECCION.find((t) => t.key === p.tipo_seccion) ?? SIN_DATOS;
 }
 
 function bucketOportunidad(nivel: string | null) {
@@ -251,9 +274,7 @@ function prioridad(p: FeatureProps): number | null {
     const oportunidad = p.indice_oportunidad ?? 0;
     const coberturaPendiente = 100 - Math.min(p.cobertura, 1) * 100;
 
-    return (
-        0.4 * competitividad + 0.4 * oportunidad + 0.2 * coberturaPendiente
-    );
+    return 0.4 * competitividad + 0.4 * oportunidad + 0.2 * coberturaPendiente;
 }
 
 function bucketPrioridad(p: FeatureProps) {
@@ -457,15 +478,33 @@ const MODOS_BASE: { key: Modo; label: string }[] = [
 const modos = computed(() => {
     const indicadores = page.props.campana?.indicadores;
     const opcionales: { key: Modo; label: string; activo: boolean }[] = [
-        { key: 'competitividad', label: 'Competitividad', activo: indicadores?.competitividad ?? true },
-        { key: 'tipo_seccion', label: 'Alfa / Beta / Gama', activo: indicadores?.tipo_seccion ?? true },
-        { key: 'prioridad', label: 'Prioridad', activo: indicadores?.indice_neutral ?? true },
-        { key: 'oportunidad', label: 'Oportunidad', activo: indicadores?.oportunidad ?? true },
+        {
+            key: 'competitividad',
+            label: 'Competitividad',
+            activo: indicadores?.competitividad ?? true,
+        },
+        {
+            key: 'tipo_seccion',
+            label: 'Alfa / Beta / Gama',
+            activo: indicadores?.tipo_seccion ?? true,
+        },
+        {
+            key: 'prioridad',
+            label: 'Prioridad',
+            activo: indicadores?.indice_neutral ?? true,
+        },
+        {
+            key: 'oportunidad',
+            label: 'Oportunidad',
+            activo: indicadores?.oportunidad ?? true,
+        },
     ];
 
     return [
         ...MODOS_BASE,
-        ...opcionales.filter((o) => o.activo).map(({ key, label }) => ({ key, label })),
+        ...opcionales
+            .filter((o) => o.activo)
+            .map(({ key, label }) => ({ key, label })),
     ];
 });
 
@@ -489,14 +528,6 @@ const tituloLeyenda = computed(() => {
 
     return TITULOS_LEYENDA[modo.value];
 });
-
-function fmt(n: number): string {
-    return n.toLocaleString('es-MX');
-}
-
-function pct(v: number): string {
-    return `${Math.round(v * 100)}%`;
-}
 
 function tiempoRelativo(iso: string | null): string {
     if (!iso) {
@@ -624,6 +655,7 @@ async function seleccionar(p: FeatureProps) {
         brigadistas_activos: [],
         ultimo_registro: null,
         demografia: null,
+        desglose_2024: null,
         cargando: true,
     };
     capa?.setStyle(estiloFeature);
@@ -639,6 +671,7 @@ async function seleccionar(p: FeatureProps) {
             brigadistas_activos: resumen.brigadistas_activos ?? [],
             ultimo_registro: resumen.ultimo_registro ?? null,
             demografia: resumen.demografia ?? null,
+            desglose_2024: resumen.desglose_2024 ?? null,
             cargando: false,
         };
     }
@@ -755,7 +788,9 @@ onBeforeUnmount(() => {
 
             <div class="flex flex-col gap-3 px-4 pb-4">
                 <!-- Toggle de modo -->
-                <div class="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1 text-sm">
+                <div
+                    class="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1 text-sm"
+                >
                     <button
                         v-for="opcion in modos"
                         :key="opcion.key"
@@ -779,7 +814,10 @@ onBeforeUnmount(() => {
                 >
                     Configura el partido de tu campaña para ver la
                     competitividad desde tu perspectiva.
-                    <Link href="/settings/campana" class="font-semibold underline">
+                    <Link
+                        href="/settings/campana"
+                        class="font-semibold underline"
+                    >
                         Ir a configuración →
                     </Link>
                 </p>
@@ -903,7 +941,9 @@ onBeforeUnmount(() => {
                     class="rounded-xl border bg-background p-4"
                 >
                     <div class="flex items-center justify-between">
-                        <h2 class="flex items-center gap-1.5 text-base font-semibold">
+                        <h2
+                            class="flex items-center gap-1.5 text-base font-semibold"
+                        >
                             Sección {{ seccionSel.numero }}
                             <span
                                 v-if="
@@ -912,8 +952,8 @@ onBeforeUnmount(() => {
                                 "
                                 class="rounded-md px-1.5 py-0.5 text-[0.65rem] font-bold text-white"
                                 :style="{
-                                    backgroundColor: bucketTipoSeccion(seccionSel)
-                                        .color,
+                                    backgroundColor:
+                                        bucketTipoSeccion(seccionSel).color,
                                 }"
                             >
                                 {{
@@ -1027,7 +1067,10 @@ onBeforeUnmount(() => {
 
                     <!-- Estadística electoral/demográfica 2024 (si fue importada) -->
                     <div
-                        v-if="seccionSel.ganador_bloque || seccionSel.nivel_oportunidad"
+                        v-if="
+                            seccionSel.ganador_bloque ||
+                            seccionSel.nivel_oportunidad
+                        "
                         class="mt-3 border-t pt-3"
                     >
                         <div
@@ -1041,7 +1084,9 @@ onBeforeUnmount(() => {
                                 class="flex justify-between py-1.5"
                             >
                                 <dt class="text-muted-foreground">Ganador</dt>
-                                <dd class="flex items-center gap-1.5 font-medium">
+                                <dd
+                                    class="flex items-center gap-1.5 font-medium"
+                                >
                                     <span
                                         class="size-2.5 rounded-sm"
                                         :style="{
@@ -1062,7 +1107,9 @@ onBeforeUnmount(() => {
                                 class="flex justify-between py-1.5"
                             >
                                 <dt class="text-muted-foreground">Estatus</dt>
-                                <dd class="flex items-center gap-1.5 font-medium tabular-nums">
+                                <dd
+                                    class="flex items-center gap-1.5 font-medium tabular-nums"
+                                >
                                     <span
                                         class="size-2.5 rounded-sm"
                                         :style="{
@@ -1073,11 +1120,21 @@ onBeforeUnmount(() => {
                                     />
                                     {{ bucketEstatusPartido(seccionSel).label }}
                                     <span
-                                        v-if="seccionSel.diferencia_votos !== null"
+                                        v-if="
+                                            seccionSel.diferencia_votos !== null
+                                        "
                                         class="text-muted-foreground"
                                     >
-                                        ({{ seccionSel.diferencia_votos >= 0 ? '+' : '−' }}{{
-                                            fmt(Math.abs(seccionSel.diferencia_votos))
+                                        ({{
+                                            seccionSel.diferencia_votos >= 0
+                                                ? '+'
+                                                : '−'
+                                        }}{{
+                                            fmt(
+                                                Math.abs(
+                                                    seccionSel.diferencia_votos,
+                                                ),
+                                            )
                                         }}
                                         votos)
                                     </span>
@@ -1105,7 +1162,11 @@ onBeforeUnmount(() => {
                                     Participación 2024
                                 </dt>
                                 <dd class="font-medium tabular-nums">
-                                    {{ seccionSel.participacion_2024.toFixed(1) }}%
+                                    {{
+                                        seccionSel.participacion_2024.toFixed(
+                                            1,
+                                        )
+                                    }}%
                                 </dd>
                             </div>
                             <div
@@ -1115,7 +1176,9 @@ onBeforeUnmount(() => {
                                 <dt class="text-muted-foreground">
                                     Oportunidad
                                 </dt>
-                                <dd class="flex items-center gap-1.5 font-medium">
+                                <dd
+                                    class="flex items-center gap-1.5 font-medium"
+                                >
                                     <span
                                         class="size-2.5 rounded-sm"
                                         :style="{
@@ -1141,7 +1204,9 @@ onBeforeUnmount(() => {
                                 </dd>
                             </div>
                             <div
-                                v-if="seccionSel.potencial_movilizacion !== null"
+                                v-if="
+                                    seccionSel.potencial_movilizacion !== null
+                                "
                                 class="flex justify-between py-1.5"
                             >
                                 <dt class="text-muted-foreground">
@@ -1157,7 +1222,9 @@ onBeforeUnmount(() => {
                                 class="flex justify-between py-1.5"
                             >
                                 <dt class="text-muted-foreground">Prioridad</dt>
-                                <dd class="flex items-center gap-1.5 font-medium tabular-nums">
+                                <dd
+                                    class="flex items-center gap-1.5 font-medium tabular-nums"
+                                >
                                     <span
                                         class="size-2.5 rounded-sm"
                                         :style="{
@@ -1166,7 +1233,9 @@ onBeforeUnmount(() => {
                                                     .color,
                                         }"
                                     />
-                                    {{ Math.round(prioridad(seccionSel) ?? 0) }}/100
+                                    {{
+                                        Math.round(prioridad(seccionSel) ?? 0)
+                                    }}/100
                                 </dd>
                             </div>
                         </dl>
@@ -1192,6 +1261,51 @@ onBeforeUnmount(() => {
                         >
                             {{ b.nombre }}
                         </span>
+                    </div>
+
+                    <div
+                        v-if="seccionSel.desglose_2024"
+                        class="mt-3 space-y-1.5 border-t border-sidebar-border/70 pt-3 dark:border-sidebar-border"
+                    >
+                        <div
+                            class="text-[0.7rem] font-medium tracking-wide text-muted-foreground uppercase"
+                        >
+                            Votos por bloque (2024)
+                        </div>
+                        <div
+                            v-for="bloque in seccionSel.desglose_2024.bloques"
+                            :key="bloque.nombre"
+                            class="flex items-center gap-2 text-xs"
+                        >
+                            <span
+                                class="size-2 shrink-0 rounded-sm"
+                                :style="{ backgroundColor: bloque.color }"
+                            />
+                            <span class="min-w-0 flex-1 truncate">
+                                {{ bloque.nombre }}
+                                <span
+                                    v-if="bloque.es_bloque_propio"
+                                    class="text-[0.65rem] font-semibold text-muted-foreground"
+                                >
+                                    · tu bloque
+                                </span>
+                            </span>
+                            <span class="shrink-0 font-medium tabular-nums">
+                                {{ fmt(bloque.total) }}
+                                <span
+                                    v-if="seccionSel.desglose_2024.total_votos"
+                                    class="text-muted-foreground"
+                                >
+                                    ({{
+                                        pct(
+                                            bloque.total /
+                                                seccionSel.desglose_2024
+                                                    .total_votos,
+                                        )
+                                    }})
+                                </span>
+                            </span>
+                        </div>
                     </div>
 
                     <Link

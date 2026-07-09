@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Actions\Estadisticas\CalcularCompetitividadSeccion;
+use App\Actions\Estadisticas\DesglosarVotosSeccion;
 use App\Actions\Metas\DefinirMetaSeccion;
 use App\Enums\CompetitividadSeccion;
 use App\Enums\TipoSeccion;
@@ -10,8 +11,10 @@ use App\Http\Controllers\Concerns\PresentaElectores;
 use App\Models\Coalicion;
 use App\Models\CoberturaSeccion;
 use App\Models\Elector;
+use App\Models\EstadisticaSeccion;
 use App\Models\Membership;
 use App\Models\MetaSeccion;
+use App\Models\Partido;
 use App\Models\Seccion;
 use App\Models\Tenant;
 use App\Support\Tenancy\TenantContext;
@@ -188,6 +191,7 @@ class MapaController extends Controller
                 'votos_mejor_rival' => $competitividad['votos_mejor_rival'],
                 'bloque_propio' => $competitividad['bloque_propio'],
             ],
+            'desglose_2024' => $this->calcularDesglose($estadistica, $config),
             'demografia' => $estadistica?->nivel_oportunidad === null ? null : [
                 'indice_oportunidad' => (float) $estadistica->indice_oportunidad,
                 'nivel_oportunidad' => $estadistica->nivel_oportunidad,
@@ -446,5 +450,23 @@ class MapaController extends Controller
     private function calcularTipoSeccion(?int $listaNominal, array $config): ?TipoSeccion
     {
         return TipoSeccion::desdeListaNominal($listaNominal, $config['umbralAlfa'], $config['umbralBeta']);
+    }
+
+    /**
+     * Desglose de votos 2024 por bloque y opción de boleta (F3), solo para
+     * el detalle de sección: null si no hay estadística electoral.
+     *
+     * @param  array{partidoSiglas: string|null, coaliciones: Collection<int, Coalicion>}  $config
+     * @return array{total_votos: int|null, votos_nulos?: int, bloques: list<array{nombre: string, siglas: list<string>, color: string, total: int, es_bloque_propio: bool, opciones: list<array{clave: string, siglas: list<string>, votos: int}>}>}|null
+     */
+    private function calcularDesglose(?EstadisticaSeccion $estadistica, array $config): ?array
+    {
+        return (new DesglosarVotosSeccion)->handle(
+            $estadistica?->votos_partidos,
+            $estadistica?->total_votos,
+            $config['partidoSiglas'],
+            $config['coaliciones'],
+            Partido::all(),
+        );
     }
 }
