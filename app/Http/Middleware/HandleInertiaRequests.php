@@ -69,6 +69,13 @@ class HandleInertiaRequests extends Middleware
                 'color' => $tenant === null ? '#1d4ed8' : ($tenant->marca_color ?? '#1d4ed8'),
                 'logo_url' => $tenant?->marca_logo_url,
             ],
+            // Configuración efectiva del análisis electoral (F1): partido +
+            // umbrales + toggles, para que Mapa/Prioridades/Seccion (F2/F3)
+            // la consuman sin fetch extra.
+            'campana' => $tenant === null ? null : [
+                'partido' => $tenant->partido?->only(['id', 'siglas', 'nombre', 'color']),
+                ...$tenant->configuracion(),
+            ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];
     }

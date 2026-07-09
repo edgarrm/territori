@@ -13,6 +13,7 @@ use App\Http\Controllers\InteraccionController;
 use App\Http\Controllers\LoteriaController;
 use App\Http\Controllers\MapaController;
 use App\Http\Controllers\RedCiudadanaController;
+use App\Http\Controllers\Settings\CampanaController as SettingsCampanaController;
 use App\Http\Controllers\SolicitudArcoController;
 use Illuminate\Support\Facades\Route;
 
@@ -56,6 +57,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::middleware('rol:admin')->group(function () {
                 Route::get('campanas/crear', [CampanaController::class, 'create'])->name('campanas.crear');
                 Route::post('campanas', [CampanaController::class, 'store'])->name('campanas.store');
+
+                // Configuración del análisis electoral (partido, umbrales, indicadores).
+                Route::get('settings/campana', [SettingsCampanaController::class, 'edit'])->name('campana.edit');
+                Route::patch('settings/campana', [SettingsCampanaController::class, 'update'])->name('campana.update');
             });
 
             Route::get('mapa', [MapaController::class, 'index'])->name('mapa');
