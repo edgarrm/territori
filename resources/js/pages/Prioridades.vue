@@ -278,6 +278,9 @@ function flecha(campo: CampoOrden): string {
                         {{ info.label }}
                     </option>
                 </select>
+                <span class="text-sm whitespace-nowrap text-muted-foreground">
+                    {{ seccionesVisibles.length }} de {{ secciones.length }}
+                </span>
             </div>
         </div>
 
