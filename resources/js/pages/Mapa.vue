@@ -6,7 +6,7 @@ import { Head, Link, usePage } from '@inertiajs/vue3';
 import type * as L from 'leaflet';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import 'leaflet/dist/leaflet.css';
-import { fmt, pct } from '@/lib/formato';
+import { fmt, formatoDiferenciaCompetitividad, pct } from '@/lib/formato';
 import { dashboard } from '@/routes';
 import { cobertura as coberturaRoute } from '@/routes/mapa';
 import {
@@ -30,6 +30,13 @@ const props = defineProps<{
     seccionInicial?: number | null;
 }>();
 
+type CategoriaCompetitividad = {
+    nombre: string;
+    color: string;
+    umbral: number | null;
+    slug: string;
+};
+
 type Campana = {
     partido: {
         id: number;
@@ -37,9 +44,10 @@ type Campana = {
         nombre: string;
         color: string;
     } | null;
-    umbral_ganada_franca: number;
     umbral_alfa: number;
     umbral_beta: number;
+    modo_calculo_competitividad: 'votos' | 'porcentaje';
+    categorias_competitividad: CategoriaCompetitividad[];
     indicadores: {
         competitividad: boolean;
         tipo_seccion: boolean;
@@ -84,9 +92,14 @@ type FeatureProps = {
     indice_oportunidad: number | null;
     nivel_oportunidad: string | null;
     potencial_movilizacion: number | null;
-    // F2: competitividad y tipo de sección desde la perspectiva del partido del tenant.
-    competitividad: string;
+    // F2: competitividad y tipo de sección desde la perspectiva del partido del
+    // tenant. Label/color ya vienen resueltos por el backend según las
+    // categorías configurables de la campaña (Tenant::configuracion()).
+    estatus_slug: string;
+    estatus_label: string;
+    estatus_color: string;
     diferencia_votos: number | null;
+    diferencia_pct: number | null;
     tipo_seccion: string | null;
 };
 
@@ -172,15 +185,6 @@ const ESCALA_COMPETITIVIDAD = [
     },
 ] as const;
 
-// Competitividad desde la perspectiva del partido del tenant (F2): estatus ya
-// calculado en el backend (App\Enums\CompetitividadSeccion).
-const ESTATUS_COMPETITIVIDAD = [
-    { key: 'ganada_franca', label: 'Ganada franca', color: '#15803d' },
-    { key: 'competida', label: 'Competida', color: '#f59e0b' },
-    { key: 'empatada', label: 'Empatada', color: '#6b7280' },
-    { key: 'perdida', label: 'Perdida', color: '#dc2626' },
-] as const;
-
 // Tipo de sección por lista nominal (F2): App\Enums\TipoSeccion.
 const TIPOS_SECCION = [
     { key: 'alfa', label: 'Alfa', color: '#7c3aed' },
@@ -249,11 +253,21 @@ function bucketCompetitividad(margen: number | null) {
 // margen neutral (comportamiento previo a F2).
 const partidoConfigurado = computed(() => page.props.campana?.partido != null);
 
+// Categorías de competitividad configuradas por el tenant (F2 configurable):
+// label/color por sección ya vienen resueltos del backend; esta lista solo
+// sirve para construir la leyenda con todas las categorías posibles
+// (incluyendo las de conteo 0), en el orden definido en /settings/campana.
+const categoriasCompetitividad = computed(
+    () =>
+        page.props.campana?.categorias_competitividad.map((c) => ({
+            key: c.slug,
+            label: c.nombre,
+            color: c.color,
+        })) ?? [],
+);
+
 function bucketEstatusPartido(p: FeatureProps) {
-    return (
-        ESTATUS_COMPETITIVIDAD.find((b) => b.key === p.competitividad) ??
-        SIN_DATOS
-    );
+    return { key: p.estatus_slug, label: p.estatus_label, color: p.estatus_color };
 }
 
 function bucketTipoSeccion(p: FeatureProps) {
@@ -430,7 +444,7 @@ const leyenda = computed(() => {
     if (modo.value === 'competitividad') {
         const escala: readonly { key: string; label: string; color: string }[] =
             partidoConfigurado.value
-                ? ESTATUS_COMPETITIVIDAD
+                ? categoriasCompetitividad.value
                 : ESCALA_COMPETITIVIDAD;
         const items: LeyendaItemConCuenta[] = escala.map((b) => ({
             key: b.key,
@@ -1102,7 +1116,7 @@ onBeforeUnmount(() => {
                                     page.props.campana?.indicadores
                                         .competitividad &&
                                     partidoConfigurado &&
-                                    seccionSel.competitividad !== 'sin_datos'
+                                    seccionSel.estatus_slug !== 'sin_datos'
                                 "
                                 class="flex justify-between py-1.5"
                             >
@@ -1121,22 +1135,25 @@ onBeforeUnmount(() => {
                                     {{ bucketEstatusPartido(seccionSel).label }}
                                     <span
                                         v-if="
-                                            seccionSel.diferencia_votos !== null
+                                            formatoDiferenciaCompetitividad(
+                                                page.props.campana
+                                                    ?.modo_calculo_competitividad ??
+                                                    'votos',
+                                                seccionSel.diferencia_votos,
+                                                seccionSel.diferencia_pct,
+                                            )
                                         "
                                         class="text-muted-foreground"
                                     >
                                         ({{
-                                            seccionSel.diferencia_votos >= 0
-                                                ? '+'
-                                                : '−'
-                                        }}{{
-                                            fmt(
-                                                Math.abs(
-                                                    seccionSel.diferencia_votos,
-                                                ),
+                                            formatoDiferenciaCompetitividad(
+                                                page.props.campana
+                                                    ?.modo_calculo_competitividad ??
+                                                    'votos',
+                                                seccionSel.diferencia_votos,
+                                                seccionSel.diferencia_pct,
                                             )
-                                        }}
-                                        votos)
+                                        }})
                                     </span>
                                 </dd>
                             </div>

@@ -11,7 +11,7 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { fmt, pct } from '@/lib/formato';
+import { fmt, formatoDiferenciaCompetitividad, pct } from '@/lib/formato';
 import { dashboard } from '@/routes';
 import { vigente as avisoVigente } from '@/routes/avisos';
 import { store as electoresStore } from '@/routes/electores';
@@ -49,9 +49,14 @@ type Electoral2024 = {
     pct_fuerza: number;
     pct_morena_pvem: number;
     pct_otros: number;
-    // F2: competitividad desde la perspectiva del partido del tenant.
-    competitividad: string;
+    // F2: competitividad desde la perspectiva del partido del tenant. Label/
+    // color ya vienen resueltos por el backend según las categorías
+    // configurables de la campaña.
+    estatus_slug: string;
+    estatus_label: string;
+    estatus_color: string;
     diferencia_votos: number | null;
+    diferencia_pct: number | null;
     votos_bloque_propio: number | null;
     votos_mejor_rival: number | null;
     bloque_propio: string | null;
@@ -149,16 +154,6 @@ const COLORES_OPORTUNIDAD: Record<string, string> = {
     Seguimiento: '#0ea5e9',
 };
 
-// F2: mismos colores/etiquetas que Mapa.vue y Prioridades.vue.
-const ESTATUS_COMPETITIVIDAD: Record<string, { label: string; color: string }> =
-    {
-        ganada_franca: { label: 'Ganada franca', color: '#15803d' },
-        competida: { label: 'Competida', color: '#f59e0b' },
-        empatada: { label: 'Empatada', color: '#6b7280' },
-        perdida: { label: 'Perdida', color: '#dc2626' },
-        sin_datos: { label: 'Sin datos', color: '#9ca3af' },
-    };
-
 const TIPOS_SECCION: Record<string, string> = {
     alfa: 'α',
     beta: 'β',
@@ -173,6 +168,7 @@ const page = usePage<{
             nombre: string;
             color: string;
         } | null;
+        modo_calculo_competitividad: 'votos' | 'porcentaje';
         indicadores: { competitividad: boolean; tipo_seccion: boolean };
     } | null;
 }>();
@@ -465,37 +461,33 @@ async function guardar() {
                     v-if="
                         page.props.campana?.indicadores.competitividad &&
                         page.props.campana?.partido &&
-                        resumen.electoral_2024.competitividad !== 'sin_datos'
+                        resumen.electoral_2024.estatus_slug !== 'sin_datos'
                     "
                     class="flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold text-white"
                     :style="{
-                        backgroundColor:
-                            ESTATUS_COMPETITIVIDAD[
-                                resumen.electoral_2024.competitividad
-                            ]?.color,
+                        backgroundColor: resumen.electoral_2024.estatus_color,
                     }"
                 >
-                    {{
-                        ESTATUS_COMPETITIVIDAD[
-                            resumen.electoral_2024.competitividad
-                        ]?.label
-                    }}
+                    {{ resumen.electoral_2024.estatus_label }}
                     <span
-                        v-if="resumen.electoral_2024.diferencia_votos !== null"
+                        v-if="
+                            formatoDiferenciaCompetitividad(
+                                page.props.campana?.modo_calculo_competitividad ??
+                                    'votos',
+                                resumen.electoral_2024.diferencia_votos,
+                                resumen.electoral_2024.diferencia_pct,
+                            )
+                        "
                     >
                         ·
                         {{
-                            resumen.electoral_2024.diferencia_votos >= 0
-                                ? '+'
-                                : '−'
-                        }}{{
-                            fmt(
-                                Math.abs(
-                                    resumen.electoral_2024.diferencia_votos,
-                                ),
+                            formatoDiferenciaCompetitividad(
+                                page.props.campana
+                                    ?.modo_calculo_competitividad ?? 'votos',
+                                resumen.electoral_2024.diferencia_votos,
+                                resumen.electoral_2024.diferencia_pct,
                             )
                         }}
-                        votos
                     </span>
                 </span>
                 <span

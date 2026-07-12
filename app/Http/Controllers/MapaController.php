@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use App\Actions\Estadisticas\CalcularCompetitividadSeccion;
 use App\Actions\Estadisticas\DesglosarVotosSeccion;
 use App\Actions\Metas\DefinirMetaSeccion;
-use App\Enums\CompetitividadSeccion;
 use App\Enums\TipoSeccion;
 use App\Http\Controllers\Concerns\PresentaElectores;
 use App\Models\Coalicion;
@@ -85,12 +84,13 @@ class MapaController extends Controller
                 'estadisticas_seccion.nivel_oportunidad',
                 'estadisticas_seccion.potencial_movilizacion',
                 'estadisticas_seccion.votos_partidos',
+                'estadisticas_seccion.total_votos',
                 DB::raw('ST_AsGeoJSON(ST_SimplifyPreserveTopology(secciones.geom, '.self::TOLERANCIA_SIMPLIFICACION.')) as geom_json'),
             ])
             ->get();
 
         $features = $filas->map(function ($fila) use ($config) {
-            $competitividad = $this->calcularCompetitividad($fila->votos_partidos, $config);
+            $competitividad = $this->calcularCompetitividad($fila->votos_partidos, $fila->total_votos, $config);
 
             return [
                 'type' => 'Feature',
@@ -114,8 +114,11 @@ class MapaController extends Controller
                     'indice_oportunidad' => $fila->indice_oportunidad !== null ? (float) $fila->indice_oportunidad : null,
                     'nivel_oportunidad' => $fila->nivel_oportunidad,
                     'potencial_movilizacion' => $fila->potencial_movilizacion,
-                    'competitividad' => $competitividad['estatus']->value,
+                    'estatus_slug' => $competitividad['estatus_slug'],
+                    'estatus_label' => $competitividad['estatus_label'],
+                    'estatus_color' => $competitividad['estatus_color'],
                     'diferencia_votos' => $competitividad['diferencia_votos'],
+                    'diferencia_pct' => $competitividad['diferencia_pct'],
                     'tipo_seccion' => $this->calcularTipoSeccion($fila->lista_nominal, $config)?->value,
                 ],
             ];
@@ -160,7 +163,7 @@ class MapaController extends Controller
 
         $estadistica = $seccion->estadistica;
         $config = $this->configuracionCompetitividad($tenant);
-        $competitividad = $this->calcularCompetitividad($estadistica?->votos_partidos, $config);
+        $competitividad = $this->calcularCompetitividad($estadistica?->votos_partidos, $estadistica?->total_votos, $config);
 
         return response()->json([
             'numero' => $seccion->numero,
@@ -185,8 +188,11 @@ class MapaController extends Controller
                 'pct_fuerza' => (float) $estadistica->pct_fuerza,
                 'pct_morena_pvem' => (float) $estadistica->pct_morena_pvem,
                 'pct_otros' => (float) $estadistica->pct_otros,
-                'competitividad' => $competitividad['estatus']->value,
+                'estatus_slug' => $competitividad['estatus_slug'],
+                'estatus_label' => $competitividad['estatus_label'],
+                'estatus_color' => $competitividad['estatus_color'],
                 'diferencia_votos' => $competitividad['diferencia_votos'],
+                'diferencia_pct' => $competitividad['diferencia_pct'],
                 'votos_bloque_propio' => $competitividad['votos_bloque_propio'],
                 'votos_mejor_rival' => $competitividad['votos_mejor_rival'],
                 'bloque_propio' => $competitividad['bloque_propio'],
@@ -265,11 +271,12 @@ class MapaController extends Controller
                 'estadisticas_seccion.potencial_movilizacion',
                 'estadisticas_seccion.grupo_dominante',
                 'estadisticas_seccion.votos_partidos',
+                'estadisticas_seccion.total_votos',
             ])
             ->get();
 
         $secciones = $filas->map(function ($fila) use ($config) {
-            $competitividad = $this->calcularCompetitividad($fila->votos_partidos, $config);
+            $competitividad = $this->calcularCompetitividad($fila->votos_partidos, $fila->total_votos, $config);
 
             return [
                 'seccion_id' => $fila->seccion_id,
@@ -289,8 +296,11 @@ class MapaController extends Controller
                     $fila->indice_oportunidad !== null ? (float) $fila->indice_oportunidad : null,
                     (float) $fila->cobertura,
                 ),
-                'competitividad' => $competitividad['estatus']->value,
+                'estatus_slug' => $competitividad['estatus_slug'],
+                'estatus_label' => $competitividad['estatus_label'],
+                'estatus_color' => $competitividad['estatus_color'],
                 'diferencia_votos' => $competitividad['diferencia_votos'],
+                'diferencia_pct' => $competitividad['diferencia_pct'],
                 'tipo_seccion' => $this->calcularTipoSeccion($fila->lista_nominal, $config)?->value,
             ];
         })->values();
@@ -401,10 +411,10 @@ class MapaController extends Controller
 
     /**
      * Config de competitividad/tipo resuelta una sola vez por request (F2):
-     * partido + coaliciones 2024 + umbrales, para no repetir queries en el
-     * loop de secciones.
+     * partido + coaliciones 2024 + categorías + modo de cálculo, para no
+     * repetir queries ni recomputar slugs en el loop de secciones.
      *
-     * @return array{partidoSiglas: string|null, coaliciones: Collection<int, Coalicion>, umbral: int, umbralAlfa: int, umbralBeta: int, indicadores: array<string, bool>}
+     * @return array{partidoSiglas: string|null, coaliciones: Collection<int, Coalicion>, categorias: list<array{nombre: string, color: string, umbral: int|float|null, slug: string}>, modoCalculo: string, umbralAlfa: int, umbralBeta: int, indicadores: array<string, bool>}
      */
     private function configuracionCompetitividad(?Tenant $tenant): array
     {
@@ -413,7 +423,8 @@ class MapaController extends Controller
         return [
             'partidoSiglas' => $tenant?->partido?->siglas,
             'coaliciones' => Coalicion::where('anio', 2024)->get(),
-            'umbral' => $configuracion['umbral_ganada_franca'] ?? 30,
+            'categorias' => $configuracion['categorias_competitividad'] ?? [],
+            'modoCalculo' => $configuracion['modo_calculo_competitividad'] ?? 'votos',
             'umbralAlfa' => $configuracion['umbral_alfa'] ?? 1000,
             'umbralBeta' => $configuracion['umbral_beta'] ?? 500,
             'indicadores' => $configuracion['indicadores'] ?? [
@@ -427,10 +438,10 @@ class MapaController extends Controller
 
     /**
      * @param  array<string, int>|string|null  $votosPartidos  array (cast Eloquent) o string jsonb crudo (DB::table)
-     * @param  array{partidoSiglas: string|null, coaliciones: Collection<int, Coalicion>, umbral: int, umbralAlfa: int, umbralBeta: int, indicadores: array<string, bool>}  $config
-     * @return array{estatus: CompetitividadSeccion, diferencia_votos: int|null, votos_bloque_propio: int|null, votos_mejor_rival: int|null, bloque_propio: string|null}
+     * @param  array{partidoSiglas: string|null, coaliciones: Collection<int, Coalicion>, categorias: list<array{nombre: string, color: string, umbral: int|float|null, slug: string}>, modoCalculo: string, umbralAlfa: int, umbralBeta: int, indicadores: array<string, bool>}  $config
+     * @return array{estatus_slug: string, estatus_label: string, estatus_color: string, diferencia_votos: int|null, diferencia_pct: float|null, votos_bloque_propio: int|null, votos_mejor_rival: int|null, bloque_propio: string|null}
      */
-    private function calcularCompetitividad(array|string|null $votosPartidos, array $config): array
+    private function calcularCompetitividad(array|string|null $votosPartidos, ?int $totalVotos, array $config): array
     {
         if (is_string($votosPartidos)) {
             $votosPartidos = json_decode($votosPartidos, true);
@@ -440,7 +451,9 @@ class MapaController extends Controller
             $votosPartidos,
             $config['partidoSiglas'],
             $config['coaliciones'],
-            $config['umbral'],
+            $config['categorias'],
+            $config['modoCalculo'],
+            $totalVotos,
         );
     }
 

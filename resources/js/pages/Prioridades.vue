@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
+import { formatoDiferenciaCompetitividad } from '@/lib/formato';
 import { dashboard, mapa } from '@/routes';
 import { detalle as detalleRoute } from '@/routes/secciones';
 
@@ -27,9 +28,14 @@ type SeccionPrioridad = {
     potencial_movilizacion: number | null;
     grupo_dominante: string | null;
     prioridad: number | null;
-    // F2: competitividad y tipo de sección desde la perspectiva del partido del tenant.
-    competitividad: string;
+    // F2: competitividad y tipo de sección desde la perspectiva del partido del
+    // tenant. Label/color ya vienen resueltos por el backend según las
+    // categorías configurables de la campaña.
+    estatus_slug: string;
+    estatus_label: string;
+    estatus_color: string;
     diferencia_votos: number | null;
+    diferencia_pct: number | null;
     tipo_seccion: string | null;
 };
 
@@ -41,13 +47,41 @@ const props = defineProps<{
     mostrarOportunidad: boolean;
 }>();
 
-const ESTATUS_COMPETITIVIDAD: Record<string, { label: string; color: string }> = {
-    ganada_franca: { label: 'Ganada franca', color: '#15803d' },
-    competida: { label: 'Competida', color: '#f59e0b' },
-    empatada: { label: 'Empatada', color: '#6b7280' },
-    perdida: { label: 'Perdida', color: '#dc2626' },
-    sin_datos: { label: 'Sin datos', color: '#9ca3af' },
+type CategoriaCompetitividad = {
+    nombre: string;
+    color: string;
+    umbral: number | null;
+    slug: string;
 };
+
+const page = usePage<{
+    campana: {
+        categorias_competitividad: CategoriaCompetitividad[];
+        modo_calculo_competitividad: 'votos' | 'porcentaje';
+    } | null;
+}>();
+
+const SIN_DATOS = { slug: 'sin_datos', label: 'Sin datos', color: '#9ca3af' };
+
+// Categorías configuradas por el tenant (F2 configurable) + "Sin datos" al
+// final, en el orden definido en /settings/campana.
+const categoriasCompetitividad = computed(() => [
+    ...(page.props.campana?.categorias_competitividad ?? []).map((c) => ({
+        slug: c.slug,
+        label: c.nombre,
+        color: c.color,
+    })),
+    SIN_DATOS,
+]);
+
+const ordenEstatusPorSlug = computed(() => {
+    const orden: Record<string, number> = {};
+    categoriasCompetitividad.value.forEach((c, indice) => {
+        orden[c.slug] = indice;
+    });
+
+    return orden;
+});
 
 const TIPOS_SECCION: Record<string, { label: string; color: string }> = {
     alfa: { label: 'α Alfa', color: '#7c3aed' },
@@ -56,22 +90,15 @@ const TIPOS_SECCION: Record<string, { label: string; color: string }> = {
 };
 
 // Orden por defecto pedido en el spec: tipo (Alfa→Beta→Gama), dentro estatus
-// (GanadaFranca→Competida→Empatada→Perdida→SinDatos).
+// (en el orden configurado por el tenant).
 const ORDEN_TIPO: Record<string, number> = { alfa: 0, beta: 1, gama: 2 };
-const ORDEN_ESTATUS: Record<string, number> = {
-    ganada_franca: 0,
-    competida: 1,
-    empatada: 2,
-    perdida: 3,
-    sin_datos: 4,
-};
 
 function ordenTipo(tipo: string | null): number {
     return tipo !== null ? (ORDEN_TIPO[tipo] ?? 99) : 99;
 }
 
 function ordenEstatus(estatus: string): number {
-    return ORDEN_ESTATUS[estatus] ?? 99;
+    return ordenEstatusPorSlug.value[estatus] ?? 99;
 }
 
 // Colores consistentes con las capas del Mapa.
@@ -95,10 +122,22 @@ const COLORES_OPORTUNIDAD: Record<string, string> = {
 };
 
 function colorPrioridad(valor: number): string {
-    if (valor >= 80) return '#ef4444';
-    if (valor >= 65) return '#f97316';
-    if (valor >= 50) return '#f59e0b';
-    if (valor >= 35) return '#84cc16';
+    if (valor >= 80) {
+        return '#ef4444';
+    }
+
+    if (valor >= 65) {
+        return '#f97316';
+    }
+
+    if (valor >= 50) {
+        return '#f59e0b';
+    }
+
+    if (valor >= 35) {
+        return '#84cc16';
+    }
+
     return '#0ea5e9';
 }
 
@@ -146,9 +185,7 @@ const seccionesVisibles = computed(() => {
     let lista = props.secciones;
 
     if (filtroNivel.value) {
-        lista = lista.filter(
-            (s) => s.nivel_oportunidad === filtroNivel.value,
-        );
+        lista = lista.filter((s) => s.nivel_oportunidad === filtroNivel.value);
     }
 
     if (filtroGanador.value) {
@@ -160,7 +197,7 @@ const seccionesVisibles = computed(() => {
     }
 
     if (filtroEstatus.value) {
-        lista = lista.filter((s) => s.competitividad === filtroEstatus.value);
+        lista = lista.filter((s) => s.estatus_slug === filtroEstatus.value);
     }
 
     const numero = Number.parseInt(busqueda.value.trim(), 10);
@@ -175,8 +212,8 @@ const seccionesVisibles = computed(() => {
     if (campo === 'tipo_seccion') {
         return [...lista].sort((a, b) => {
             const cmp =
-                (ordenTipo(a.tipo_seccion) - ordenTipo(b.tipo_seccion)) ||
-                (ordenEstatus(a.competitividad) - ordenEstatus(b.competitividad));
+                ordenTipo(a.tipo_seccion) - ordenTipo(b.tipo_seccion) ||
+                ordenEstatus(a.estatus_slug) - ordenEstatus(b.estatus_slug);
 
             return cmp * factor;
         });
@@ -187,9 +224,17 @@ const seccionesVisibles = computed(() => {
         const vb = b[campo];
 
         // Secciones sin dato siempre al final, sin importar la dirección.
-        if (va === null && vb === null) return 0;
-        if (va === null) return 1;
-        if (vb === null) return -1;
+        if (va === null && vb === null) {
+            return 0;
+        }
+
+        if (va === null) {
+            return 1;
+        }
+
+        if (vb === null) {
+            return -1;
+        }
 
         return (Number(va) - Number(vb)) * factor;
     });
@@ -221,8 +266,8 @@ function flecha(campo: CampoOrden): string {
                 <h1 class="text-xl font-semibold">Prioridades por sección</h1>
                 <p class="mt-1 max-w-3xl text-sm text-muted-foreground">
                     Índice neutral 0-100 para enfocar esfuerzos: 40%
-                    competitividad 2024 (margen chico = cada voto vale más),
-                    40% oportunidad de movilización por edad y 20% cobertura
+                    competitividad 2024 (margen chico = cada voto vale más), 40%
+                    oportunidad de movilización por edad y 20% cobertura
                     pendiente de la campaña.
                 </p>
             </div>
@@ -271,9 +316,9 @@ function flecha(campo: CampoOrden): string {
                 >
                     <option value="">Estatus: todos</option>
                     <option
-                        v-for="(info, clave) in ESTATUS_COMPETITIVIDAD"
-                        :key="clave"
-                        :value="clave"
+                        v-for="info in categoriasCompetitividad"
+                        :key="info.slug"
+                        :value="info.slug"
                     >
                         {{ info.label }}
                     </option>
@@ -388,23 +433,30 @@ function flecha(campo: CampoOrden): string {
                                 <span
                                     class="size-2.5 shrink-0 rounded-sm"
                                     :style="{
-                                        backgroundColor:
-                                            ESTATUS_COMPETITIVIDAD[
-                                                seccion.competitividad
-                                            ]?.color,
+                                        backgroundColor: seccion.estatus_color,
                                     }"
                                 />
-                                {{
-                                    ESTATUS_COMPETITIVIDAD[
-                                        seccion.competitividad
-                                    ]?.label
-                                }}
+                                {{ seccion.estatus_label }}
                                 <span
-                                    v-if="seccion.diferencia_votos !== null"
+                                    v-if="
+                                        formatoDiferenciaCompetitividad(
+                                            page.props.campana
+                                                ?.modo_calculo_competitividad ??
+                                                'votos',
+                                            seccion.diferencia_votos,
+                                            seccion.diferencia_pct,
+                                        )
+                                    "
                                     class="text-muted-foreground tabular-nums"
                                 >
-                                    ({{ seccion.diferencia_votos >= 0 ? '+' : '−' }}{{
-                                        fmt(Math.abs(seccion.diferencia_votos))
+                                    ({{
+                                        formatoDiferenciaCompetitividad(
+                                            page.props.campana
+                                                ?.modo_calculo_competitividad ??
+                                                'votos',
+                                            seccion.diferencia_votos,
+                                            seccion.diferencia_pct,
+                                        )
                                     }})
                                 </span>
                             </span>
@@ -471,7 +523,10 @@ function flecha(campo: CampoOrden): string {
                             </span>
                             <span v-else class="text-muted-foreground">—</span>
                         </td>
-                        <td v-if="mostrarOportunidad" class="p-2 text-right tabular-nums">
+                        <td
+                            v-if="mostrarOportunidad"
+                            class="p-2 text-right tabular-nums"
+                        >
                             {{
                                 seccion.potencial_movilizacion !== null
                                     ? fmt(seccion.potencial_movilizacion)

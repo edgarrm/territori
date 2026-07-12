@@ -33,12 +33,18 @@ class CampanaController extends Controller
     {
         $tenant = TenantContext::get();
 
+        $categorias = $request->validated('categorias_competitividad');
+        // Defensa: el catch-all (última fila) nunca debe persistir un umbral,
+        // sin importar lo que haya llegado deshabilitado desde el formulario.
+        $categorias[array_key_last($categorias)]['umbral'] = null;
+
         $tenant?->update([
             'partido_id' => $request->validated('partido_id'),
             'settings' => [
-                'umbral_ganada_franca' => $request->validated('umbral_ganada_franca'),
                 'umbral_alfa' => $request->validated('umbral_alfa'),
                 'umbral_beta' => $request->validated('umbral_beta'),
+                'modo_calculo_competitividad' => $request->validated('modo_calculo_competitividad'),
+                'categorias_competitividad' => $categorias,
                 'indicadores' => $request->validated('indicadores'),
             ],
         ]);
