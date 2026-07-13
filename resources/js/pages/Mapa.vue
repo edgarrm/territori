@@ -82,6 +82,8 @@ type FeatureProps = {
     meta: number;
     cobertura: number;
     penetracion: number;
+    verificados: number;
+    movilizacion_verificada: number;
     lista_nominal: number | null;
     // Estadística pública 2024 (null cuando la sección no tiene dato importado).
     ganador_bloque: string | null;
@@ -201,6 +203,17 @@ const NIVELES_OPORTUNIDAD = [
     { key: 'Seguimiento', label: 'Seguimiento', color: '#0ea5e9' },
 ] as const;
 
+// Movilización verificada = verificados / lista nominal. Mismos cortes que
+// ESCALA_PENETRACION (misma naturaleza de ratio), etiquetas propias para el
+// badge tipo índice (igual patrón que Seccion.vue).
+const ESCALA_MOVILIZACION_VERIFICADA = [
+    { key: 'alta', label: 'Alta', color: '#0ea5e9', min: 0.1 },
+    { key: 'buena', label: 'Buena', color: '#16a34a', min: 0.06 },
+    { key: 'media', label: 'Media', color: '#84cc16', min: 0.03 },
+    { key: 'baja', label: 'Baja', color: '#f59e0b', min: 0.0001 },
+    { key: 'nula', label: 'Nula', color: '#ef4444', min: 0 },
+] as const;
+
 // Prioridad 0-100 (misma fórmula que la vista de prioridades, neutral):
 // 40% competitividad + 40% oportunidad de movilización + 20% cobertura pendiente.
 const ESCALA_PRIORIDAD = [
@@ -219,6 +232,13 @@ function bucketPenetracion(valor: number) {
     return (
         ESCALA_PENETRACION.find((b) => valor >= b.min) ??
         ESCALA_PENETRACION[ESCALA_PENETRACION.length - 1]
+    );
+}
+
+function bucketMovilizacionVerificada(valor: number) {
+    return (
+        ESCALA_MOVILIZACION_VERIFICADA.find((b) => valor >= b.min) ??
+        ESCALA_MOVILIZACION_VERIFICADA[ESCALA_MOVILIZACION_VERIFICADA.length - 1]
     );
 }
 
@@ -1220,18 +1240,33 @@ onBeforeUnmount(() => {
                                     </span>
                                 </dd>
                             </div>
-                            <div
-                                v-if="
-                                    seccionSel.potencial_movilizacion !== null
-                                "
-                                class="flex justify-between py-1.5"
-                            >
+                            <div class="flex items-center justify-between gap-2 py-1.5">
                                 <dt class="text-muted-foreground">
-                                    Potencial de movilización
+                                    Movilización verificada
                                 </dt>
-                                <dd class="font-medium tabular-nums">
-                                    {{ fmt(seccionSel.potencial_movilizacion) }}
-                                    votos
+                                <dd class="shrink-0">
+                                    <span
+                                        class="whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold text-white"
+                                        :style="{
+                                            backgroundColor:
+                                                bucketMovilizacionVerificada(
+                                                    seccionSel.movilizacion_verificada,
+                                                ).color,
+                                        }"
+                                    >
+                                        {{
+                                            bucketMovilizacionVerificada(
+                                                seccionSel.movilizacion_verificada,
+                                            ).label
+                                        }}
+                                        ·
+                                        {{
+                                            Math.round(
+                                                seccionSel.movilizacion_verificada *
+                                                    100,
+                                            )
+                                        }}/100
+                                    </span>
                                 </dd>
                             </div>
                             <div

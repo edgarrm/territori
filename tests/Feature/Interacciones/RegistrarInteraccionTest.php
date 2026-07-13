@@ -123,4 +123,66 @@ class RegistrarInteraccionTest extends TestCase
                 'tipo' => 'llamada',
             ])->assertForbidden();
     }
+
+    public function test_interaccion_con_verificar_marca_al_elector(): void
+    {
+        [$tenant, $user, $membership, $elector] = $this->setupConElector();
+
+        $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->postJson("/api/electores/{$elector->id}/interacciones", [
+                'tipo' => 'whatsapp',
+                'resultado' => 'contesto',
+                'verificar' => true,
+            ])->assertCreated();
+
+        $elector->refresh();
+        $this->assertNotNull($elector->verificado_en);
+        $this->assertSame('whatsapp', $elector->verificado_via);
+        $this->assertSame($membership->id, $elector->verificado_membership_id);
+    }
+
+    public function test_verificar_con_nota_es_invalido(): void
+    {
+        [$tenant, $user, , $elector] = $this->setupConElector();
+
+        $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->postJson("/api/electores/{$elector->id}/interacciones", [
+                'tipo' => 'nota',
+                'verificar' => true,
+            ])->assertStatus(422);
+
+        $this->assertNull($elector->fresh()->verificado_en);
+    }
+
+    public function test_interaccion_sin_verificar_no_marca_al_elector(): void
+    {
+        [$tenant, $user, , $elector] = $this->setupConElector();
+
+        $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->postJson("/api/electores/{$elector->id}/interacciones", [
+                'tipo' => 'llamada',
+            ])->assertCreated();
+
+        $this->assertNull($elector->fresh()->verificado_en);
+    }
+
+    public function test_quitar_verificacion_limpia_los_campos(): void
+    {
+        [$tenant, $user, $membership, $elector] = $this->setupConElector();
+        $elector->update([
+            'verificado_en' => now(),
+            'verificado_via' => 'llamada',
+            'verificado_membership_id' => $membership->id,
+        ]);
+
+        $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->deleteJson("/api/electores/{$elector->id}/verificacion")
+            ->assertOk()
+            ->assertJsonPath('verificado', false);
+
+        $elector->refresh();
+        $this->assertNull($elector->verificado_en);
+        $this->assertNull($elector->verificado_via);
+        $this->assertNull($elector->verificado_membership_id);
+    }
 }

@@ -127,4 +127,33 @@ class CoberturaIncrementalTest extends TestCase
         TenantContext::set($tenant);
         $this->assertSame(2, CoberturaSeccion::query()->where('seccion_id', $seccion->id)->first()->capturados);
     }
+
+    public function test_recalcular_cobertura_cuenta_verificados_y_movilizacion(): void
+    {
+        [$tenant, , $municipio, $aviso, $membership] = $this->setupCampana();
+        $seccion = Seccion::query()->where('municipio_id', $municipio->id)->where('numero', 1)->first();
+        $seccion->update(['lista_nominal' => 100]);
+
+        TenantContext::set($tenant);
+        Elector::factory()->count(3)->verificado()->create([
+            'tenant_id' => $tenant->id,
+            'seccion_id' => $seccion->id,
+            'membership_id' => $membership->id,
+            'aviso_privacidad_id' => $aviso->id,
+        ]);
+        Elector::factory()->count(2)->create([
+            'tenant_id' => $tenant->id,
+            'seccion_id' => $seccion->id,
+            'membership_id' => $membership->id,
+            'aviso_privacidad_id' => $aviso->id,
+        ]);
+
+        (new ActualizarCoberturaSeccion($tenant->id, $seccion->id))->handle(new RecalcularCoberturaSeccion);
+
+        TenantContext::set($tenant);
+        $cobertura = CoberturaSeccion::query()->where('seccion_id', $seccion->id)->first();
+        $this->assertSame(5, $cobertura->capturados);
+        $this->assertSame(3, $cobertura->verificados);
+        $this->assertSame('0.0300', $cobertura->movilizacion_verificada);
+    }
 }

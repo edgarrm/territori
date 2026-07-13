@@ -35,6 +35,9 @@ use MatanYadaev\EloquentSpatial\Traits\HasSpatial;
  * @property string|null $observaciones
  * @property bool $consentimiento
  * @property int $aviso_privacidad_id
+ * @property Carbon|null $verificado_en
+ * @property string|null $verificado_via
+ * @property int|null $verificado_membership_id
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property Carbon|null $deleted_at
@@ -68,6 +71,9 @@ class Elector extends Model
         'observaciones',
         'consentimiento',
         'aviso_privacidad_id',
+        'verificado_en',
+        'verificado_via',
+        'verificado_membership_id',
     ];
 
     /**
@@ -81,6 +87,7 @@ class Elector extends Model
             'domicilio' => 'encrypted',
             'consentimiento' => 'boolean',
             'ubicacion' => Point::class,
+            'verificado_en' => 'datetime',
         ];
     }
 
@@ -130,6 +137,14 @@ class Elector extends Model
     public function avisoPrivacidad(): BelongsTo
     {
         return $this->belongsTo(AvisoPrivacidad::class, 'aviso_privacidad_id');
+    }
+
+    /**
+     * @return BelongsTo<Membership, $this>
+     */
+    public function verificadoPor(): BelongsTo
+    {
+        return $this->belongsTo(Membership::class, 'verificado_membership_id');
     }
 
     /**

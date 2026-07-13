@@ -37,6 +37,15 @@ class StoreInteraccionRequest extends FormRequest
             'nota' => ['nullable', 'string'],
             'fecha' => ['nullable', 'date'],
             'proximo_seguimiento' => ['nullable', 'date'],
+            'verificar' => [
+                'nullable',
+                'boolean',
+                function (string $attribute, mixed $value, Closure $fail): void {
+                    if ($this->boolean('verificar') && $this->input('tipo') === 'nota') {
+                        $fail('Una nota no puede verificar el contacto.');
+                    }
+                },
+            ],
         ];
     }
 }

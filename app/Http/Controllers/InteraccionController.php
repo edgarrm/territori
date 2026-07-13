@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Actions\Electores\VerificarElector;
 use App\Actions\Interacciones\RegistrarInteraccion;
 use App\Http\Requests\StoreInteraccionRequest;
 use App\Models\Elector;
@@ -31,7 +32,7 @@ class InteraccionController extends Controller
         );
     }
 
-    public function store(StoreInteraccionRequest $request, string $elector, RegistrarInteraccion $registrar): JsonResponse
+    public function store(StoreInteraccionRequest $request, string $elector, RegistrarInteraccion $registrar, VerificarElector $verificar): JsonResponse
     {
         $modelo = Elector::query()->findOrFail($elector);
         $membership = $request->user()->membershipEn(TenantContext::get());
@@ -39,6 +40,10 @@ class InteraccionController extends Controller
         abort_unless($membership !== null && $membership->puedeAccederElector($modelo), 403);
 
         $interaccion = $registrar->handle($modelo, $request->validated(), $membership);
+
+        if ($request->boolean('verificar')) {
+            $verificar->marcar($modelo, $interaccion->tipo, $membership);
+        }
 
         return response()->json($this->presentar($interaccion), 201);
     }

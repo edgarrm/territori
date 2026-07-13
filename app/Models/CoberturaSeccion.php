@@ -23,6 +23,8 @@ use Illuminate\Support\Carbon;
  * @property int $meta
  * @property float $cobertura
  * @property float $penetracion
+ * @property int $verificados
+ * @property float $movilizacion_verificada
  * @property Carbon|null $actualizado_en
  */
 class CoberturaSeccion extends Model
@@ -47,6 +49,8 @@ class CoberturaSeccion extends Model
         'meta',
         'cobertura',
         'penetracion',
+        'verificados',
+        'movilizacion_verificada',
         'actualizado_en',
     ];
 
@@ -58,6 +62,7 @@ class CoberturaSeccion extends Model
         return [
             'cobertura' => 'decimal:4',
             'penetracion' => 'decimal:4',
+            'movilizacion_verificada' => 'decimal:4',
             'actualizado_en' => 'datetime',
         ];
     }

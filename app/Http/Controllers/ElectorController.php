@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Actions\Electores\ActualizarElector;
 use App\Actions\Electores\CapturarElector;
+use App\Actions\Electores\VerificarElector;
 use App\Actions\Privacidad\CancelarElector;
 use App\Exceptions\ElectorDuplicado;
 use App\Http\Controllers\Concerns\PresentaElectores;
@@ -82,6 +83,23 @@ class ElectorController extends Controller
         $cancelar->handle($modelo);
 
         return response()->json(['message' => 'Elector cancelado (ARCO).']);
+    }
+
+    /**
+     * Quita la verificación de un elector (la verificación se fija al registrar
+     * una interacción; quitarla es una acción manual desde la ficha). Resolución
+     * manual del modelo tenant-scoped, misma regla de acceso que show/update.
+     */
+    public function quitarVerificacion(string $elector, VerificarElector $verificar): JsonResponse
+    {
+        $modelo = Elector::query()->findOrFail($elector);
+        $viewer = $this->miMembership();
+
+        abort_unless($viewer !== null && $viewer->puedeAccederElector($modelo), 403);
+
+        $verificar->quitar($modelo);
+
+        return response()->json($this->presentar($modelo->fresh(), $viewer));
     }
 
     /**
@@ -198,6 +216,9 @@ class ElectorController extends Controller
             'domicilio' => $verPii ? $elector->domicilio : Pii::enmascararDomicilio($elector->domicilio),
             'observaciones' => $elector->observaciones,
             'consentimiento' => $elector->consentimiento,
+            'verificado' => $elector->verificado_en !== null,
+            'verificado_via' => $elector->verificado_via,
+            'verificado_en' => $elector->verificado_en?->toIso8601String(),
         ];
     }
 }

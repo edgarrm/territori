@@ -41,4 +41,16 @@ class ElectorFactory extends Factory
             'aviso_privacidad_id' => AvisoPrivacidad::factory(),
         ];
     }
+
+    /**
+     * Elector con verificación confirmada por un canal.
+     */
+    public function verificado(string $via = 'whatsapp'): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'verificado_en' => now(),
+            'verificado_via' => $via,
+            'verificado_membership_id' => Membership::factory(),
+        ]);
+    }
 }

@@ -18,6 +18,7 @@ class RecalcularCoberturaSeccion
     public function handle(Seccion $seccion): void
     {
         $capturados = Elector::query()->where('seccion_id', $seccion->id)->count();
+        $verificados = Elector::query()->where('seccion_id', $seccion->id)->whereNotNull('verificado_en')->count();
         $meta = (int) (MetaSeccion::query()->where('seccion_id', $seccion->id)->value('meta_capturas') ?? 0);
         $listaNominal = (int) ($seccion->lista_nominal ?? 0);
 
@@ -26,6 +27,8 @@ class RecalcularCoberturaSeccion
             'meta' => $meta,
             'cobertura' => $meta > 0 ? round($capturados / $meta, 4) : 0,
             'penetracion' => $listaNominal > 0 ? round($capturados / $listaNominal, 4) : 0,
+            'verificados' => $verificados,
+            'movilizacion_verificada' => $listaNominal > 0 ? round($verificados / $listaNominal, 4) : 0,
             'actualizado_en' => now(),
         ]);
     }

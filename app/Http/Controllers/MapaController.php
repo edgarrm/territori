@@ -73,6 +73,8 @@ class MapaController extends Controller
                 DB::raw('COALESCE(cobertura_seccion.meta, 0) as meta'),
                 DB::raw('COALESCE(cobertura_seccion.cobertura, 0) as cobertura'),
                 DB::raw('COALESCE(cobertura_seccion.penetracion, 0) as penetracion'),
+                DB::raw('COALESCE(cobertura_seccion.verificados, 0) as verificados'),
+                DB::raw('COALESCE(cobertura_seccion.movilizacion_verificada, 0) as movilizacion_verificada'),
                 // Estadística pública 2024 (solo escalares chicos; el desglose
                 // jsonb vive en el endpoint de resumen para no inflar el GeoJSON).
                 'estadisticas_seccion.ganador_bloque',
@@ -105,6 +107,8 @@ class MapaController extends Controller
                     'meta' => (int) $fila->meta,
                     'cobertura' => (float) $fila->cobertura,
                     'penetracion' => (float) $fila->penetracion,
+                    'verificados' => (int) $fila->verificados,
+                    'movilizacion_verificada' => (float) $fila->movilizacion_verificada,
                     'lista_nominal' => $fila->lista_nominal,
                     'ganador_bloque' => $fila->ganador_bloque,
                     'margen_pp' => $fila->margen_pp !== null ? (float) $fila->margen_pp : null,
@@ -175,6 +179,8 @@ class MapaController extends Controller
             'meta' => $cobertura !== null ? $cobertura->meta : 0,
             'cobertura' => $cobertura !== null ? (float) $cobertura->cobertura : 0,
             'penetracion' => $cobertura !== null ? (float) $cobertura->penetracion : 0,
+            'verificados' => $cobertura !== null ? $cobertura->verificados : 0,
+            'movilizacion_verificada' => $cobertura !== null ? (float) $cobertura->movilizacion_verificada : 0,
             'brigadistas_activos' => $this->brigadistasActivosEn($seccion, $tenant),
             'ultimo_registro' => $ultimoRegistro,
             'tipo_seccion' => $this->calcularTipoSeccion($seccion->lista_nominal, $config)?->value,

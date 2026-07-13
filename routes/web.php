@@ -97,6 +97,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
             Route::get('api/electores/{elector}', [ElectorController::class, 'show'])->name('electores.show');
             Route::put('api/electores/{elector}', [ElectorController::class, 'update'])->name('electores.update');
+            Route::delete('api/electores/{elector}/verificacion', [ElectorController::class, 'quitarVerificacion'])->name('electores.verificacion.destroy');
             Route::get('electores/{elector}', [ElectorController::class, 'page'])->name('electores.page');
             Route::get('secciones/{seccion}', [MapaController::class, 'detalle'])->name('secciones.detalle');
             Route::get('api/secciones/{seccion}/electores', [ElectorController::class, 'indexPorSeccion'])->name('secciones.electores');

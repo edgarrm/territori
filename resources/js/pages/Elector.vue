@@ -28,6 +28,9 @@ type Elector = {
     email: string | null;
     domicilio: string | null;
     observaciones: string | null;
+    verificado: boolean;
+    verificado_via: string | null;
+    verificado_en: string | null;
 };
 
 type Interaccion = {
@@ -73,8 +76,16 @@ const nueva = reactive({
     resultado: '' as string,
     nota: '',
     proximo_seguimiento: '',
+    verificar: false,
 });
 const registrando = ref(false);
+
+const verificacion = reactive({
+    verificado: props.elector.verificado,
+    via: props.elector.verificado_via,
+    en: props.elector.verificado_en,
+});
+const quitandoVerificacion = ref(false);
 
 function csrf(): string {
     return (
@@ -114,6 +125,7 @@ async function guardarElector() {
 async function registrarInteraccion() {
     registrando.value = true;
     try {
+        const verificar = nueva.tipo !== 'nota' && nueva.verificar;
         const body: Record<string, unknown> = { tipo: nueva.tipo };
         if (nueva.tipo !== 'nota' && nueva.resultado) {
             body.resultado = nueva.resultado;
@@ -121,6 +133,7 @@ async function registrarInteraccion() {
         if (nueva.nota) body.nota = nueva.nota;
         if (nueva.proximo_seguimiento)
             body.proximo_seguimiento = nueva.proximo_seguimiento;
+        if (verificar) body.verificar = true;
 
         const res = await fetch(
             `/api/electores/${props.elector.id}/interacciones`,
@@ -129,12 +142,35 @@ async function registrarInteraccion() {
         if (res.ok) {
             const creada: Interaccion = await res.json();
             timeline.value.unshift(creada);
+            if (verificar) {
+                verificacion.verificado = true;
+                verificacion.via = creada.tipo;
+                verificacion.en = creada.fecha;
+            }
             nueva.resultado = '';
             nueva.nota = '';
             nueva.proximo_seguimiento = '';
+            nueva.verificar = false;
         }
     } finally {
         registrando.value = false;
+    }
+}
+
+async function quitarVerificacion() {
+    quitandoVerificacion.value = true;
+    try {
+        const res = await fetch(
+            `/api/electores/${props.elector.id}/verificacion`,
+            { method: 'DELETE', headers: headers() },
+        );
+        if (res.ok) {
+            verificacion.verificado = false;
+            verificacion.via = null;
+            verificacion.en = null;
+        }
+    } finally {
+        quitandoVerificacion.value = false;
     }
 }
 
@@ -198,6 +234,28 @@ function cancelarElector() {
             <p class="text-sm text-muted-foreground">
                 Sección {{ elector.seccion_id }}
             </p>
+
+            <div
+                v-if="verificacion.verificado"
+                class="flex flex-wrap items-center gap-2 rounded-lg border border-green-600/30 bg-green-600/10 px-3 py-2 text-sm text-green-700 dark:text-green-400"
+            >
+                <span class="font-medium">✓ Verificado</span>
+                <span v-if="verificacion.via">vía {{ verificacion.via }}</span>
+                <span
+                    v-if="verificacion.en"
+                    class="text-xs text-muted-foreground"
+                >
+                    · {{ new Date(verificacion.en).toLocaleDateString() }}
+                </span>
+                <button
+                    type="button"
+                    class="ml-auto text-xs underline disabled:opacity-50"
+                    :disabled="quitandoVerificacion"
+                    @click="quitarVerificacion"
+                >
+                    Quitar
+                </button>
+            </div>
 
             <label class="text-sm font-medium">Nombre</label>
             <Input v-model="datos.nombre" />
@@ -304,6 +362,13 @@ function cancelarElector() {
                     placeholder="Nota…"
                     class="rounded-md border bg-background p-2 text-sm"
                 />
+                <label
+                    v-if="nueva.tipo !== 'nota'"
+                    class="flex items-center gap-2 text-sm"
+                >
+                    <input v-model="nueva.verificar" type="checkbox" />
+                    Confirmar datos del contacto por este medio
+                </label>
                 <Button :disabled="registrando" @click="registrarInteraccion">
                     Registrar
                 </Button>

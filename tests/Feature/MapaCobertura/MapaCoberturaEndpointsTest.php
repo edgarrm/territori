@@ -41,6 +41,32 @@ class MapaCoberturaEndpointsTest extends TestCase
         $this->assertNotNull($feature);
         $this->assertSame(0, $feature['properties']['capturados']);
         $this->assertSame(0, $feature['properties']['meta']);
+        $this->assertSame(0, $feature['properties']['verificados']);
+        $this->assertEquals(0, $feature['properties']['movilizacion_verificada']);
+    }
+
+    public function test_geojson_expone_verificados_y_movilizacion(): void
+    {
+        [$tenant, $user, $municipio] = $this->tenantConMiembro();
+        $seccion = Seccion::factory()->create(['municipio_id' => $municipio->id]);
+
+        TenantContext::set($tenant);
+        CoberturaSeccion::create([
+            'seccion_id' => $seccion->id,
+            'capturados' => 10,
+            'meta' => 20,
+            'cobertura' => 0.5,
+            'penetracion' => 0.05,
+            'verificados' => 6,
+            'movilizacion_verificada' => 0.03,
+        ]);
+
+        $response = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->getJson('/api/cobertura.geojson');
+
+        $feature = collect($response->json('features'))->firstWhere('properties.seccion_id', $seccion->id);
+        $this->assertSame(6, $feature['properties']['verificados']);
+        $this->assertSame(0.03, $feature['properties']['movilizacion_verificada']);
     }
 
     public function test_geojson_scoped_por_tenant(): void
@@ -76,8 +102,36 @@ class MapaCoberturaEndpointsTest extends TestCase
             'meta' => 0,
             'cobertura' => 0,
             'penetracion' => 0,
+            'verificados' => 0,
+            'movilizacion_verificada' => 0,
             'brigadistas_activos' => [],
             'ultimo_registro' => null,
+        ]);
+    }
+
+    public function test_resumen_seccion_expone_verificados_y_movilizacion(): void
+    {
+        [$tenant, $user, $municipio] = $this->tenantConMiembro();
+        $seccion = Seccion::factory()->create(['municipio_id' => $municipio->id, 'lista_nominal' => 200]);
+
+        TenantContext::set($tenant);
+        CoberturaSeccion::create([
+            'seccion_id' => $seccion->id,
+            'capturados' => 10,
+            'meta' => 20,
+            'cobertura' => 0.5,
+            'penetracion' => 0.05,
+            'verificados' => 6,
+            'movilizacion_verificada' => 0.03,
+        ]);
+
+        $response = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->getJson("/api/secciones/{$seccion->id}/resumen");
+
+        $response->assertOk();
+        $response->assertJson([
+            'verificados' => 6,
+            'movilizacion_verificada' => 0.03,
         ]);
     }
 

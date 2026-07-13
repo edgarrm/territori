@@ -108,6 +108,8 @@ type Resumen = {
     meta: number;
     cobertura: number;
     penetracion: number;
+    verificados: number;
+    movilizacion_verificada: number;
     brigadistas_activos: Brigadista[];
     ultimo_registro: string | null;
     tipo_seccion: string | null;
@@ -131,6 +133,23 @@ const ESCALA = [
 
 function bucket(valor: number) {
     return ESCALA.find((b) => valor >= b.min) ?? ESCALA[ESCALA.length - 1];
+}
+
+// Escala de la movilización verificada (verificados ÷ lista nominal), mismos
+// umbrales que ESCALA_PENETRACION del Mapa (misma naturaleza de ratio).
+const ESCALA_MOVILIZACION_VERIFICADA = [
+    { label: 'Alta', color: '#0ea5e9', min: 0.1 },
+    { label: 'Buena', color: '#16a34a', min: 0.06 },
+    { label: 'Media', color: '#84cc16', min: 0.03 },
+    { label: 'Baja', color: '#f59e0b', min: 0.0001 },
+    { label: 'Nula', color: '#ef4444', min: 0 },
+] as const;
+
+function bucketMovilizacionVerificada(valor: number) {
+    return (
+        ESCALA_MOVILIZACION_VERIFICADA.find((b) => valor >= b.min) ??
+        ESCALA_MOVILIZACION_VERIFICADA[ESCALA_MOVILIZACION_VERIFICADA.length - 1]
+    );
 }
 
 // Colores por bloque electoral, idénticos a la capa "Ganador 2024" del Mapa.
@@ -415,6 +434,39 @@ async function guardar() {
                     <dt class="text-muted-foreground">Penetración</dt>
                     <dd class="font-medium tabular-nums">
                         {{ pct(resumen.penetracion) }}
+                    </dd>
+                </div>
+                <div class="flex justify-between py-1.5">
+                    <dt class="text-muted-foreground">Verificados</dt>
+                    <dd class="font-medium tabular-nums">
+                        {{ fmt(resumen.verificados) }}
+                    </dd>
+                </div>
+                <div class="flex items-center justify-between gap-2 py-1.5">
+                    <dt class="text-muted-foreground">
+                        Movilización verificada
+                    </dt>
+                    <dd class="shrink-0">
+                        <span
+                            class="whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold text-white"
+                            :style="{
+                                backgroundColor: bucketMovilizacionVerificada(
+                                    resumen.movilizacion_verificada,
+                                ).color,
+                            }"
+                        >
+                            {{
+                                bucketMovilizacionVerificada(
+                                    resumen.movilizacion_verificada,
+                                ).label
+                            }}
+                            ·
+                            {{
+                                Math.round(
+                                    resumen.movilizacion_verificada * 100,
+                                )
+                            }}/100
+                        </span>
                     </dd>
                 </div>
                 <div class="flex justify-between py-1.5">
