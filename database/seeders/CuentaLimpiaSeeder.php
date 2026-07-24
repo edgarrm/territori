@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\DB;
 /**
  * Cuenta limpia lista para usar: crea un tenant propio sobre un municipio con
  * cartografía cargada, usuarios por rol y aviso de privacidad, y fija la meta de
- * cada sección al TOTAL de su lista nominal (fuente lista_nominal_pct al 100%).
+ * cada sección a la MITAD de su lista nominal (fuente lista_nominal_pct al 50%).
  * NO genera electores, zonas ni red ciudadana: la cobertura arranca en 0, lista
  * para capturas reales. Idempotente. Requiere correr CartografiaSeeder (con el
  * lista_nominal.csv) primero.
@@ -26,6 +26,9 @@ use Illuminate\Support\Facades\DB;
  */
 class CuentaLimpiaSeeder extends Seeder
 {
+    /** Porcentaje de la lista nominal que se fija como meta por sección. */
+    private const PCT_LISTA_NOMINAL = 50;
+
     public function run(): void
     {
         // Municipio con secciones cargadas (no el primero a ciegas): la cartografía
@@ -95,7 +98,7 @@ class CuentaLimpiaSeeder extends Seeder
     }
 
     /**
-     * Meta = total de la lista nominal por sección. Salta las secciones sin padrón
+     * Meta = mitad de la lista nominal por sección. Salta las secciones sin padrón
      * (lista_nominal null/0) para NO fijar meta 0 —que dejaría la cobertura muerta—
      * y las reporta. Idempotente: limpia metas/cobertura del tenant y resiembra.
      */
@@ -124,9 +127,9 @@ class CuentaLimpiaSeeder extends Seeder
             $metas[] = [
                 'tenant_id' => $tenant->id,
                 'seccion_id' => $seccion->id,
-                'meta_capturas' => $listaNominal,
+                'meta_capturas' => (int) round($listaNominal * self::PCT_LISTA_NOMINAL / 100),
                 'fuente_meta' => 'lista_nominal_pct',
-                'pct_lista_nominal' => 100,
+                'pct_lista_nominal' => self::PCT_LISTA_NOMINAL,
                 'created_at' => now(),
                 'updated_at' => now(),
             ];
@@ -143,9 +146,10 @@ class CuentaLimpiaSeeder extends Seeder
         Artisan::call('territori:recalcular-cobertura', ['tenant' => $tenant->id]);
 
         $this->command?->info(sprintf(
-            'Cuenta limpia "%s": %d secciones con meta = lista nominal, %d sin padrón (meta omitida).',
+            'Cuenta limpia "%s": %d secciones con meta = %d%% de la lista nominal, %d sin padrón (meta omitida).',
             $tenant->subdominio,
             count($metas),
+            self::PCT_LISTA_NOMINAL,
             $sinPadron,
         ));
 
