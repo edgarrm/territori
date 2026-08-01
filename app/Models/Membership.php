@@ -196,14 +196,15 @@ class Membership extends Model
 
     /**
      * Ruta de aterrizaje según el rol: los roles de acceso restringido entran
-     * directo a su área (enlace → redes, anfitrión → loterías); el resto al
-     * dashboard.
+     * directo a su área (enlace → redes, anfitrión → loterías, brigadista →
+     * sus capturados); la gestión al dashboard.
      */
     public function rutaInicial(): string
     {
         return match ($this->rol) {
             'enlace' => 'redes-ciudadanas.index',
             'anfitrion' => 'loterias.index',
+            'brigadista' => 'mis-capturados',
             default => 'dashboard',
         };
     }

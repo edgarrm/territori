@@ -5,6 +5,9 @@ namespace App\Providers;
 use App\Actions\Fortify\CreateNewUser;
 use App\Actions\Fortify\ResetUserPassword;
 use App\Http\Responses\LoginResponse;
+use App\Models\User;
+use App\Support\Tenancy\TenantContext;
+use Illuminate\Auth\Middleware\RedirectIfAuthenticated;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -34,6 +37,23 @@ class FortifyServiceProvider extends ServiceProvider
         $this->configureActions();
         $this->configureViews();
         $this->configureRateLimiting();
+        $this->configureRedirectDeAutenticados();
+    }
+
+    /**
+     * Un usuario ya autenticado que visita /login se redirige a su ruta inicial
+     * según el rol. El default de Fortify (`fortify.home` = /dashboard) daría 403
+     * a los roles que no alcanzan el dashboard (brigadista, enlace, anfitrión).
+     */
+    private function configureRedirectDeAutenticados(): void
+    {
+        RedirectIfAuthenticated::redirectUsing(function (Request $request): string {
+            $user = $request->user();
+            $tenant = TenantContext::get();
+            $membership = $user instanceof User && $tenant !== null ? $user->membershipEn($tenant) : null;
+
+            return route($membership?->rutaInicial() ?? 'dashboard');
+        });
     }
 
     /**
@@ -52,6 +72,8 @@ class FortifyServiceProvider extends ServiceProvider
     {
         Fortify::loginView(fn (Request $request) => Inertia::render('auth/Login', [
             'canResetPassword' => Features::enabled(Features::resetPasswords()),
+            // Con el registro público cerrado la ruta da 404: no ofrecer el link.
+            'canRegister' => config('fortify.registro_publico'),
             'status' => $request->session()->get('status'),
         ]));
 

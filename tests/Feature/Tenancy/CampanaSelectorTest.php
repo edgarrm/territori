@@ -22,7 +22,8 @@ class CampanaSelectorTest extends TestCase
             'tenant_id' => $tenant->id,
         ]);
 
-        $response->assertRedirect(route('dashboard'));
+        // La membership por defecto es brigadista: aterriza en sus capturados.
+        $response->assertRedirect(route('mis-capturados'));
         $this->assertSame($tenant->id, session('tenant_id'));
     }
 

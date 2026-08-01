@@ -13,21 +13,14 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
-import { dashboard } from '@/routes';
+import { useBreadcrumbs } from '@/composables/useBreadcrumbs';
 import { data as agendaData } from '@/routes/agenda';
 
 type Seccion = { id: number; numero: number };
 
 defineProps<{ secciones: Seccion[] }>();
 
-defineOptions({
-    layout: {
-        breadcrumbs: [
-            { title: 'Dashboard', href: dashboard() },
-            { title: 'Agenda', href: '/agenda' },
-        ],
-    },
-});
+useBreadcrumbs([{ title: 'Agenda', href: '/agenda' }]);
 
 type Pendiente = {
     id: number;

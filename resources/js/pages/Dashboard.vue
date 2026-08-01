@@ -18,7 +18,6 @@ type Kpi = { clave: string; label: string; valor: number; sufijo?: string };
 type EventoProximo = { id: number; nombre: string; tipo: string; fecha: string | null; lugar: string | null };
 
 defineProps<{
-    rol: string | null;
     kpis: Kpi[];
     eventosProximos: EventoProximo[];
     seguimientosPendientes: number;

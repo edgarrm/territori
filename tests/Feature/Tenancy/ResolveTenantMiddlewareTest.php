@@ -76,7 +76,8 @@ class ResolveTenantMiddlewareTest extends TestCase
         $this->actingAs($user);
         $response = $this->post(route('campanas.seleccionar.store'), ['tenant_id' => $tenantB->id]);
 
-        $response->assertRedirect(route('dashboard'));
+        // En B es brigadista: aterriza en sus capturados, no en el dashboard.
+        $response->assertRedirect(route('mis-capturados'));
         $this->assertEquals($tenantB->id, session('tenant_id'));
     }
 

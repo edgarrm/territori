@@ -2,33 +2,25 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Elector;
 use App\Models\Evento;
 use App\Models\Interaccion;
 use App\Models\Membership;
 use App\Models\Tenant;
-use App\Models\User;
 use App\Support\Tenancy\TenantContext;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class DashboardController extends Controller
 {
-    public function index(Request $request): Response
+    public function index(): Response
     {
         $tenant = TenantContext::get();
-        $user = $request->user();
-        $membership = $tenant && $user instanceof User ? $user->membershipEn($tenant) : null;
 
         return Inertia::render('Dashboard', [
-            'rol' => $membership?->rol,
-            'kpis' => $membership !== null && $membership->esBrigadista()
-                ? $this->kpisBrigadista($membership, $tenant)
-                : $this->kpisCampana($tenant),
+            'kpis' => $this->kpisCampana($tenant),
             'eventosProximos' => $this->eventosProximos(),
-            'seguimientosPendientes' => $this->seguimientosPendientes($membership),
+            'seguimientosPendientes' => $this->seguimientosPendientes(),
         ]);
     }
 
@@ -62,32 +54,6 @@ class DashboardController extends Controller
     }
 
     /**
-     * KPIs propios del brigadista: sus capturas y zonas asignadas.
-     *
-     * @return array<int, array{clave: string, label: string, valor: int, sufijo?: string}>
-     */
-    private function kpisBrigadista(Membership $membership, ?Tenant $tenant): array
-    {
-        $misCapturados = Elector::query()->where('membership_id', $membership->id)->count();
-        $hoy = Elector::query()->where('membership_id', $membership->id)->whereDate('created_at', today())->count();
-
-        $idsSecciones = $membership->secciones()->pluck('secciones.id');
-        $misSecciones = $idsSecciones->count();
-
-        $metaZonas = (int) DB::table('cobertura_seccion')
-            ->where('tenant_id', $tenant?->id)
-            ->whereIn('seccion_id', $idsSecciones)
-            ->sum('meta');
-
-        return [
-            ['clave' => 'mis_capturados', 'label' => 'Mis capturados', 'valor' => $misCapturados],
-            ['clave' => 'hoy', 'label' => 'Capturados hoy', 'valor' => $hoy],
-            ['clave' => 'mi_avance', 'label' => 'Mi avance', 'valor' => $this->porcentaje($misCapturados, $metaZonas), 'sufijo' => '%'],
-            ['clave' => 'mis_secciones', 'label' => 'Mis secciones', 'valor' => $misSecciones],
-        ];
-    }
-
-    /**
      * Próximos eventos de la campaña (a partir de hoy).
      *
      * @return array<int, array{id: int, nombre: string, tipo: string, fecha: string|null, lugar: string|null}>
@@ -110,17 +76,11 @@ class DashboardController extends Controller
     }
 
     /**
-     * Conteo de seguimientos pendientes; acotado al brigadista si aplica.
+     * Conteo de seguimientos pendientes de toda la campaña.
      */
-    private function seguimientosPendientes(?Membership $membership): int
+    private function seguimientosPendientes(): int
     {
-        $query = Interaccion::query()->pendientes();
-
-        if ($membership !== null && $membership->esBrigadista()) {
-            $query->where('membership_id', $membership->id);
-        }
-
-        return $query->count();
+        return Interaccion::query()->pendientes()->count();
     }
 
     private function porcentaje(int $parte, int $total): int

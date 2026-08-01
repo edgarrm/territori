@@ -3,7 +3,6 @@
 namespace Tests\Feature;
 
 use App\Models\CoberturaSeccion;
-use App\Models\Elector;
 use App\Models\Evento;
 use App\Models\Membership;
 use App\Models\Seccion;
@@ -65,7 +64,6 @@ class DashboardTest extends TestCase
             ->get(route('dashboard'))
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Dashboard')
-                ->where('rol', 'admin')
                 ->where('kpis', fn ($kpis) => collect($kpis)->firstWhere('clave', 'capturados')['valor'] === 100)
                 ->where('kpis', fn ($kpis) => collect($kpis)->firstWhere('clave', 'meta')['valor'] === 200)
                 ->where('kpis', fn ($kpis) => collect($kpis)->firstWhere('clave', 'avance')['valor'] === 50)
@@ -73,27 +71,19 @@ class DashboardTest extends TestCase
             );
     }
 
-    public function test_brigadista_dashboard_muestra_sus_propios_numeros(): void
+    /**
+     * El brigadista tiene perfil de captura: el dashboard es una vista de
+     * análisis de campaña y queda fuera de su alcance. Aterriza en sus
+     * capturados (ver MisCapturadosTest).
+     */
+    public function test_brigadista_no_accede_al_dashboard(): void
     {
-        [$tenant, $user, $membership] = $this->setupCampana('brigadista');
-
-        $otro = Membership::factory()->for($tenant)->create(['rol' => 'brigadista', 'activo' => true]);
-
-        Elector::factory()->count(3)->create(['tenant_id' => $tenant->id, 'membership_id' => $membership->id]);
-        Elector::factory()->count(2)->create(['tenant_id' => $tenant->id, 'membership_id' => $otro->id]);
-
-        $seccion = Seccion::factory()->create();
-        $membership->secciones()->attach($seccion->id, ['tenant_id' => $tenant->id]);
+        [$tenant, $user] = $this->setupCampana('brigadista');
 
         $this->actingAs($user)
             ->withSession(['tenant_id' => $tenant->id])
             ->get(route('dashboard'))
-            ->assertInertia(fn (Assert $page) => $page
-                ->component('Dashboard')
-                ->where('rol', 'brigadista')
-                ->where('kpis', fn ($kpis) => collect($kpis)->firstWhere('clave', 'mis_capturados')['valor'] === 3)
-                ->where('kpis', fn ($kpis) => collect($kpis)->firstWhere('clave', 'mis_secciones')['valor'] === 1)
-            );
+            ->assertForbidden();
     }
 
     public function test_dashboard_lista_proximos_eventos(): void

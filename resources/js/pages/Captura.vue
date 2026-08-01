@@ -4,21 +4,14 @@ import { computed, onMounted, ref } from 'vue';
 import ListaCapturados from '@/components/ListaCapturados.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { dashboard } from '@/routes';
+import { useBreadcrumbs } from '@/composables/useBreadcrumbs';
 import { vigente as avisoVigente } from '@/routes/avisos';
 import { store as electoresStore } from '@/routes/electores';
 import { electores as loteriaElectores } from '@/routes/loterias';
 
 type ListaExpuesta = { recargar: () => void };
 
-defineOptions({
-    layout: {
-        breadcrumbs: [
-            { title: 'Dashboard', href: dashboard() },
-            { title: 'Captura', href: '/captura' },
-        ],
-    },
-});
+useBreadcrumbs([{ title: 'Captura', href: '/captura' }]);
 
 type Seccion = { id: number; numero: number };
 type Evento = {

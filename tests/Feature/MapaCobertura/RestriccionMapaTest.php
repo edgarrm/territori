@@ -14,8 +14,9 @@ use Tests\Concerns\AsignaZonas;
 use Tests\TestCase;
 
 /**
- * El brigadista solo ve/consulta sus secciones asignadas en el mapa; gestión
- * (coordinador/admin) ve todas.
+ * El mapa y el detalle de sección son vistas de análisis: solo gestión
+ * (coordinador/admin) entra. El brigadista, cuyo perfil es de captura, recibe
+ * 403 incluso en las secciones que tiene asignadas.
  */
 class RestriccionMapaTest extends TestCase
 {
@@ -49,18 +50,24 @@ class RestriccionMapaTest extends TestCase
         return Seccion::query()->where('municipio_id', $this->municipio->id)->where('numero', $numero)->first();
     }
 
-    public function test_brigadista_solo_ve_sus_secciones_en_cobertura(): void
+    /**
+     * Ni siquiera en su propia zona: el brigadista no tiene acceso a ninguna de
+     * las vistas de análisis.
+     */
+    public function test_brigadista_no_accede_a_las_vistas_de_analisis(): void
     {
         [$user, $brigadista] = $this->miembro('brigadista');
-        $brigadista->secciones()->attach($this->seccion(1)->id, ['tenant_id' => $this->tenant->id]);
+        $propia = $this->seccion(1);
+        $brigadista->secciones()->attach($propia->id, ['tenant_id' => $this->tenant->id]);
 
-        $response = $this->actingAs($user)->withSession(['tenant_id' => $this->tenant->id])
-            ->getJson('/api/cobertura.geojson');
+        $sesion = $this->actingAs($user)->withSession(['tenant_id' => $this->tenant->id]);
 
-        $response->assertOk();
-        $features = $response->json('features');
-        $this->assertCount(1, $features);
-        $this->assertSame($this->seccion(1)->id, $features[0]['properties']['seccion_id']);
+        $sesion->get('/mapa')->assertForbidden();
+        $sesion->getJson('/api/cobertura.geojson')->assertForbidden();
+        $sesion->get('/prioridades')->assertForbidden();
+        $sesion->getJson('/api/secciones/'.$propia->id.'/resumen')->assertForbidden();
+        $sesion->get('/secciones/'.$propia->id)->assertForbidden();
+        $sesion->getJson('/api/secciones/'.$propia->id.'/electores')->assertForbidden();
     }
 
     public function test_gestion_ve_todas_las_secciones_en_cobertura(): void
@@ -76,32 +83,12 @@ class RestriccionMapaTest extends TestCase
         $this->assertGreaterThan(1, $total);
     }
 
-    public function test_brigadista_no_ve_resumen_de_seccion_ajena(): void
+    public function test_enlace_tampoco_accede_al_mapa(): void
     {
-        [$user, $brigadista] = $this->miembro('brigadista');
-        $brigadista->secciones()->attach($this->seccion(1)->id, ['tenant_id' => $this->tenant->id]);
+        [$user] = $this->miembro('enlace');
 
         $this->actingAs($user)->withSession(['tenant_id' => $this->tenant->id])
-            ->getJson('/api/secciones/'.$this->seccion(2)->id.'/resumen')
-            ->assertForbidden();
-
-        // Su propia sección sí.
-        $this->actingAs($user)->withSession(['tenant_id' => $this->tenant->id])
-            ->getJson('/api/secciones/'.$this->seccion(1)->id.'/resumen')
-            ->assertOk();
-    }
-
-    public function test_brigadista_no_ve_detalle_ni_electores_de_seccion_ajena(): void
-    {
-        [$user, $brigadista] = $this->miembro('brigadista');
-        $brigadista->secciones()->attach($this->seccion(1)->id, ['tenant_id' => $this->tenant->id]);
-        $ajena = $this->seccion(2);
-
-        $this->actingAs($user)->withSession(['tenant_id' => $this->tenant->id])
-            ->get('/secciones/'.$ajena->id)->assertForbidden();
-
-        $this->actingAs($user)->withSession(['tenant_id' => $this->tenant->id])
-            ->getJson('/api/secciones/'.$ajena->id.'/electores')->assertForbidden();
+            ->get('/mapa')->assertForbidden();
     }
 
     public function test_gestion_ve_detalle_de_cualquier_seccion(): void

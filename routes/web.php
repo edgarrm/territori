@@ -51,8 +51,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         // --- Resto del dominio: el rol "enlace" queda fuera (403) ---
         Route::middleware('rol:brigadista,coordinador,admin')->group(function () {
-            Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
-
             // Crear campaña: solo un admin de la campaña activa.
             Route::middleware('rol:admin')->group(function () {
                 Route::get('campanas/crear', [CampanaController::class, 'create'])->name('campanas.crear');
@@ -63,12 +61,23 @@ Route::middleware(['auth', 'verified'])->group(function () {
                 Route::patch('settings/campana', [SettingsCampanaController::class, 'update'])->name('campana.update');
             });
 
-            Route::get('mapa', [MapaController::class, 'index'])->name('mapa');
-            Route::get('api/cobertura.geojson', [MapaController::class, 'cobertura'])->name('mapa.cobertura');
-            Route::get('prioridades', [MapaController::class, 'prioridades'])->name('prioridades');
-            Route::get('api/secciones/{seccion}/resumen', [MapaController::class, 'resumenSeccion'])->name('secciones.resumen');
+            // Vista personal de capturados: pantalla de aterrizaje del brigadista.
+            Route::get('mis-capturados', [ElectorController::class, 'mios'])->name('mis-capturados');
+            Route::get('api/mis-capturados', [ElectorController::class, 'misDatos'])->name('mis-capturados.data');
 
+            // --- Análisis y planeación: fuera del alcance del brigadista, cuyo
+            // perfil es de captura (dashboard, mapa, prioridades, detalle de
+            // sección y las vistas de gestión) ---
             Route::middleware('rol:coordinador,admin')->group(function () {
+                Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
+
+                Route::get('mapa', [MapaController::class, 'index'])->name('mapa');
+                Route::get('api/cobertura.geojson', [MapaController::class, 'cobertura'])->name('mapa.cobertura');
+                Route::get('prioridades', [MapaController::class, 'prioridades'])->name('prioridades');
+                Route::get('api/secciones/{seccion}/resumen', [MapaController::class, 'resumenSeccion'])->name('secciones.resumen');
+                Route::get('secciones/{seccion}', [MapaController::class, 'detalle'])->name('secciones.detalle');
+                Route::get('api/secciones/{seccion}/electores', [ElectorController::class, 'indexPorSeccion'])->name('secciones.electores');
+
                 Route::get('metas', [MapaController::class, 'metas'])->name('metas');
                 Route::put('api/secciones/{seccion}/meta', [MapaController::class, 'definirMeta'])->name('secciones.meta');
 
@@ -99,8 +108,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::put('api/electores/{elector}', [ElectorController::class, 'update'])->name('electores.update');
             Route::delete('api/electores/{elector}/verificacion', [ElectorController::class, 'quitarVerificacion'])->name('electores.verificacion.destroy');
             Route::get('electores/{elector}', [ElectorController::class, 'page'])->name('electores.page');
-            Route::get('secciones/{seccion}', [MapaController::class, 'detalle'])->name('secciones.detalle');
-            Route::get('api/secciones/{seccion}/electores', [ElectorController::class, 'indexPorSeccion'])->name('secciones.electores');
 
             // Interacciones (timeline) + agenda de seguimientos.
             Route::get('api/electores/{elector}/interacciones', [InteraccionController::class, 'indexPorElector'])->name('interacciones.index');

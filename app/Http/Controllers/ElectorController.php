@@ -167,6 +167,43 @@ class ElectorController extends Controller
         return response()->json($electores);
     }
 
+    /**
+     * Vista personal de capturados: solo los electores que registró el propio
+     * usuario. Es la pantalla de aterrizaje del brigadista, cuyo perfil es de
+     * captura y no tiene acceso a las vistas de análisis.
+     */
+    public function mios(): Response
+    {
+        $viewer = $this->miMembership();
+
+        abort_if($viewer === null, 403);
+
+        return Inertia::render('MisCapturados', [
+            'seccionesFiltro' => $viewer->seccionesDisponibles(),
+            'modos' => $this->catalogoModos(),
+        ]);
+    }
+
+    /**
+     * Lista paginada de los capturados propios. Mismos filtros que la lista
+     * global (`q`, `modos`, `secciones`); el scope base por `membership_id` es
+     * lo único que la distingue.
+     */
+    public function misDatos(Request $request): JsonResponse
+    {
+        $viewer = $this->miMembership();
+
+        abort_if($viewer === null, 403);
+
+        $electores = $this->paginarElectores(
+            Elector::query()->where('membership_id', $viewer->id),
+            $request,
+            $viewer,
+        );
+
+        return response()->json($electores);
+    }
+
     public function indexPorSeccion(Request $request, Seccion $seccion): JsonResponse
     {
         $viewer = $this->miMembership();

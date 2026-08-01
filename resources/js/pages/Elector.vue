@@ -3,22 +3,17 @@ import { Head, router, usePage } from '@inertiajs/vue3';
 import { computed, reactive, ref } from 'vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { dashboard } from '@/routes';
+import { useBreadcrumbs } from '@/composables/useBreadcrumbs';
 
 const page = usePage<{ auth: { rol: string | null } }>();
 const esGestion = computed(() =>
     ['coordinador', 'admin'].includes(page.props.auth?.rol ?? ''),
 );
 
-defineOptions({
-    layout: {
-        breadcrumbs: [
-            { title: 'Dashboard', href: dashboard() },
-            { title: 'Agenda', href: '/agenda' },
-            { title: 'Ficha de elector', href: '#' },
-        ],
-    },
-});
+useBreadcrumbs([
+    { title: 'Agenda', href: '/agenda' },
+    { title: 'Ficha de elector', href: '#' },
+]);
 
 type Elector = {
     id: number;

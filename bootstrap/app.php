@@ -18,6 +18,11 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Detrás de un proxy TLS (ngrok en desarrollo, load balancer en Cloud) el
+        // request llega por http; sin esto Laravel generaría URLs http:// y el
+        // login viajaría en claro hasta el borde del túnel.
+        $middleware->trustProxies(at: '*');
+
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
 
         $middleware->web(append: [

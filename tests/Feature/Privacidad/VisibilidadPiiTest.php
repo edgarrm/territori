@@ -4,6 +4,7 @@ namespace Tests\Feature\Privacidad;
 
 use App\Models\AvisoPrivacidad;
 use App\Models\Elector;
+use App\Models\Evento;
 use App\Models\Membership;
 use App\Models\Municipio;
 use App\Models\Seccion;
@@ -102,17 +103,23 @@ class VisibilidadPiiTest extends TestCase
         $response->assertJsonPath('domicilio', 'Calle Falsa 123');
     }
 
-    public function test_lista_por_seccion_enmascara_telefono_de_ajenos_para_brigadista(): void
+    /**
+     * Los asistentes de un evento son la lista compartida que sí alcanza el
+     * brigadista: ahí conviven capturas suyas y de otros miembros.
+     */
+    public function test_lista_compartida_enmascara_telefono_de_ajenos_para_brigadista(): void
     {
         [$tenant, , $seccion, $aviso] = $this->setupCampana();
         [$user, $membership] = $this->miembro($tenant, 'brigadista');
         [, $otro] = $this->miembro($tenant, 'brigadista');
-        $membership->secciones()->attach($seccion->id, ['tenant_id' => $tenant->id]);
+
+        $evento = Evento::factory()->create(['tenant_id' => $tenant->id, 'seccion_id' => $seccion->id]);
         $propio = $this->elector($tenant, $membership, $seccion, $aviso, '5511112222', 'Mi Calle 1');
         $ajeno = $this->elector($tenant, $otro, $seccion, $aviso, '5599998888', 'Otra Calle 2');
+        Elector::query()->whereKey([$propio->id, $ajeno->id])->update(['evento_id' => $evento->id]);
 
         $response = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
-            ->getJson("/api/secciones/{$seccion->id}/electores");
+            ->getJson("/api/eventos/{$evento->id}/asistentes");
 
         $response->assertOk();
         $porId = collect($response->json('data'))->keyBy('id');
