@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\BloqueaRutasDeDesarrollo;
 use App\Http\Middleware\EnsureRol;
 use App\Http\Middleware\EnsureTenantSeleccionado;
 use App\Http\Middleware\HandleAppearance;
@@ -18,10 +19,14 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        // Detrás de un proxy TLS (ngrok en desarrollo, load balancer en Cloud) el
-        // request llega por http; sin esto Laravel generaría URLs http:// y el
-        // login viajaría en claro hasta el borde del túnel.
-        $middleware->trustProxies(at: '*');
+        // `_dusk/*` y `_boost/*` se registran solos fuera de producción y no
+        // piden autenticación. Va en el stack global (y primero) porque
+        // `_boost/browser-logs` no pasa siquiera por el grupo `web`.
+        $middleware->prepend(BloqueaRutasDeDesarrollo::class);
+
+        // Los proxies de confianza se configuran en AppServiceProvider::boot():
+        // aquí todavía no existe el contenedor de configuración, y leerlos con
+        // env() daría null en cuanto se ejecute `config:cache`.
 
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
 

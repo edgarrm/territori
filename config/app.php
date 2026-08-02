@@ -68,6 +68,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Trusted Proxies
+    |--------------------------------------------------------------------------
+    |
+    | Proxies de los que se aceptan las cabeceras X-Forwarded-*. Con '*'
+    | cualquier cliente cuenta como proxy y puede falsear su IP para saltarse
+    | el rate limit de login, así que en producción debe ser el CIDR real del
+    | balanceador. Lista separada por comas o '*'.
+    |
+    */
+
+    'trusted_proxies' => env('TRUSTED_PROXIES', '*'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
     |

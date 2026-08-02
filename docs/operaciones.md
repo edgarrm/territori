@@ -92,18 +92,52 @@ APP_URL=https://...             # dominio real con HTTPS
 
 DB_CONNECTION=pgsql             # nunca sqlite en prod
 
-SESSION_SECURE_COOKIE=true      # cookies solo por HTTPS
-SESSION_ENCRYPT=true            # opcional pero recomendado (sesión en DB)
-SESSION_SAME_SITE=lax
+SESSION_SECURE_COOKIE=true      # obligatorio: la app no arranca sin esto en prod
+SESSION_ENCRYPT=true            # obligatorio: la app no arranca sin esto en prod
+SESSION_SAME_SITE=strict
+
+TRUSTED_PROXIES=10.0.0.0/8      # CIDR del balanceador; NUNCA '*' en producción
+DB_SSLMODE=require              # 'prefer' acepta en silencio una conexión en claro
 
 LOG_LEVEL=warning               # no 'debug' en prod
+LOG_STACK=daily                 # 'single' crece sin rotar
 ```
+
+`AppServiceProvider::verificarConfiguracionDeProduccion()` aborta el arranque si en
+producción `APP_DEBUG` está activo o falta `SESSION_SECURE_COOKIE`/`SESSION_ENCRYPT`.
+Es deliberado: toda la política de seguridad (contraseñas de 12 con `uncompromised`,
+`prohibitDestructiveCommands`) cuelga de `isProduction()`, así que un `APP_ENV` mal
+puesto la degradaba en silencio.
 
 - Forzar **HTTPS** (redirección + HSTS) a nivel de plataforma/servidor.
 - `composer install --no-dev --optimize-autoloader` (excluye Boost y herramientas de dev).
 - Cola persistente real (`QUEUE_CONNECTION=redis|database`) + worker (`queue:work`) para los jobs de cobertura.
 - Rotación de `APP_KEY` solo con plan de migración: re-cifra `telefono`/`domicilio` (cast `encrypted`) **y** invalida los `telefono_hash` (HMAC con APP_KEY) → habría que recalcularlos.
 - Mantener `min-release-age`/`ignore-scripts` del `.npmrc` y los lockfiles commiteados (ver §Seguridad de cadena de suministro).
+
+## ⚠️ Exponer la instancia local por un túnel (ngrok)
+
+Publicar el entorno de desarrollo en internet es lo más peligroso que se le puede hacer
+a esta app, porque `laravel/dusk` y `laravel/boost` registran rutas **sin autenticación**
+en cuanto `APP_ENV` no es `production`:
+
+| Ruta | Riesgo |
+|------|--------|
+| `GET /_dusk/login/{userId}` | Autentica como cualquier usuario sin contraseña ni 2FA → acceso total al padrón |
+| `GET /_dusk/logout`, `/_dusk/user` | Manipulación de sesión sin auth |
+| `POST /_boost/browser-logs` | Sin auth **ni CSRF**: log injection y llenado de disco |
+
+`App\Http\Middleware\BloqueaRutasDeDesarrollo` (stack global, primero) las cierra con 404:
+`_dusk/*` solo responde en `testing`/`dusk`/`dusk.local`, y `_boost/*` solo cuando la app
+está en `local` **y** el socket viene de loopback — se lee `REMOTE_ADDR` a propósito, sin
+pasar por la resolución de proxies, porque `X-Forwarded-For` lo escribe el cliente.
+
+Aun así, antes de levantar un túnel:
+
+- `composer install --no-dev` para que los paquetes ni existan.
+- Nunca con datos reales de personas: usa seeders de demo.
+- Acota `TRUSTED_PROXIES`; con `'*'` cualquier cliente es un "proxy confiable" y puede
+  rotar `X-Forwarded-For` para saltarse el rate limit de login.
 
 ## Seguridad de cadena de suministro
 
