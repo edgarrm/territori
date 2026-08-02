@@ -15,6 +15,7 @@ class CampanaSelectorTest extends DuskTestCase
     public function test_usuario_con_varias_campanas_elige_una_y_entra(): void
     {
         [$tenant, $user, , $municipio] = $this->crearCampana('admin');
+        $this->confirmarDobleFactor($user);
         $tenant2 = Tenant::factory()->create(['municipio_id' => $municipio->id]);
         Membership::factory()->for($tenant2)->for($user)->create(['rol' => 'coordinador', 'activo' => true]);
 

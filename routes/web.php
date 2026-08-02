@@ -69,7 +69,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             // perfil es de captura (dashboard, mapa, prioridades, detalle de
             // sección y las vistas de gestión) ---
             Route::middleware('rol:coordinador,admin')->group(function () {
-                Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
+                Route::get('dashboard', [DashboardController::class, 'index'])->middleware('2fa')->name('dashboard');
 
                 Route::get('mapa', [MapaController::class, 'index'])->name('mapa');
                 Route::get('api/cobertura.geojson', [MapaController::class, 'cobertura'])->name('mapa.cobertura');
@@ -89,11 +89,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
                 // Cancelación ARCO (baja lógica) y export: acciones de gestión.
                 Route::delete('api/electores/{elector}', [ElectorController::class, 'destroy'])->name('electores.destroy');
-                Route::get('api/export/electores.csv', [ExportController::class, 'electores'])->name('export.electores');
+                Route::get('api/export/electores.csv', [ExportController::class, 'electores'])->middleware('2fa')->name('export.electores');
 
                 // Bandeja de solicitudes ARCO: listar y atender (LFPDPPP, ADR-004).
-                Route::get('solicitudes-arco', [SolicitudArcoController::class, 'index'])->name('solicitudes-arco.index');
-                Route::put('api/solicitudes-arco/{solicitud}/atendido', [SolicitudArcoController::class, 'atendido'])->name('solicitudes-arco.atendido');
+                Route::get('solicitudes-arco', [SolicitudArcoController::class, 'index'])->middleware('2fa')->name('solicitudes-arco.index');
+                Route::put('api/solicitudes-arco/{solicitud}/atendido', [SolicitudArcoController::class, 'atendido'])->middleware('2fa')->name('solicitudes-arco.atendido');
 
                 // Lista global de capturados (todos los electores del municipio),
                 // paginada y con filtros por nombre, tipo de captura y sección.

@@ -15,6 +15,7 @@ class DashboardBrowserTest extends DuskTestCase
     public function test_admin_ve_las_tarjetas_kpi(): void
     {
         [$tenant, $user, , $municipio] = $this->crearCampana('admin');
+        $this->confirmarDobleFactor($user);
         $seccion = Seccion::query()->where('municipio_id', $municipio->id)->firstOrFail();
         CoberturaSeccion::factory()->create([
             'tenant_id' => $tenant->id,
@@ -42,6 +43,7 @@ class DashboardBrowserTest extends DuskTestCase
     public function test_el_dashboard_es_legible_en_movil(): void
     {
         [$tenant, $user, , $municipio] = $this->crearCampana('admin');
+        $this->confirmarDobleFactor($user);
         $seccion = Seccion::query()->where('municipio_id', $municipio->id)->firstOrFail();
         CoberturaSeccion::factory()->create([
             'tenant_id' => $tenant->id,

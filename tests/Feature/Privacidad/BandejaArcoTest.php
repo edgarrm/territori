@@ -29,7 +29,7 @@ class BandejaArcoTest extends TestCase
         (new CartografiaSeeder)->run(base_path('tests/Fixtures/cartografia/99-test'));
         $municipio = Municipio::query()->where('clave', 12)->first();
         $tenant = Tenant::factory()->create(['municipio_id' => $municipio->id]);
-        $user = User::factory()->create();
+        $user = User::factory()->withTwoFactor()->create();
         $membership = Membership::create(['tenant_id' => $tenant->id, 'user_id' => $user->id, 'rol' => $rol]);
         TenantContext::set($tenant);
         $seccion = Seccion::query()->where('municipio_id', $municipio->id)->where('numero', 1)->first();

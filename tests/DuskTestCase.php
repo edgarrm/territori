@@ -115,4 +115,16 @@ abstract class DuskTestCase extends BaseTestCase
 
         return [$tenant, $user, $membership, $municipio, $aviso];
     }
+
+    /**
+     * Satisface `RequiereDobleFactor` (dashboard, export, bandeja ARCO) sin
+     * activar el reto real de Fortify en el login: ese solo dispara si
+     * `two_factor_secret` también está presente (ver
+     * `TwoFactorAuthenticatable::twoFactorEnabled()`), y estos tests entran
+     * con `loginAs()`, que no pasa por el pipeline de autenticación real.
+     */
+    protected function confirmarDobleFactor(User $user): void
+    {
+        $user->forceFill(['two_factor_confirmed_at' => now()])->save();
+    }
 }

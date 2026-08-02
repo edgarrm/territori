@@ -86,7 +86,7 @@ class ResolveTenantMiddlewareTest extends TestCase
         config(['app.tenant_domain' => 'territori.test']);
 
         $tenant = Tenant::create(['nombre' => 'A', 'municipio_id' => $this->municipioId(), 'subdominio' => 'campania-a']);
-        $user = User::factory()->create();
+        $user = User::factory()->withTwoFactor()->create();
         Membership::create(['tenant_id' => $tenant->id, 'user_id' => $user->id, 'rol' => 'coordinador']);
 
         $response = $this->actingAs($user)

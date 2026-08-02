@@ -18,7 +18,7 @@ class HardeningTest extends TestCase
      */
     private function adminConCampana(): array
     {
-        $user = User::factory()->create();
+        $user = User::factory()->withTwoFactor()->create();
         $tenant = Tenant::factory()->create();
         Membership::create(['tenant_id' => $tenant->id, 'user_id' => $user->id, 'rol' => 'admin', 'activo' => true]);
 
@@ -75,5 +75,44 @@ class HardeningTest extends TestCase
 
         $response->assertRedirect(route('dashboard'));
         $this->assertDatabaseHas('tenants', ['nombre' => 'Color válido', 'marca_color' => '#1d4ed8']);
+    }
+
+    public function test_cabeceras_de_seguridad_estan_presentes(): void
+    {
+        $response = $this->get(route('login'));
+
+        $response->assertOk();
+        $response->assertHeader('X-Frame-Options', 'DENY');
+        $response->assertHeader('X-Content-Type-Options', 'nosniff');
+        $response->assertHeader('Referrer-Policy', 'same-origin');
+        $response->assertHeader('Permissions-Policy');
+
+        $csp = $response->headers->get('Content-Security-Policy');
+        $this->assertNotNull($csp);
+        $this->assertStringContainsString("default-src 'self'", $csp);
+        $this->assertStringContainsString("frame-ancestors 'none'", $csp);
+        $this->assertMatchesRegularExpression("/script-src 'self' 'nonce-[A-Za-z0-9+\/=]+'/", $csp);
+    }
+
+    public function test_hsts_solo_se_envia_sobre_https(): void
+    {
+        $host = parse_url(config('app.url'), PHP_URL_HOST);
+        $path = route('login', absolute: false);
+
+        $this->get("http://{$host}{$path}")->assertHeaderMissing('Strict-Transport-Security');
+
+        $this->get("https://{$host}{$path}")
+            ->assertHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    }
+
+    public function test_forgot_password_aplica_throttle_tras_seis_intentos(): void
+    {
+        for ($i = 0; $i < 6; $i++) {
+            $this->post(route('password.email'), ['email' => 'nadie@example.com'])
+                ->assertStatus(302);
+        }
+
+        $this->post(route('password.email'), ['email' => 'nadie@example.com'])
+            ->assertStatus(429);
     }
 }

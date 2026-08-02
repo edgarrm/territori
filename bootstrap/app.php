@@ -1,10 +1,12 @@
 <?php
 
 use App\Http\Middleware\BloqueaRutasDeDesarrollo;
+use App\Http\Middleware\CabecerasSeguridad;
 use App\Http\Middleware\EnsureRol;
 use App\Http\Middleware\EnsureTenantSeleccionado;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\RequiereDobleFactor;
 use App\Http\Middleware\ResolveTenant;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -31,6 +33,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
 
         $middleware->web(append: [
+            CabecerasSeguridad::class,
             HandleAppearance::class,
             ResolveTenant::class,
             HandleInertiaRequests::class,
@@ -40,6 +43,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'rol' => EnsureRol::class,
             'tenant' => EnsureTenantSeleccionado::class,
+            '2fa' => RequiereDobleFactor::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

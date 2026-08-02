@@ -11,6 +11,7 @@ use Illuminate\Auth\Middleware\RedirectIfAuthenticated;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
@@ -38,6 +39,33 @@ class FortifyServiceProvider extends ServiceProvider
         $this->configureViews();
         $this->configureRateLimiting();
         $this->configureRedirectDeAutenticados();
+        $this->throttleRutasSensibles();
+    }
+
+    /**
+     * `forgot-password`, `reset-password`, `register` y `user/confirm-password`
+     * no tienen un limiter dedicado en `fortify.limiters` (solo existe para
+     * login, two-factor y passkeys), así que no hay forma de asignarles rate
+     * limit desde config. Se añade el middleware por nombre de ruta después de
+     * que Fortify las registra en su propio `boot()`, que corre antes que este
+     * (ver `bootstrap/providers.php`).
+     */
+    private function throttleRutasSensibles(): void
+    {
+        $rutas = Route::getRoutes();
+
+        // `RouteCollection::addLookups()` indexa por nombre en el momento de
+        // `add()`, antes de que el `->name(...)` encadenado se aplique al
+        // objeto Route — el índice por nombre queda vacío hasta el primer
+        // `refreshNameLookups()` (normalmente disparado en el primer dispatch,
+        // o por `route:cache`). Se fuerza aquí para poder resolver por nombre
+        // ahora mismo, y `route:cache` conserva el middleware añadido porque
+        // serializa la colección después de que toda la app arranca.
+        $rutas->refreshNameLookups();
+
+        foreach (['password.email', 'password.update', 'register.store', 'password.confirm.store'] as $nombre) {
+            $rutas->getByName($nombre)?->middleware('throttle:6,1');
+        }
     }
 
     /**

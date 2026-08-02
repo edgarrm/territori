@@ -23,7 +23,7 @@ class DashboardTest extends TestCase
     private function setupCampana(string $rol): array
     {
         $tenant = Tenant::factory()->create();
-        $user = User::factory()->create();
+        $user = User::factory()->withTwoFactor()->create();
         $membership = Membership::factory()->for($tenant)->for($user)->create(['rol' => $rol, 'activo' => true]);
         TenantContext::set($tenant);
 
