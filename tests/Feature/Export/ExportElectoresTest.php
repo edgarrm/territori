@@ -36,6 +36,17 @@ class ExportElectoresTest extends TestCase
         return [$tenant, $user, $membership, $seccion, $aviso];
     }
 
+    /**
+     * La ruta de export exige RequirePassword además de 2FA (P4): la sesión debe
+     * llevar la contraseña reconfirmada.
+     *
+     * @return array<string, mixed>
+     */
+    private function sesionDeExport(Tenant $tenant): array
+    {
+        return ['tenant_id' => $tenant->id, 'auth.password_confirmed_at' => time()];
+    }
+
     public function test_coordinador_exporta_csv_con_telefono_descifrado(): void
     {
         [$tenant, $user, $m, $s, $a] = $this->setupCampana('coordinador');
@@ -45,7 +56,7 @@ class ExportElectoresTest extends TestCase
             'telefono_hash' => Telefono::hash('5512345678'),
         ]);
 
-        $response = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+        $response = $this->actingAs($user)->withSession($this->sesionDeExport($tenant))
             ->get('/api/export/electores.csv');
         $response->assertOk();
         $csv = $response->streamedContent();
@@ -79,7 +90,7 @@ class ExportElectoresTest extends TestCase
         ]);
         $cancelado->delete();
 
-        $response = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+        $response = $this->actingAs($user)->withSession($this->sesionDeExport($tenant))
             ->get('/api/export/electores.csv');
         $csv = $response->streamedContent();
 
@@ -103,7 +114,7 @@ class ExportElectoresTest extends TestCase
             'telefono_hash' => Telefono::hash('5522220000'),
         ]);
 
-        $response = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+        $response = $this->actingAs($user)->withSession($this->sesionDeExport($tenant))
             ->get("/api/export/electores.csv?seccion_id={$s->id}");
         $csv = $response->streamedContent();
 

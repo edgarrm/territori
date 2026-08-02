@@ -6,6 +6,7 @@ use App\Actions\Electores\ActualizarElector;
 use App\Actions\Electores\CapturarElector;
 use App\Actions\Electores\VerificarElector;
 use App\Actions\Privacidad\CancelarElector;
+use App\Actions\Privacidad\RegistrarAcceso;
 use App\Exceptions\ElectorDuplicado;
 use App\Http\Controllers\Concerns\PresentaElectores;
 use App\Http\Requests\StoreElectorRequest;
@@ -24,13 +25,18 @@ class ElectorController extends Controller
 {
     use PresentaElectores;
 
-    public function store(StoreElectorRequest $request, CapturarElector $capturar): JsonResponse
+    public function store(StoreElectorRequest $request, CapturarElector $capturar, RegistrarAcceso $bitacora): JsonResponse
     {
         $membership = $request->user()->membershipEn(TenantContext::get());
 
         try {
             $elector = $capturar->handle($membership, $request->validated());
         } catch (ElectorDuplicado $e) {
+            // El 409 es un oráculo de enumeración por teléfono (A6): la respuesta
+            // no revela contra quién chocó, pero la bitácora sí, que es lo que
+            // permite detectar el barrido a posteriori.
+            $bitacora->handle('elector.duplicado', 'elector', $e->electorId);
+
             return response()->json([
                 'message' => 'Ya existe un contacto con ese teléfono en esta campaña.',
             ], 409);
@@ -44,12 +50,17 @@ class ElectorController extends Controller
      * que ResolveTenant en el stack web, así que un modelo tenant-scoped bindeado
      * implícitamente se resolvería sin TenantContext. Aquí ya hay tenant activo.
      */
-    public function show(string $elector): JsonResponse
+    public function show(string $elector, RegistrarAcceso $bitacora): JsonResponse
     {
         $modelo = Elector::query()->findOrFail($elector);
         $viewer = $this->miMembership();
 
         abort_unless($viewer !== null && $viewer->puedeAccederElector($modelo), 403);
+
+        $bitacora->handle('elector.consultado', 'elector', $modelo->id, [
+            'via' => 'api',
+            'pii_visible' => $this->puedeVerPii($modelo, $viewer),
+        ]);
 
         return response()->json($this->presentar($modelo, $viewer));
     }
@@ -105,12 +116,17 @@ class ElectorController extends Controller
     /**
      * Ficha del elector (Inertia): datos editables + timeline de interacciones.
      */
-    public function page(string $elector): Response
+    public function page(string $elector, RegistrarAcceso $bitacora): Response
     {
         $modelo = Elector::query()->with(['interacciones', 'redCiudadana'])->findOrFail($elector);
         $viewer = $this->miMembership();
 
         abort_unless($viewer !== null && $viewer->puedeAccederElector($modelo), 403);
+
+        $bitacora->handle('elector.consultado', 'elector', $modelo->id, [
+            'via' => 'ficha',
+            'pii_visible' => $this->puedeVerPii($modelo, $viewer),
+        ]);
 
         return Inertia::render('Elector', [
             'elector' => $this->presentar($modelo, $viewer),

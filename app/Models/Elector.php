@@ -76,6 +76,22 @@ class Elector extends Model
     ];
 
     /**
+     * Defensa en profundidad (P12): una serialización accidental del modelo
+     * (toArray/toJson, response()->json($elector), props de Inertia) emitiría la
+     * PII ya descifrada por los casts. Las vistas construyen su payload campo a
+     * campo y aplican el enmascarado, así que ocultarlos aquí no quita nada.
+     *
+     * @var list<string>
+     */
+    protected $hidden = [
+        'telefono',
+        'email',
+        'domicilio',
+        'telefono_hash',
+        'ubicacion',
+    ];
+
+    /**
      * @return array<string, string>
      */
     protected function casts(): array

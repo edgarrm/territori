@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Actions\Brigadistas\AsignarZonas;
 use App\Actions\Campana\InvitarMiembro;
+use App\Actions\Privacidad\RegistrarAcceso;
 use App\Http\Requests\StoreBrigadistaRequest;
 use App\Models\Membership;
 use App\Models\Seccion;
@@ -73,16 +74,17 @@ class BrigadistaController extends Controller
         return ($user !== null && $tenant !== null) ? $user->membershipEn($tenant) : null;
     }
 
-    public function store(StoreBrigadistaRequest $request, InvitarMiembro $invitar, AsignarZonas $asignar): JsonResponse|RedirectResponse
+    public function store(StoreBrigadistaRequest $request, InvitarMiembro $invitar, AsignarZonas $asignar, RegistrarAcceso $bitacora): JsonResponse|RedirectResponse
     {
         $tenant = TenantContext::get();
         $seccionIds = $request->validated('seccion_ids', []);
+        $alta = null;
 
         try {
             // Alta y zonas en una transacción: si las secciones no son válidas
             // (AsignarZonas lanza ValidationException), no queda un miembro sin
             // sus zonas (estado parcial).
-            DB::transaction(function () use ($invitar, $asignar, $tenant, $request, $seccionIds): void {
+            DB::transaction(function () use ($invitar, $asignar, $tenant, $request, $seccionIds, &$alta): void {
                 $miembro = $invitar->handle($tenant, [
                     'email' => $request->validated('email'),
                     'name' => $request->validated('name'),
@@ -94,6 +96,8 @@ class BrigadistaController extends Controller
                 if ($seccionIds !== [] && ($miembro->esBrigadista() || $miembro->esAnfitrion())) {
                     $asignar->handle($miembro, $seccionIds);
                 }
+
+                $alta = $miembro;
             });
         } catch (ValidationException $e) {
             // Secciones fuera del municipio: la transacción ya revirtió el alta.
@@ -102,10 +106,16 @@ class BrigadistaController extends Controller
             return response()->json(['message' => $e->getMessage()], 422);
         }
 
+        // Sin email ni nombre: quién es el miembro se resuelve por membership_id.
+        $bitacora->handle('miembro.alta', 'membership', $alta?->id, [
+            'rol' => $alta?->rol,
+            'secciones' => count($seccionIds),
+        ]);
+
         return response()->json(['ok' => true], 201);
     }
 
-    public function activo(Request $request, string $membership): JsonResponse
+    public function activo(Request $request, string $membership, RegistrarAcceso $bitacora): JsonResponse
     {
         $brigadista = $this->resolverBrigadista($membership);
         $activo = $request->boolean('activo');
@@ -115,6 +125,10 @@ class BrigadistaController extends Controller
         } catch (RuntimeException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }
+
+        $bitacora->handle($activo ? 'miembro.activado' : 'miembro.baja', 'membership', $brigadista->id, [
+            'rol' => $brigadista->rol,
+        ]);
 
         return response()->json(['activo' => $brigadista->fresh()->activo]);
     }

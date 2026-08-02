@@ -42,7 +42,7 @@ class CapturarElector
         $existente = Elector::query()->where('telefono_hash', $telefonoHash)->first();
 
         if ($existente !== null) {
-            throw new ElectorDuplicado($existente);
+            throw new ElectorDuplicado($existente->id);
         }
 
         $ubicacion = isset($datos['ubicacion'])

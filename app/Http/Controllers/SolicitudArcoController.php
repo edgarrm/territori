@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Actions\Privacidad\CancelarElector;
+use App\Actions\Privacidad\RegistrarAcceso;
 use App\Actions\Privacidad\RegistrarSolicitudArco;
 use App\Http\Requests\StoreSolicitudArcoRequest;
 use App\Models\Elector;
@@ -61,7 +62,7 @@ class SolicitudArcoController extends Controller
      * duplicar). Los demás derechos solo se acusan como atendidos: la resolución
      * (entregar datos, rectificar, dejar de contactar) se hace en la ficha.
      */
-    public function atendido(string $solicitud, CancelarElector $cancelar): JsonResponse
+    public function atendido(string $solicitud, CancelarElector $cancelar, RegistrarAcceso $bitacora): JsonResponse
     {
         // Resolución manual tenant-scoped: SubstituteBindings corre antes que
         // ResolveTenant, así que el route-model binding no ve el TenantContext.
@@ -74,10 +75,16 @@ class SolicitudArcoController extends Controller
         $elector = $solicitud->elector_id !== null ? Elector::query()->find($solicitud->elector_id) : null;
 
         if ($solicitud->tipo === 'cancelacion' && $elector !== null) {
+            // CancelarElector ya registra su propia entrada 'elector.cancelado'.
             $cancelar->handle($elector, $solicitud);
         } else {
             $solicitud->update(['estado' => 'atendida', 'atendido_en' => now()]);
         }
+
+        $bitacora->handle('arco.atendida', 'solicitud_arco', $solicitud->id, [
+            'tipo' => $solicitud->tipo,
+            'elector_id' => $solicitud->elector_id,
+        ]);
 
         return response()->json(['estado' => 'atendida']);
     }

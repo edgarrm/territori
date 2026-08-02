@@ -15,6 +15,7 @@ use App\Http\Controllers\MapaController;
 use App\Http\Controllers\RedCiudadanaController;
 use App\Http\Controllers\Settings\CampanaController as SettingsCampanaController;
 use App\Http\Controllers\SolicitudArcoController;
+use Illuminate\Auth\Middleware\RequirePassword;
 use Illuminate\Support\Facades\Route;
 
 Route::inertia('/', 'Welcome')->name('home');
@@ -94,7 +95,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
                 // Cancelación ARCO (baja lógica) y export: acciones de gestión.
                 Route::delete('api/electores/{elector}', [ElectorController::class, 'destroy'])->name('electores.destroy');
-                Route::get('api/export/electores.csv', [ExportController::class, 'electores'])->middleware('2fa')->name('export.electores');
+                // Export: el acceso masivo a PII más sensible de la app. Además
+                // de 2FA exige reconfirmar contraseña y lleva throttle propio
+                // (3/hora). El prefijo del throttle es obligatorio: sin él la
+                // clave se firma solo por user id y compartiría contador con el
+                // throttle:120,1 del grupo (ver A6).
+                Route::get('api/export/electores.csv', [ExportController::class, 'electores'])
+                    ->middleware(['2fa', RequirePassword::class, 'throttle:3,60,export-electores'])
+                    ->name('export.electores');
 
                 // Bandeja de solicitudes ARCO: listar y atender (LFPDPPP, ADR-004).
                 Route::get('solicitudes-arco', [SolicitudArcoController::class, 'index'])->middleware('2fa')->name('solicitudes-arco.index');
