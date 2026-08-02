@@ -33,7 +33,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
         // en ellas y leer el aviso de privacidad vigente para el consentimiento.
         Route::get('redes-ciudadanas', [RedCiudadanaController::class, 'index'])->name('redes-ciudadanas.index');
         Route::get('api/redes-ciudadanas/{red}/registros', [RedCiudadanaController::class, 'registros'])->name('redes-ciudadanas.registros');
-        Route::post('api/electores', [ElectorController::class, 'store'])->name('electores.store');
+        // Throttle propio, más estricto que el del grupo: limita el oráculo de
+        // enumeración del 409 por teléfono duplicado (A6). Prefijo distinto:
+        // el throttle sin nombre firma la clave solo por user id, así que sin
+        // esto compartiría contador con el throttle:120,1 del grupo y dispararía
+        // el límite de 20 mucho antes de las 20 peticiones reales.
+        Route::post('api/electores', [ElectorController::class, 'store'])->middleware('throttle:20,1,electores-store')->name('electores.store');
         Route::get('api/avisos-privacidad/vigente', [AvisoPrivacidadController::class, 'vigente'])->name('avisos.vigente');
 
         // Crear red / designar enlace: solo gestión.

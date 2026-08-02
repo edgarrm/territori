@@ -367,9 +367,16 @@ class LoteriaTest extends TestCase
     {
         [$tenant, $user, $membership, $municipio, $aviso] = $this->setupCampana();
         $seccion = Seccion::query()->where('municipio_id', $municipio->id)->where('numero', 1)->first();
+
+        // Otro brigadista del mismo tenant, creador de la lotería (acceso legítimo)
+        // pero que no capturó a estos electores.
+        $otro = User::factory()->create();
+        $otraMembership = Membership::create(['tenant_id' => $tenant->id, 'user_id' => $otro->id, 'rol' => 'brigadista']);
+
         $loteria = Loteria::factory()->create([
             'tenant_id' => $tenant->id,
             'membership_id' => $membership->id,
+            'creada_por_membership_id' => $otraMembership->id,
             'seccion_id' => $seccion->id,
         ]);
 
@@ -382,10 +389,6 @@ class LoteriaTest extends TestCase
                 'consentimiento' => true,
                 'aviso_privacidad_id' => $aviso->id,
             ])->assertCreated();
-
-        // Otro brigadista del mismo tenant que no capturó a estos electores.
-        $otro = User::factory()->create();
-        Membership::create(['tenant_id' => $tenant->id, 'user_id' => $otro->id, 'rol' => 'brigadista']);
 
         $response = $this->actingAs($otro)->withSession(['tenant_id' => $tenant->id])
             ->getJson("/api/loterias/{$loteria->id}/electores");

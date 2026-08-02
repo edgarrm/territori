@@ -366,6 +366,8 @@ class MapaController extends Controller
 
     public function definirMeta(Request $request, Seccion $seccion): JsonResponse
     {
+        $this->asegurarAccesoSeccion($seccion);
+
         $data = $request->validate([
             'fuente_meta' => ['required', 'in:manual,lista_nominal_pct'],
             'meta_capturas' => ['required_if:fuente_meta,manual', 'integer', 'min:0'],
@@ -398,8 +400,8 @@ class MapaController extends Controller
 
         $viewer = $this->miMembership();
 
-        abort_if(
-            $viewer !== null && ! $viewer->puedeCapturarEnSeccion($seccion->id),
+        abort_unless(
+            $viewer !== null && $viewer->puedeCapturarEnSeccion($seccion->id),
             403,
         );
     }

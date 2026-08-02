@@ -55,7 +55,6 @@ class Elector extends Model
     protected $table = 'electores';
 
     protected $fillable = [
-        'tenant_id',
         'seccion_id',
         'membership_id',
         'modo_captura',

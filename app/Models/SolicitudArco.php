@@ -34,7 +34,6 @@ class SolicitudArco extends Model
     public $timestamps = false;
 
     protected $fillable = [
-        'tenant_id',
         'elector_id',
         'tipo',
         'estado',

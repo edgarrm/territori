@@ -34,7 +34,6 @@ class RedCiudadana extends Model
     protected $table = 'redes_ciudadanas';
 
     protected $fillable = [
-        'tenant_id',
         'enlace_membership_id',
         'nombre',
         'descripcion',

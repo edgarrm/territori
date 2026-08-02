@@ -7,6 +7,7 @@ use App\Models\Membership;
 use App\Models\Municipio;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Support\Tenancy\TenantContext;
 use Database\Seeders\CartografiaSeeder;
 use Facebook\WebDriver\Chrome\ChromeOptions;
 use Facebook\WebDriver\Remote\DesiredCapabilities;
@@ -111,6 +112,11 @@ abstract class DuskTestCase extends BaseTestCase
         $tenant = Tenant::factory()->create(['municipio_id' => $municipio->id]);
         $user = User::factory()->create(['password' => bcrypt($password)]);
         $membership = Membership::factory()->for($tenant)->for($user)->create(['rol' => $rol, 'activo' => true]);
+        // El proceso de PHPUnit no comparte contenedor con el servidor HTTP que
+        // maneja el navegador: tenant_id ya no es fillable (A5), así que hay que
+        // fijar el TenantContext aquí para que los modelos tenant-scoped creados
+        // en este proceso (aviso y cualquier fixture adicional del test) lo tomen.
+        TenantContext::set($tenant);
         $aviso = AvisoPrivacidad::factory()->create(['tenant_id' => $tenant->id]);
 
         return [$tenant, $user, $membership, $municipio, $aviso];

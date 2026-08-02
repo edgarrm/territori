@@ -161,7 +161,9 @@ class BandejaArcoTest extends TestCase
     {
         [$tenant, $user] = $this->setupCampana('coordinador');
         $otro = Tenant::factory()->create();
+        TenantContext::set($otro);
         $solOtro = SolicitudArco::factory()->create(['tenant_id' => $otro->id, 'tipo' => 'acceso', 'estado' => 'pendiente']);
+        TenantContext::set($tenant);
 
         $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
             ->putJson("/api/solicitudes-arco/{$solOtro->id}/atendido")->assertNotFound();

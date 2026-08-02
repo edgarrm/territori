@@ -21,6 +21,20 @@ class ProfileUpdateTest extends TestCase
         $response->assertOk();
     }
 
+    /**
+     * A8: settings/profile exige email verificado, como el resto de settings.
+     */
+    public function test_profile_page_requiere_email_verificado()
+    {
+        $user = User::factory()->unverified()->create();
+
+        $response = $this
+            ->actingAs($user)
+            ->get(route('profile.edit'));
+
+        $response->assertRedirect(route('verification.notice'));
+    }
+
     public function test_profile_information_can_be_updated()
     {
         $user = User::factory()->create();

@@ -5,6 +5,7 @@ namespace App\Actions\Campana;
 use App\Models\Membership;
 use App\Models\Tenant;
 use App\Models\User;
+use Illuminate\Support\Facades\Password;
 use RuntimeException;
 
 class InvitarMiembro
@@ -28,6 +29,12 @@ class InvitarMiembro
             ['email' => $datos['email']],
             ['name' => $datos['name'] ?? $datos['email'], 'password' => bcrypt(str()->random(32))],
         );
+
+        // Cuenta nueva: la contraseña generada es indescifrable para el invitado,
+        // sin este link nunca podría iniciar sesión (A9).
+        if ($user->wasRecentlyCreated) {
+            Password::sendResetLink(['email' => $user->email]);
+        }
 
         return Membership::create([
             'tenant_id' => $tenant->id,

@@ -7,9 +7,11 @@ use App\Actions\Campana\InvitarMiembro;
 use App\Models\Membership;
 use App\Models\Tenant;
 use App\Models\User;
+use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
 
 class CampanaTest extends TestCase
@@ -59,6 +61,34 @@ class CampanaTest extends TestCase
         $this->assertSame('brigadista', $membership->rol);
         $this->assertSame(15, $membership->meta_diaria);
         $this->assertNotNull(User::where('email', 'nuevo@example.com')->first());
+    }
+
+    /**
+     * A9: sin este link el invitado (cuenta nueva, password aleatorio
+     * indescifrable) nunca podría iniciar sesión.
+     */
+    public function test_invitar_miembro_nuevo_envia_link_de_restablecer_password(): void
+    {
+        Notification::fake();
+        $tenant = Tenant::create(['nombre' => 'T', 'municipio_id' => $this->municipioId()]);
+
+        (new InvitarMiembro)->handle($tenant, ['email' => 'nuevo@example.com', 'rol' => 'brigadista']);
+
+        Notification::assertSentTo(
+            User::where('email', 'nuevo@example.com')->firstOrFail(),
+            ResetPassword::class,
+        );
+    }
+
+    public function test_invitar_miembro_existente_no_reenvia_link_de_password(): void
+    {
+        Notification::fake();
+        $tenant = Tenant::create(['nombre' => 'T', 'municipio_id' => $this->municipioId()]);
+        $existente = User::factory()->create(['email' => 'ya-existe@example.com']);
+
+        (new InvitarMiembro)->handle($tenant, ['email' => 'ya-existe@example.com', 'rol' => 'enlace']);
+
+        Notification::assertNothingSentTo($existente);
     }
 
     public function test_invitar_brigadista_sobre_el_limite_lanza_excepcion(): void

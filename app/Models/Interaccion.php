@@ -42,7 +42,6 @@ class Interaccion extends Model
     const UPDATED_AT = null;
 
     protected $fillable = [
-        'tenant_id',
         'elector_id',
         'membership_id',
         'tipo',

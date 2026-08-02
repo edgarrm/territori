@@ -2,9 +2,11 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Elector;
 use App\Support\Tenancy\TenantContext;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 class StoreSolicitudArcoRequest extends FormRequest
 {
@@ -33,5 +35,28 @@ class StoreSolicitudArcoRequest extends FormRequest
                 Rule::exists('electores', 'id')->where('tenant_id', $tenantId),
             ],
         ];
+    }
+
+    /**
+     * El tenant acota qué electores existen; el acceso por zona acota cuáles
+     * puede señalar este miembro en particular (mismo criterio que la ficha).
+     */
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(function (Validator $validator): void {
+            $electorId = $this->input('elector_id');
+
+            if ($electorId === null || $validator->errors()->has('elector_id')) {
+                return;
+            }
+
+            $tenant = TenantContext::get();
+            $viewer = $tenant !== null ? $this->user()?->membershipEn($tenant) : null;
+            $elector = Elector::query()->whereKey($electorId)->first();
+
+            if ($viewer === null || $elector === null || ! $viewer->puedeAccederElector($elector)) {
+                $validator->errors()->add('elector_id', 'No tienes acceso a este elector.');
+            }
+        });
     }
 }

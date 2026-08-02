@@ -88,12 +88,18 @@ class EventoController extends Controller
     public function asistentes(Request $request, string $evento): JsonResponse
     {
         $modelo = Evento::query()->findOrFail($evento);
+        $viewer = $request->user()?->membershipEn(TenantContext::get());
 
-        $asistentes = $this->paginarElectores(
-            Elector::query()->where('evento_id', $modelo->id),
-            $request,
-            $request->user()?->membershipEn(TenantContext::get()),
-        );
+        abort_if($viewer === null, 403);
+
+        $query = Elector::query()->where('evento_id', $modelo->id);
+
+        if (! $viewer->esGestion()) {
+            $seccionesIds = collect($viewer->seccionesDisponibles())->pluck('id')->all();
+            $query->whereIn('seccion_id', $seccionesIds);
+        }
+
+        $asistentes = $this->paginarElectores($query, $request, $viewer);
 
         return response()->json($asistentes);
     }

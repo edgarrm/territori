@@ -36,7 +36,6 @@ class Loteria extends Model
     protected $table = 'loterias';
 
     protected $fillable = [
-        'tenant_id',
         'membership_id',
         'creada_por_membership_id',
         'seccion_id',

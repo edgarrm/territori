@@ -115,4 +115,24 @@ class HardeningTest extends TestCase
         $this->post(route('password.email'), ['email' => 'nadie@example.com'])
             ->assertStatus(429);
     }
+
+    /**
+     * A6: throttle propio (20/min) en la captura de electores, más estricto que
+     * el 120/min compartido del grupo, para acotar el oráculo de enumeración del
+     * 409 por teléfono duplicado.
+     */
+    public function test_crear_elector_aplica_throttle_propio_tras_veinte_intentos(): void
+    {
+        [$user, $tenant] = $this->adminConCampana();
+
+        for ($i = 0; $i < 20; $i++) {
+            $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+                ->postJson('/api/electores', [])
+                ->assertStatus(422);
+        }
+
+        $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->postJson('/api/electores', [])
+            ->assertStatus(429);
+    }
 }

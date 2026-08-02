@@ -27,7 +27,6 @@ class AvisoPrivacidad extends Model
     protected $table = 'avisos_privacidad';
 
     protected $fillable = [
-        'tenant_id',
         'version',
         'texto',
         'vigente_desde',

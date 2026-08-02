@@ -112,6 +112,8 @@ class VisibilidadPiiTest extends TestCase
         [$tenant, , $seccion, $aviso] = $this->setupCampana();
         [$user, $membership] = $this->miembro($tenant, 'brigadista');
         [, $otro] = $this->miembro($tenant, 'brigadista');
+        // El viewer necesita la sección asignada para ver la lista del evento (A2).
+        $membership->secciones()->attach($seccion->id, ['tenant_id' => $tenant->id]);
 
         $evento = Evento::factory()->create(['tenant_id' => $tenant->id, 'seccion_id' => $seccion->id]);
         $propio = $this->elector($tenant, $membership, $seccion, $aviso, '5511112222', 'Mi Calle 1');

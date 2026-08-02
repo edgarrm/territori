@@ -213,7 +213,7 @@ class ElectorController extends Controller
         abort_if($seccion->municipio_id !== TenantContext::get()?->municipio_id, 404);
 
         // El brigadista solo consulta electores de sus zonas asignadas.
-        abort_if($viewer !== null && ! $viewer->puedeCapturarEnSeccion($seccion->id), 403);
+        abort_unless($viewer !== null && $viewer->puedeCapturarEnSeccion($seccion->id), 403);
 
         $electores = $this->paginarElectores(
             Elector::query()->where('seccion_id', $seccion->id),
