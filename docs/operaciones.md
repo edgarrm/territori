@@ -82,26 +82,13 @@ El job fija el `TenantContext` desde su `tenant_id` (los jobs no heredan el tena
 
 ## ⚠️ Checklist de hardening de producción
 
-`.env.example` viene orientado a desarrollo (`APP_DEBUG=true`, `APP_ENV=local`, `SESSION_ENCRYPT=false`, `DB_CONNECTION=sqlite`). **Copiarlo tal cual a producción filtra stack traces con datos sensibles.** En el `.env` de producción, verifica:
+`.env.example` viene orientado a desarrollo (`APP_DEBUG=true`, `APP_ENV=local`, `SESSION_ENCRYPT=false`, `DB_CONNECTION=sqlite`). **Copiarlo tal cual a producción filtra stack traces con datos sensibles.**
 
-```dotenv
-APP_ENV=production
-APP_DEBUG=false                 # crítico: evita exponer stack traces / PII en errores
-APP_KEY=base64:...              # generada (php artisan key:generate); NUNCA vacía ni en el repo
-APP_URL=https://...             # dominio real con HTTPS
-
-DB_CONNECTION=pgsql             # nunca sqlite en prod
-
-SESSION_SECURE_COOKIE=true      # obligatorio: la app no arranca sin esto en prod
-SESSION_ENCRYPT=true            # obligatorio: la app no arranca sin esto en prod
-SESSION_SAME_SITE=strict
-
-TRUSTED_PROXIES=10.0.0.0/8      # CIDR del balanceador; NUNCA '*' en producción
-DB_SSLMODE=require              # 'prefer' acepta en silencio una conexión en claro
-
-LOG_LEVEL=warning               # no 'debug' en prod
-LOG_STACK=daily                 # 'single' crece sin rotar
-```
+La lista completa de variables de seguridad vive en un solo sitio: el bloque
+**`# production variables`** al final de [`.env.example`](../.env.example). Está
+comentado para que copiar el archivo siga dando un entorno de desarrollo que arranca;
+al montar producción se copia ese bloque y se descomenta. Crece con cada fase de la
+remediación de seguridad, así que consúltalo ahí en vez de duplicarlo aquí.
 
 `AppServiceProvider::verificarConfiguracionDeProduccion()` aborta el arranque si en
 producción `APP_DEBUG` está activo o falta `SESSION_SECURE_COOKIE`/`SESSION_ENCRYPT`.
