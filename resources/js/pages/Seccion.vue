@@ -148,7 +148,9 @@ const ESCALA_MOVILIZACION_VERIFICADA = [
 function bucketMovilizacionVerificada(valor: number) {
     return (
         ESCALA_MOVILIZACION_VERIFICADA.find((b) => valor >= b.min) ??
-        ESCALA_MOVILIZACION_VERIFICADA[ESCALA_MOVILIZACION_VERIFICADA.length - 1]
+        ESCALA_MOVILIZACION_VERIFICADA[
+            ESCALA_MOVILIZACION_VERIFICADA.length - 1
+        ]
     );
 }
 
@@ -351,8 +353,8 @@ async function guardar() {
 <template>
     <Head :title="`Sección ${seccion.numero}`" />
 
-    <div class="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-4 p-4">
-        <div class="flex items-center justify-between">
+    <div class="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-4 p-3 sm:p-4">
+        <div class="flex flex-wrap items-center justify-between gap-2">
             <h1 class="flex items-center gap-1.5 text-xl font-semibold">
                 Sección {{ seccion.numero }}
                 <span
@@ -370,9 +372,9 @@ async function guardar() {
         <!-- Estadísticas -->
         <section
             v-if="resumen"
-            class="rounded-xl border border-sidebar-border/70 bg-card p-4 dark:border-sidebar-border"
+            class="rounded-xl border border-sidebar-border/70 bg-card p-3 sm:p-4 dark:border-sidebar-border"
         >
-            <div class="flex items-center justify-between">
+            <div class="flex flex-wrap items-start justify-between gap-2">
                 <h2 class="text-base font-semibold">Cobertura</h2>
                 <span
                     class="rounded-full px-2.5 py-0.5 text-xs font-semibold text-white"
@@ -448,7 +450,7 @@ async function guardar() {
                     </dt>
                     <dd class="shrink-0">
                         <span
-                            class="whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold text-white"
+                            class="rounded-full px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap text-white"
                             :style="{
                                 backgroundColor: bucketMovilizacionVerificada(
                                     resumen.movilizacion_verificada,
@@ -505,9 +507,9 @@ async function guardar() {
         <!-- Elección 2024 -->
         <section
             v-if="resumen?.electoral_2024"
-            class="rounded-xl border border-sidebar-border/70 bg-card p-4 dark:border-sidebar-border"
+            class="rounded-xl border border-sidebar-border/70 bg-card p-3 sm:p-4 dark:border-sidebar-border"
         >
-            <div class="flex items-center justify-between">
+            <div class="flex flex-wrap items-start justify-between gap-2">
                 <h2 class="text-base font-semibold">Elección 2024</h2>
                 <span
                     v-if="
@@ -524,8 +526,8 @@ async function guardar() {
                     <span
                         v-if="
                             formatoDiferenciaCompetitividad(
-                                page.props.campana?.modo_calculo_competitividad ??
-                                    'votos',
+                                page.props.campana
+                                    ?.modo_calculo_competitividad ?? 'votos',
                                 resumen.electoral_2024.diferencia_votos,
                                 resumen.electoral_2024.diferencia_pct,
                             )
@@ -653,7 +655,7 @@ async function guardar() {
         <!-- Votos por partido y coalición 2024 (F3) -->
         <section
             v-if="resumen?.desglose_2024"
-            class="rounded-xl border border-sidebar-border/70 bg-card p-4 dark:border-sidebar-border"
+            class="rounded-xl border border-sidebar-border/70 bg-card p-3 sm:p-4 dark:border-sidebar-border"
         >
             <h2 class="text-base font-semibold">
                 Votos por partido y coalición (2024)
@@ -710,14 +712,14 @@ async function guardar() {
                         />
                     </div>
 
-                    <div class="mt-2 space-y-1 pl-4">
+                    <div class="mt-2 space-y-1 pl-2 sm:pl-4">
                         <div
                             v-for="opcion in bloque.opciones"
                             :key="opcion.clave"
                             class="flex items-center gap-2 text-xs"
                         >
                             <span
-                                class="w-32 shrink-0 truncate text-muted-foreground"
+                                class="w-24 shrink-0 truncate text-muted-foreground sm:w-32"
                             >
                                 {{ etiquetaOpcion(opcion) }}
                             </span>
@@ -733,7 +735,7 @@ async function guardar() {
                                 />
                             </div>
                             <span
-                                class="w-10 shrink-0 text-right font-medium tabular-nums"
+                                class="w-12 shrink-0 text-right font-medium tabular-nums"
                             >
                                 {{ fmt(opcion.votos) }}
                             </span>
@@ -755,9 +757,9 @@ async function guardar() {
         <!-- Perfil por edad -->
         <section
             v-if="resumen?.demografia"
-            class="rounded-xl border border-sidebar-border/70 bg-card p-4 dark:border-sidebar-border"
+            class="rounded-xl border border-sidebar-border/70 bg-card p-3 sm:p-4 dark:border-sidebar-border"
         >
-            <div class="flex items-center justify-between">
+            <div class="flex flex-wrap items-start justify-between gap-2">
                 <h2 class="text-base font-semibold">Perfil por edad (2024)</h2>
                 <span
                     class="rounded-full px-2.5 py-0.5 text-xs font-semibold text-white"
@@ -780,9 +782,9 @@ async function guardar() {
                         (g) => resumen?.demografia?.grupos_edad?.[g],
                     )"
                     :key="grupo"
-                    class="flex items-center gap-3 text-sm"
+                    class="flex items-center gap-2 text-sm sm:gap-3"
                 >
-                    <span class="w-12 shrink-0 text-muted-foreground">{{
+                    <span class="w-10 shrink-0 text-muted-foreground sm:w-12">{{
                         grupo
                     }}</span>
                     <div
@@ -801,7 +803,7 @@ async function guardar() {
                         />
                     </div>
                     <span
-                        class="w-24 shrink-0 text-right text-xs text-muted-foreground tabular-nums"
+                        class="w-20 shrink-0 text-right text-[0.7rem] text-muted-foreground tabular-nums sm:w-24 sm:text-xs"
                     >
                         {{
                             resumen.demografia.grupos_edad[
@@ -867,11 +869,13 @@ async function guardar() {
 
         <!-- Lista de electores -->
         <section
-            class="rounded-xl border border-sidebar-border/70 bg-card p-4 dark:border-sidebar-border"
+            class="rounded-xl border border-sidebar-border/70 bg-card p-3 sm:p-4 dark:border-sidebar-border"
         >
-            <div class="mb-3 flex items-center justify-between">
+            <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <h2 class="text-base font-semibold">Electores</h2>
-                <Button @click="abrirModal">Agregar elector</Button>
+                <Button class="w-full sm:w-auto" @click="abrirModal">
+                    Agregar elector
+                </Button>
             </div>
 
             <ListaCapturados

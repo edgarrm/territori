@@ -34,4 +34,32 @@ class DashboardBrowserTest extends DuskTestCase
                 ->assertPresent('@dashboard-seguimientos');
         });
     }
+
+    /**
+     * En móvil los KPIs siguen visibles (dos columnas) y nada desborda a lo
+     * ancho de la pantalla.
+     */
+    public function test_el_dashboard_es_legible_en_movil(): void
+    {
+        [$tenant, $user, , $municipio] = $this->crearCampana('admin');
+        $seccion = Seccion::query()->where('municipio_id', $municipio->id)->firstOrFail();
+        CoberturaSeccion::factory()->create([
+            'tenant_id' => $tenant->id,
+            'seccion_id' => $seccion->id,
+            'capturados' => 42,
+            'meta' => 100,
+        ]);
+
+        $this->browse(function (Browser $browser) use ($user) {
+            $browser->loginAs($user)
+                ->resize(...$this->viewportMovil)
+                ->visit('/dashboard')
+                ->waitFor('@dashboard-kpis')
+                ->assertVisible('@kpi-capturados')
+                ->assertSeeIn('@kpi-capturados', '42')
+                ->assertSee('Mapa de cobertura');
+
+            $this->assertSinScrollHorizontal($browser);
+        });
+    }
 }

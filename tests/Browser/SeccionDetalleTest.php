@@ -3,6 +3,7 @@
 namespace Tests\Browser;
 
 use App\Models\Coalicion;
+use App\Models\Elector;
 use App\Models\EstadisticaSeccion;
 use App\Models\Partido;
 use App\Models\Seccion;
@@ -95,6 +96,34 @@ class SeccionDetalleTest extends DuskTestCase
 
             $browser->press('Agregar elector')
                 ->waitForText("Agregar elector a la sección {$seccion->numero}");
+        });
+    }
+
+    /**
+     * En móvil el detalle cabe a lo ancho y la lista de electores se muestra
+     * como tarjetas (la tabla queda oculta debajo de `sm`).
+     */
+    public function test_el_detalle_es_legible_en_movil(): void
+    {
+        [$tenant, $user, $membership, $municipio] = $this->crearCampana('admin');
+        $seccion = Seccion::query()->where('municipio_id', $municipio->id)->orderBy('numero')->firstOrFail();
+        Elector::factory()->create([
+            'tenant_id' => $tenant->id,
+            'seccion_id' => $seccion->id,
+            'membership_id' => $membership->id,
+            'nombre' => 'Juana Pérez',
+        ]);
+
+        $this->browse(function (Browser $browser) use ($user, $seccion) {
+            $browser->loginAs($user)
+                ->resize(...$this->viewportMovil)
+                ->visit("/secciones/{$seccion->id}")
+                ->waitForText("Sección {$seccion->numero}")
+                ->waitForText('Cobertura')
+                ->waitForText('Juana Pérez')
+                ->assertMissing('table');
+
+            $this->assertSinScrollHorizontal($browser);
         });
     }
 }

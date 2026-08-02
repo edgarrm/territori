@@ -13,6 +13,7 @@ use Facebook\WebDriver\Remote\DesiredCapabilities;
 use Facebook\WebDriver\Remote\RemoteWebDriver;
 use Illuminate\Foundation\Testing\DatabaseTruncation;
 use Illuminate\Support\Collection;
+use Laravel\Dusk\Browser;
 use Laravel\Dusk\TestCase as BaseTestCase;
 use PHPUnit\Framework\Attributes\BeforeClass;
 
@@ -59,6 +60,30 @@ abstract class DuskTestCase extends BaseTestCase
             DesiredCapabilities::chrome()->setCapability(
                 ChromeOptions::CAPABILITY, $options
             )
+        );
+    }
+
+    /**
+     * Viewport de teléfono (iPhone 14) para las pruebas de responsividad.
+     *
+     * @var array{0: int, 1: int}
+     */
+    protected array $viewportMovil = [390, 844];
+
+    /**
+     * Falla si la página desborda a lo ancho: en móvil eso obliga al usuario a
+     * hacer scroll horizontal para leer el contenido.
+     */
+    protected function assertSinScrollHorizontal(Browser $browser): void
+    {
+        $desborde = $browser->script(
+            'return document.documentElement.scrollWidth - window.innerWidth;'
+        )[0];
+
+        $this->assertLessThanOrEqual(
+            1,
+            $desborde,
+            "La página desborda {$desborde}px a lo ancho del viewport."
         );
     }
 
