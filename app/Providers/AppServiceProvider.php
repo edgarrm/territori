@@ -77,10 +77,15 @@ class AppServiceProvider extends ServiceProvider
     {
         $proxies = config('app.trusted_proxies');
 
-        TrustProxies::at(is_string($proxies) && str_contains($proxies, ',')
-            ? array_map(trim(...), explode(',', $proxies))
-            : $proxies,
-        );
+        // `null` (sin TRUSTED_PROXIES) se traduce a lista vacía, no se omite la
+        // llamada: `TrustProxies::at()` no acepta null, y dejar el estático sin
+        // fijar arrastraría el valor de un arranque anterior dentro del mismo
+        // proceso (los tests reconfiguran el provider en caliente).
+        TrustProxies::at(match (true) {
+            $proxies === null || $proxies === '' => [],
+            is_string($proxies) && str_contains($proxies, ',') => array_map(trim(...), explode(',', $proxies)),
+            default => $proxies,
+        });
 
         TrustProxies::withHeaders(
             Request::HEADER_X_FORWARDED_FOR
@@ -116,6 +121,13 @@ class AppServiceProvider extends ServiceProvider
 
         if (config('session.encrypt') !== true) {
             $problemas[] = 'SESSION_ENCRYPT debe ser true (payload de sesión cifrado en reposo).';
+        }
+
+        $proxies = config('app.trusted_proxies');
+
+        if ($proxies === null || $proxies === '' || $proxies === '*') {
+            $problemas[] = 'TRUSTED_PROXIES debe ser el CIDR real del balanceador, nunca vacío ni "*" '
+                .'(con "*" cualquier cliente falsea su IP vía X-Forwarded-For y se salta el rate limit de login).';
         }
 
         if ($problemas !== []) {

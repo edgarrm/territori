@@ -18,6 +18,7 @@ use Illuminate\Support\Str;
  * @property int|null $partido_id
  * @property string $plan
  * @property string $estado
+ * @property Carbon|null $cerrada_en
  * @property int|null $limite_brigadistas
  * @property string|null $marca_nombre
  * @property string|null $marca_logo_url
@@ -87,7 +88,25 @@ class Tenant extends Model
     {
         return [
             'settings' => 'array',
+            'cerrada_en' => 'datetime',
         ];
+    }
+
+    /**
+     * Cierra la campaña: se agota la finalidad del tratamiento y arranca el
+     * plazo de retención (LFPDPPP art. 11) que aplica `territori:purgar-datos`.
+     *
+     * `cerrada_en` es deliberadamente distinto de `updated_at`: cualquier otra
+     * escritura sobre el tenant movería `updated_at` y aplazaría el borrado.
+     * Idempotente: recerrar no reinicia el reloj.
+     */
+    public function cerrar(): void
+    {
+        if ($this->estado === 'cerrada') {
+            return;
+        }
+
+        $this->forceFill(['estado' => 'cerrada', 'cerrada_en' => now()])->save();
     }
 
     /**

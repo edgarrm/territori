@@ -5,6 +5,7 @@ namespace Tests\Feature\Privacidad;
 use App\Models\AvisoPrivacidad;
 use App\Models\Elector;
 use App\Models\Evento;
+use App\Models\Interaccion;
 use App\Models\Membership;
 use App\Models\Municipio;
 use App\Models\Seccion;
@@ -198,5 +199,98 @@ class VisibilidadPiiTest extends TestCase
         $this->assertSame('5511112222', $porId[$propio->id]['telefono']);
         $this->assertNotSame('5599998888', $porId[$ajeno->id]['telefono']);
         $this->assertStringContainsString('8888', $porId[$ajeno->id]['telefono']);
+    }
+
+    /**
+     * El acceso al timeline se decide por zona (`puedeAccederElector`), pero la
+     * visibilidad de la PII se decide por propiedad (`puedeVerPii`). El timeline
+     * entregaba `nota` en claro a un brigadista que veía `observaciones`
+     * enmascaradas del mismo elector: la nota es texto libre del equipo de campo
+     * y es donde más caen datos del art. 9.
+     */
+    public function test_brigadista_no_ve_la_nota_del_timeline_de_un_elector_ajeno(): void
+    {
+        [$tenant, , $seccion, $aviso] = $this->setupCampana();
+        [$user, $membership] = $this->miembro($tenant, 'brigadista');
+        [, $otro] = $this->miembro($tenant, 'brigadista');
+        $membership->secciones()->attach($seccion->id, ['tenant_id' => $tenant->id]);
+
+        $elector = $this->elector($tenant, $otro, $seccion, $aviso, '5511112222', 'Calle Falsa 123');
+        Interaccion::create([
+            'elector_id' => $elector->id,
+            'membership_id' => $otro->id,
+            'tipo' => 'visita',
+            'nota' => 'Padece diabetes, atender por la tarde',
+            'fecha' => now(),
+        ]);
+
+        $response = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->getJson("/api/electores/{$elector->id}/interacciones");
+
+        $response->assertOk();
+        $this->assertStringNotContainsString('diabetes', json_encode($response->json()));
+    }
+
+    public function test_brigadista_si_ve_la_nota_del_timeline_de_su_propio_elector(): void
+    {
+        [$tenant, , $seccion, $aviso] = $this->setupCampana();
+        [$user, $membership] = $this->miembro($tenant, 'brigadista');
+        $membership->secciones()->attach($seccion->id, ['tenant_id' => $tenant->id]);
+
+        $elector = $this->elector($tenant, $membership, $seccion, $aviso, '5511112222', 'Calle Falsa 123');
+        Interaccion::create([
+            'elector_id' => $elector->id,
+            'membership_id' => $membership->id,
+            'tipo' => 'visita',
+            'nota' => 'Quedó de apoyar el sábado',
+            'fecha' => now(),
+        ]);
+
+        $response = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->getJson("/api/electores/{$elector->id}/interacciones");
+
+        $response->assertOk();
+        $response->assertJsonPath('0.nota', 'Quedó de apoyar el sábado');
+    }
+
+    /**
+     * La agenda devolvía el nombre completo del elector cuando las listas de
+     * capturados ya lo reducían a iniciales (P6): mismo dato, otra superficie.
+     */
+    public function test_la_agenda_enmascara_el_nombre_de_un_elector_ajeno(): void
+    {
+        [$tenant, , $seccion, $aviso] = $this->setupCampana();
+        [$user, $membership] = $this->miembro($tenant, 'coordinador');
+        [, $otro] = $this->miembro($tenant, 'brigadista');
+
+        $elector = $this->elector($tenant, $otro, $seccion, $aviso, '5511112222', 'Calle Falsa 123');
+        $elector->update(['nombre' => 'Juan Carlos Pérez García']);
+
+        Interaccion::create([
+            'elector_id' => $elector->id,
+            'membership_id' => $otro->id,
+            'tipo' => 'llamada',
+            'nota' => 'Sin contestar',
+            'fecha' => now()->subDays(3),
+            'proximo_seguimiento' => now()->subDay()->toDateString(),
+        ]);
+
+        // El coordinador es gestión: ve la PII completa.
+        $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->getJson('/api/agenda')
+            ->assertOk()
+            ->assertJsonPath('data.0.elector.nombre', 'Juan Carlos Pérez García');
+
+        // El brigadista ajeno con la zona asignada, no: mismo criterio que las listas.
+        [$brigadista, $suMembership] = $this->miembro($tenant, 'brigadista');
+        $suMembership->secciones()->attach($seccion->id, ['tenant_id' => $tenant->id]);
+        Interaccion::query()->update(['membership_id' => $suMembership->id]);
+
+        $response = $this->actingAs($brigadista)->withSession(['tenant_id' => $tenant->id])
+            ->getJson('/api/agenda');
+
+        $response->assertOk();
+        $this->assertNotSame('Juan Carlos Pérez García', $response->json('data.0.elector.nombre'));
+        $this->assertSame('J. C. Pérez G.', $response->json('data.0.elector.nombre'));
     }
 }

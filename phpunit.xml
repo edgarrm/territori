@@ -34,6 +34,10 @@
         <env name="REGISTRO_PUBLICO" value="true"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>
+        <!-- Simula el despliegue real detrás de un balanceador: sin esto no hay
+             proxies de confianza (el default de config/app.php ya no es '*') y
+             X-Forwarded-Proto se ignoraría en los tests. -->
+        <env name="TRUSTED_PROXIES" value="127.0.0.1"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>

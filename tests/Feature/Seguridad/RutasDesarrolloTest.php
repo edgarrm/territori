@@ -84,6 +84,58 @@ class RutasDesarrolloTest extends TestCase
         $this->assertTrue(request()->isSecure());
     }
 
+    /**
+     * El default de `trusted_proxies` era '*', que falla abierto: con él
+     * cualquier cliente cuenta como proxy y `X-Forwarded-For` decide la IP que
+     * ve la app. El limiter de login firma por `email|ip`, así que rotar la
+     * cabecera daba intentos ilimitados; y la IP de `bitacora_accesos` — la
+     * traza de accesos a datos personales — quedaba escrita por el atacante.
+     */
+    public function test_x_forwarded_for_no_altera_la_ip_sin_proxies_de_confianza(): void
+    {
+        config(['app.trusted_proxies' => null]);
+        (new AppServiceProvider(app()))->boot();
+
+        $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.7'])
+            ->withHeaders(['X-Forwarded-For' => '198.51.100.4'])
+            ->get(route('login'))
+            ->assertOk();
+
+        $this->assertSame('203.0.113.7', request()->ip());
+    }
+
+    public function test_produccion_no_arranca_con_proxies_comodin(): void
+    {
+        app()->detectEnvironment(fn (): string => 'production');
+        config([
+            'app.debug' => false,
+            'session.secure' => true,
+            'session.encrypt' => true,
+            'app.trusted_proxies' => '*',
+        ]);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('TRUSTED_PROXIES');
+
+        (new AppServiceProvider(app()))->boot();
+    }
+
+    public function test_produccion_no_arranca_sin_proxies_de_confianza(): void
+    {
+        app()->detectEnvironment(fn (): string => 'production');
+        config([
+            'app.debug' => false,
+            'session.secure' => true,
+            'session.encrypt' => true,
+            'app.trusted_proxies' => null,
+        ]);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('TRUSTED_PROXIES');
+
+        (new AppServiceProvider(app()))->boot();
+    }
+
     public function test_produccion_no_arranca_sin_cookie_de_sesion_segura(): void
     {
         app()->detectEnvironment(fn (): string => 'production');

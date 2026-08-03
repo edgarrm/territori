@@ -18,6 +18,8 @@ class SeccionDetalleTest extends DuskTestCase
     public function test_detalle_de_seccion_carga(): void
     {
         [, $user, , $municipio] = $this->crearCampana('admin');
+        // El detalle de sección exige 2FA: incluye la lista de electores (PII).
+        $this->confirmarDobleFactor($user);
         $seccion = Seccion::query()->where('municipio_id', $municipio->id)->orderBy('numero')->firstOrFail();
 
         $this->browse(function (Browser $browser) use ($user, $seccion) {
@@ -36,6 +38,8 @@ class SeccionDetalleTest extends DuskTestCase
     public function test_card_de_desglose_aparece_entre_eleccion_y_perfil_por_edad(): void
     {
         [$tenant, $user, , $municipio] = $this->crearCampana('admin');
+        // El detalle de sección exige 2FA: incluye la lista de electores (PII).
+        $this->confirmarDobleFactor($user);
         $partido = Partido::factory()->create(['siglas' => 'MORENA']);
         $tenant->update(['partido_id' => $partido->id]);
         Coalicion::factory()->create(['nombre' => 'Sigamos Haciendo Historia', 'anio' => 2024, 'partidos' => ['MORENA', 'PVEM']]);
@@ -74,6 +78,8 @@ class SeccionDetalleTest extends DuskTestCase
     public function test_boton_agregar_elector_vive_en_la_card_electores(): void
     {
         [, $user, , $municipio] = $this->crearCampana('admin');
+        // El detalle de sección exige 2FA: incluye la lista de electores (PII).
+        $this->confirmarDobleFactor($user);
         $seccion = Seccion::query()->where('municipio_id', $municipio->id)->orderBy('numero')->firstOrFail();
 
         $this->browse(function (Browser $browser) use ($user, $seccion) {
@@ -106,6 +112,8 @@ class SeccionDetalleTest extends DuskTestCase
     public function test_el_detalle_es_legible_en_movil(): void
     {
         [$tenant, $user, $membership, $municipio] = $this->crearCampana('admin');
+        // El detalle de sección exige 2FA: incluye la lista de electores (PII).
+        $this->confirmarDobleFactor($user);
         $seccion = Seccion::query()->where('municipio_id', $municipio->id)->orderBy('numero')->firstOrFail();
         Elector::factory()->create([
             'tenant_id' => $tenant->id,

@@ -23,7 +23,8 @@ class SeccionDetalleTest extends TestCase
     {
         $municipio = Municipio::factory()->create();
         $tenant = Tenant::factory()->create(['municipio_id' => $municipio->id]);
-        $user = User::factory()->create();
+        // 2FA confirmada: /api/secciones/{s}/electores la exige (trae PII).
+        $user = User::factory()->withTwoFactor()->create();
         $membership = Membership::create(['tenant_id' => $tenant->id, 'user_id' => $user->id, 'rol' => $rol]);
 
         return [$tenant, $user, $municipio, $membership];

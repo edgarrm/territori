@@ -100,9 +100,10 @@ class PurgarDatosCommand extends Command
             return 0;
         }
 
-        // No hay columna `cerrada_en`: `updated_at` es el momento en que se
-        // marcó el cierre (nada más muta el tenant después).
-        if ($tenant->updated_at === null || $tenant->updated_at->gt(now()->subDays($dias))) {
+        // `cerrada_en`, no `updated_at`: cualquier escritura sobre el tenant
+        // (guardar la configuración del análisis electoral, por ejemplo) movía
+        // `updated_at` y aplazaba el borrado de la PII sin que nadie lo notara.
+        if ($tenant->cerrada_en === null || $tenant->cerrada_en->gt(now()->subDays($dias))) {
             return 0;
         }
 

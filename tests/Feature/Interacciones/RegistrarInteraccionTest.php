@@ -78,6 +78,27 @@ class RegistrarInteraccionTest extends TestCase
         $response->assertStatus(422);
     }
 
+    /**
+     * `nota` no tenía tope y la columna es `text`: se comprobó que un solo POST
+     * escribía 2 MB. Cualquier miembro de campo podía inflar la base y los
+     * respaldos cifrados a voluntad. Mismo límite que `observaciones`.
+     */
+    public function test_nota_tiene_tope_de_longitud(): void
+    {
+        [$tenant, $user, , $elector] = $this->setupConElector();
+
+        $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->postJson("/api/electores/{$elector->id}/interacciones", [
+                'tipo' => 'nota',
+                'nota' => str_repeat('A', 2001),
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('nota');
+
+        TenantContext::set($tenant);
+        $this->assertSame(0, Interaccion::query()->count());
+    }
+
     public function test_fecha_por_defecto_es_ahora(): void
     {
         [$tenant, $user, , $elector] = $this->setupConElector();

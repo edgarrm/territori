@@ -18,7 +18,7 @@ use Illuminate\Support\Carbon;
  * @property int $id
  * @property int $tenant_id
  * @property int $elector_id
- * @property int $membership_id
+ * @property int|null $membership_id
  * @property string $tipo
  * @property string|null $resultado
  * @property string|null $nota

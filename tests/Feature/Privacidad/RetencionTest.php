@@ -115,7 +115,7 @@ class RetencionTest extends TestCase
             'membership_id' => $m->id, 'nota' => 'Prefiere que le llamen de noche',
         ]);
 
-        Tenant::query()->whereKey($tenant->id)->update(['updated_at' => now()->subDays(365)]);
+        Tenant::query()->whereKey($tenant->id)->update(['cerrada_en' => now()->subDays(365)]);
 
         $this->artisan('territori:purgar-datos')->assertSuccessful();
 
@@ -132,7 +132,50 @@ class RetencionTest extends TestCase
     {
         [$tenant, $m, $s, $a] = $this->setupCampana('cerrada');
         $elector = $this->elector($tenant, $m, $s, $a, '5511112222');
-        Tenant::query()->whereKey($tenant->id)->update(['updated_at' => now()->subDays(5)]);
+        Tenant::query()->whereKey($tenant->id)->update(['cerrada_en' => now()->subDays(5)]);
+
+        $this->artisan('territori:purgar-datos')->assertSuccessful();
+
+        TenantContext::set($tenant);
+        $this->assertNull(Elector::query()->find($elector->id)->deleted_at);
+    }
+
+    /**
+     * El plazo se medía con `tenants.updated_at` bajo la premisa de que nada
+     * más muta el tenant tras cerrarlo. Dejó de ser cierto al añadir la
+     * configuración del análisis electoral: guardar cualquier ajuste en una
+     * campaña cerrada aplazaba 180 días más el borrado de la PII, en silencio.
+     */
+    public function test_editar_la_configuracion_no_aplaza_la_purga_de_una_campana_cerrada(): void
+    {
+        [$tenant, $m, $s, $a] = $this->setupCampana('cerrada');
+        $elector = $this->elector($tenant, $m, $s, $a, '5511112222');
+        Tenant::query()->whereKey($tenant->id)->update(['cerrada_en' => now()->subDays(365)]);
+
+        // Cualquier escritura posterior sobre el tenant mueve `updated_at`.
+        $tenant->refresh()->update(['settings' => ['umbral_alfa' => 1234]]);
+        $this->assertTrue($tenant->refresh()->updated_at->isToday());
+
+        $this->artisan('territori:purgar-datos')->assertSuccessful();
+
+        TenantContext::set($tenant);
+        $this->assertNotNull(Elector::withTrashed()->find($elector->id)->deleted_at);
+    }
+
+    /**
+     * Una campaña cerrada antes de que existiera `cerrada_en` no tiene fecha de
+     * cierre; sin ella no se purga (fail-closed): más vale conservar de más que
+     * borrar datos por una fecha que nadie registró. La migración rellena el
+     * valor con `updated_at` para las que ya estaban cerradas.
+     */
+    public function test_campana_cerrada_sin_fecha_de_cierre_no_se_purga(): void
+    {
+        [$tenant, $m, $s, $a] = $this->setupCampana('cerrada');
+        $elector = $this->elector($tenant, $m, $s, $a, '5511112222');
+        Tenant::query()->whereKey($tenant->id)->update([
+            'cerrada_en' => null,
+            'updated_at' => now()->subDays(2000),
+        ]);
 
         $this->artisan('territori:purgar-datos')->assertSuccessful();
 
@@ -156,7 +199,7 @@ class RetencionTest extends TestCase
     {
         [$tenant, $m, $s, $a] = $this->setupCampana('cerrada');
         $this->elector($tenant, $m, $s, $a, '5511112222');
-        Tenant::query()->whereKey($tenant->id)->update(['updated_at' => now()->subDays(365)]);
+        Tenant::query()->whereKey($tenant->id)->update(['cerrada_en' => now()->subDays(365)]);
 
         $this->artisan('territori:purgar-datos')->assertSuccessful();
 

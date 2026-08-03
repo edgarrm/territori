@@ -34,7 +34,10 @@ class StoreInteraccionRequest extends FormRequest
                     }
                 },
             ],
-            'nota' => ['nullable', 'string'],
+            // La columna es `text` (ilimitada). Sin tope, un solo POST escribe
+            // megabytes por interacción — se comprobó con 2 MB aceptados y
+            // guardados. Mismo límite que `observaciones` en StoreElectorRequest.
+            'nota' => ['nullable', 'string', 'max:2000'],
             'fecha' => ['nullable', 'date'],
             'proximo_seguimiento' => ['nullable', 'date'],
             'verificar' => [

@@ -1,6 +1,6 @@
 # Operaciones — Territori
 
-> Runbook para preparar entornos, cargar datos y mantener la app. Para el arranque local detallado y la sección de seguridad de cadena de suministro, ver [`_ai/SETUP.md`](../_ai/SETUP.md).
+> Runbook para preparar entornos, cargar datos y mantener la app. Para el arranque local detallado y la sección de seguridad de cadena de suministro, ver [`_ai/SETUP.md`](../_ai/SETUP.md). Para la matriz de controles de seguridad y privacidad (qué protege cada uno, dónde vive y qué test lo fija), ver [`seguridad.md`](seguridad.md).
 
 ## Requisitos
 
@@ -91,11 +91,18 @@ al montar producción se copia ese bloque y se descomenta. Crece con cada fase d
 remediación de seguridad, así que consúltalo ahí en vez de duplicarlo aquí.
 
 `AppServiceProvider::verificarConfiguracionDeProduccion()` aborta el arranque si en
-producción `APP_DEBUG` está activo o falta `SESSION_SECURE_COOKIE`/`SESSION_ENCRYPT`.
-Es deliberado: toda la política de seguridad (contraseñas de 12 con `uncompromised`,
-`prohibitDestructiveCommands`) cuelga de `isProduction()`, así que un `APP_ENV` mal
-puesto la degradaba en silencio.
+producción `APP_DEBUG` está activo, falta `SESSION_SECURE_COOKIE`/`SESSION_ENCRYPT`
+o `TRUSTED_PROXIES` está vacío o en `*`. Es deliberado: toda la política de seguridad
+(contraseñas de 12 con `uncompromised`, `prohibitDestructiveCommands`) cuelga de
+`isProduction()`, así que un `APP_ENV` mal puesto la degradaba en silencio.
 
+- **`APP_URL` con el dominio real** antes de nada: alimenta la validación de la
+  cabecera `Host` (`trustHosts`) y el `relying_party_id` de las passkeys. Si queda
+  apuntando a un túnel de desarrollo, las passkeys se registran contra el dominio
+  equivocado y dejan de validar.
+- **`TRUSTED_PROXIES` con el CIDR del balanceador**, nunca `*`: con `*` cualquier
+  cliente falsea su IP vía `X-Forwarded-For`, se salta el rate limit de login y
+  escribe la IP que quiera en la bitácora de accesos.
 - Forzar **HTTPS** (redirección + HSTS) a nivel de plataforma/servidor.
 - `composer install --no-dev --optimize-autoloader` (excluye Boost y herramientas de dev).
 - Cola persistente real (`QUEUE_CONNECTION=redis|database`) + worker (`queue:work`) para los jobs de cobertura.
@@ -115,9 +122,16 @@ que los justificó. `territori:purgar-datos` aplica esa política en tres frente
 
 | Frente | Qué hace | Plazo |
 |--------|----------|-------|
-| Cierre de campaña | Un tenant en `estado = 'cerrada'` pierde la PII de sus electores (scrub + baja lógica) | `RETENCION_CAMPANA_CERRADA_DIAS` (180) |
+| Cierre de campaña | Un tenant en `estado = 'cerrada'` pierde la PII de sus electores (scrub + baja lógica) | `RETENCION_CAMPANA_CERRADA_DIAS` (180) desde `cerrada_en` |
 | Cancelados antiguos | Borrado físico de las filas ya scrubbeadas por una Cancelación ARCO | `RETENCION_ELECTORES_CANCELADOS_DIAS` (365) |
 | Sesiones | Borra `sessions` con `last_activity` fuera del `SESSION_LIFETIME` | — |
+
+El cierre se hace **desde la aplicación**: Ajustes → Campaña → *Cerrar campaña*
+(admin, con 2FA y reconfirmación de contraseña). Fija `estado` y `cerrada_en`, y
+deja traza `campana.cerrada` en la bitácora. El plazo se mide desde `cerrada_en`
+y no desde `updated_at`, precisamente para que guardar cualquier ajuste de la
+campaña no aplace el borrado. Una campaña cerrada sin `cerrada_en` **no se purga**
+(fail-closed): más vale conservar de más que borrar por una fecha que nadie registró.
 
 ```bash
 php artisan territori:purgar-datos --dry-run

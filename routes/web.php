@@ -62,6 +62,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
                 Route::get('campanas/crear', [CampanaController::class, 'create'])->name('campanas.crear');
                 Route::post('campanas', [CampanaController::class, 'store'])->name('campanas.store');
 
+                // Cerrar campaña: arranca la retención por finalidad agotada
+                // (LFPDPPP art. 11) y acaba borrando la PII de sus electores.
+                // Irreversible desde la app, así que lleva los mismos controles
+                // que el export: 2FA + reconfirmar contraseña.
+                Route::patch('campanas/cerrar', [CampanaController::class, 'cerrar'])
+                    ->middleware(['2fa', RequirePassword::class])
+                    ->name('campanas.cerrar');
+
                 // Configuración del análisis electoral (partido, umbrales, indicadores).
                 Route::get('settings/campana', [SettingsCampanaController::class, 'edit'])->name('campana.edit');
                 Route::patch('settings/campana', [SettingsCampanaController::class, 'update'])->name('campana.update');
@@ -75,14 +83,23 @@ Route::middleware(['auth', 'verified'])->group(function () {
             // perfil es de captura (dashboard, mapa, prioridades, detalle de
             // sección y las vistas de gestión) ---
             Route::middleware('rol:coordinador,admin')->group(function () {
-                Route::get('dashboard', [DashboardController::class, 'index'])->middleware('2fa')->name('dashboard');
+                // El dashboard solo expone agregados (conteos, metas, próximos
+                // eventos): no lleva 2FA. La exigencia vive donde está la PII.
+                Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
                 Route::get('mapa', [MapaController::class, 'index'])->name('mapa');
                 Route::get('api/cobertura.geojson', [MapaController::class, 'cobertura'])->name('mapa.cobertura');
                 Route::get('prioridades', [MapaController::class, 'prioridades'])->name('prioridades');
                 Route::get('api/secciones/{seccion}/resumen', [MapaController::class, 'resumenSeccion'])->name('secciones.resumen');
-                Route::get('secciones/{seccion}', [MapaController::class, 'detalle'])->name('secciones.detalle');
-                Route::get('api/secciones/{seccion}/electores', [ElectorController::class, 'indexPorSeccion'])->name('secciones.electores');
+                // Detalle de sección y su lista de electores: PII de gestión,
+                // igual que /capturados, así que ambas van con 2FA. La página
+                // se incluye a propósito junto al endpoint: gatear solo el
+                // endpoint la dejaría cargando con la tarjeta de electores
+                // vacía y sin explicación.
+                Route::middleware('2fa')->group(function () {
+                    Route::get('secciones/{seccion}', [MapaController::class, 'detalle'])->name('secciones.detalle');
+                    Route::get('api/secciones/{seccion}/electores', [ElectorController::class, 'indexPorSeccion'])->name('secciones.electores');
+                });
 
                 Route::get('metas', [MapaController::class, 'metas'])->name('metas');
                 Route::put('api/secciones/{seccion}/meta', [MapaController::class, 'definirMeta'])->name('secciones.meta');
@@ -116,8 +133,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
                 // Lista global de capturados (todos los electores del municipio),
                 // paginada y con filtros por nombre, tipo de captura y sección.
-                Route::get('capturados', [ElectorController::class, 'index'])->name('capturados');
-                Route::get('api/capturados', [ElectorController::class, 'data'])->name('capturados.data');
+                //
+                // Exige 2FA: para gestión esta lista trae nombre y teléfono en
+                // claro de todo el padrón. Sin ella, paginar de 25 en 25 obtenía
+                // lo mismo que el export —que sí pedía 2FA y reconfirmación de
+                // contraseña— sin ninguno de sus controles.
+                Route::middleware('2fa')->group(function () {
+                    Route::get('capturados', [ElectorController::class, 'index'])->name('capturados');
+                    Route::get('api/capturados', [ElectorController::class, 'data'])->name('capturados.data');
+                });
             });
 
             // Captura de electores (brigadista/coordinador/admin; el 403 fino lo aplica el FormRequest/acción).

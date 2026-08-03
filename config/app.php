@@ -76,9 +76,17 @@ return [
     | el rate limit de login, así que en producción debe ser el CIDR real del
     | balanceador. Lista separada por comas o '*'.
     |
+    | Sin default a propósito: el valor por omisión era '*', que falla ABIERTO.
+    | Con él, `X-Forwarded-For` controlaba por completo la IP que ve la app —
+    | el limiter de login firma por `email|ip`, así que rotar la cabecera daba
+    | fuerza bruta ilimitada, y la IP de `bitacora_accesos` (la traza LFPDPPP)
+    | quedaba escrita por el atacante. `null` = no se confía en ningún proxy;
+    | `AppServiceProvider::verificarConfiguracionDeProduccion()` además impide
+    | arrancar en producción si sigue vacío o en '*'.
+    |
     */
 
-    'trusted_proxies' => env('TRUSTED_PROXIES', '*'),
+    'trusted_proxies' => env('TRUSTED_PROXIES'),
 
     /*
     |--------------------------------------------------------------------------

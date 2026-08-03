@@ -10,8 +10,14 @@ use Tests\TestCase;
 
 /**
  * I8 de la auditoría: coordinador/admin concentran el acceso de más alcance
- * (dashboard de análisis, export del padrón, bandeja ARCO) y hasta ahora
- * podían llegar ahí con solo una contraseña, sin 2FA.
+ * (export del padrón, bandeja ARCO, listas completas de capturados) y hasta
+ * ahora podían llegar ahí con solo una contraseña, sin 2FA.
+ *
+ * El criterio es "donde hay datos personales", no "donde hay análisis": el
+ * dashboard solo muestra agregados y no lleva 2FA, mientras que /capturados y
+ * la lista por sección —nombre y teléfono en claro de todo el padrón— sí. Antes
+ * era al revés, y paginar /api/capturados de 25 en 25 obtenía lo mismo que el
+ * export sin ninguno de sus controles.
  */
 class DobleFactorObligatorioTest extends TestCase
 {
@@ -29,21 +35,37 @@ class DobleFactorObligatorioTest extends TestCase
         return [$user, $tenant];
     }
 
-    public function test_dashboard_exige_2fa_confirmada(): void
+    /**
+     * El dashboard expone conteos, metas y próximos eventos: ni un dato
+     * personal. Exigirle 2FA no protegía nada y dejaba fuera al coordinador de
+     * su propia pantalla de aterrizaje.
+     */
+    public function test_dashboard_no_exige_2fa_porque_solo_muestra_agregados(): void
     {
         [$user, $tenant] = $this->coordinadorConCampana(con2fa: false);
 
         $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
             ->get(route('dashboard'))
-            ->assertForbidden();
+            ->assertOk();
     }
 
-    public function test_dashboard_es_accesible_con_2fa_confirmada(): void
+    public function test_lista_de_capturados_exige_2fa_confirmada(): void
+    {
+        [$user, $tenant] = $this->coordinadorConCampana(con2fa: false);
+        $sesion = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id]);
+
+        // La pantalla y el endpoint que la alimenta: sin el segundo, paginar
+        // el padrón por XHR seguiría siendo posible sin 2FA.
+        $sesion->get(route('capturados'))->assertForbidden();
+        $sesion->getJson(route('capturados.data'))->assertForbidden();
+    }
+
+    public function test_lista_de_capturados_es_accesible_con_2fa_confirmada(): void
     {
         [$user, $tenant] = $this->coordinadorConCampana(con2fa: true);
 
         $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
-            ->get(route('dashboard'))
+            ->get(route('capturados'))
             ->assertOk();
     }
 
@@ -66,16 +88,17 @@ class DobleFactorObligatorioTest extends TestCase
     }
 
     /**
-     * Sin 2FA, un admin puede seguir usando el resto de la app (capturados,
-     * brigadistas...): el bloqueo es puntual a las pantallas más sensibles,
-     * no una cuarentena total de la cuenta.
+     * Sin 2FA, un coordinador puede seguir usando el resto de la app (dashboard,
+     * brigadistas, agenda...): el bloqueo es puntual a las superficies con datos
+     * personales, no una cuarentena total de la cuenta.
      */
     public function test_sin_2fa_el_resto_de_la_gestion_sigue_accesible(): void
     {
         [$user, $tenant] = $this->coordinadorConCampana(con2fa: false);
+        $sesion = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id]);
 
-        $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
-            ->get(route('capturados'))
-            ->assertOk();
+        $sesion->get(route('dashboard'))->assertOk();
+        $sesion->get(route('brigadistas'))->assertOk();
+        $sesion->get(route('agenda'))->assertOk();
     }
 }
