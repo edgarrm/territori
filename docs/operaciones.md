@@ -99,6 +99,12 @@ puesto la degradaba en silencio.
 - Forzar **HTTPS** (redirección + HSTS) a nivel de plataforma/servidor.
 - `composer install --no-dev --optimize-autoloader` (excluye Boost y herramientas de dev).
 - Cola persistente real (`QUEUE_CONNECTION=redis|database`) + worker (`queue:work`) para los jobs de cobertura.
+- **Scheduler corriendo** (`php artisan schedule:work` supervisado, o cron a
+  `schedule:run` cada minuto) — si no, `territori:purgar-datos` nunca se
+  dispara y el incumplimiento del art. 11 (retención de datos personales)
+  queda silencioso: no hay error, log ni alerta, la app sigue funcionando
+  normal. En **Laravel Cloud** esto lo gestiona la plataforma; en cualquier
+  otro hosting hay que montarlo a mano. Ver §Retención de datos personales.
 - Rotación de `APP_KEY`: **nunca a mano**, ver §Rotación de APP_KEY más abajo.
 - Mantener `min-release-age`/`ignore-scripts` del `.npmrc` y los lockfiles commiteados (ver §Seguridad de cadena de suministro).
 
