@@ -92,16 +92,21 @@ trait PresentaElectores
      */
     protected function filaElector(Elector $elector, ?Membership $viewer): array
     {
+        $verPii = $this->puedeVerPii($elector, $viewer);
+
         return [
             'id' => $elector->id,
-            'nombre' => $elector->nombre,
+            // El nombre completo + sección + últimos 4 dígitos reidentifica
+            // trivialmente (P6): en lista ajena va reducido a iniciales.
+            'nombre' => $verPii ? $elector->nombre : Pii::enmascararNombre($elector->nombre),
             'seccion_id' => $elector->seccion_id,
             'seccion_numero' => $elector->seccion?->numero,
             'modo_captura' => $elector->modo_captura,
             'origen' => $this->origen($elector),
-            'telefono' => $this->puedeVerPii($elector, $viewer)
-                ? $elector->telefono
-                : Pii::enmascararTelefono($elector->telefono),
+            'telefono' => $verPii ? $elector->telefono : Pii::enmascararTelefono($elector->telefono),
+            // Oposición ejercida (P9): la lista lo marca para que nadie lo
+            // contacte desde ahí.
+            'no_contactar' => $elector->no_contactar,
             'capturado_en' => $elector->created_at?->toIso8601String(),
         ];
     }

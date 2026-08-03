@@ -99,8 +99,75 @@ puesto la degradaba en silencio.
 - Forzar **HTTPS** (redirección + HSTS) a nivel de plataforma/servidor.
 - `composer install --no-dev --optimize-autoloader` (excluye Boost y herramientas de dev).
 - Cola persistente real (`QUEUE_CONNECTION=redis|database`) + worker (`queue:work`) para los jobs de cobertura.
-- Rotación de `APP_KEY` solo con plan de migración: re-cifra `telefono`/`domicilio` (cast `encrypted`) **y** invalida los `telefono_hash` (HMAC con APP_KEY) → habría que recalcularlos.
+- Rotación de `APP_KEY`: **nunca a mano**, ver §Rotación de APP_KEY más abajo.
 - Mantener `min-release-age`/`ignore-scripts` del `.npmrc` y los lockfiles commiteados (ver §Seguridad de cadena de suministro).
+
+## Retención de datos personales (LFPDPPP art. 11)
+
+Los datos personales se suprimen cuando dejan de ser necesarios para la finalidad
+que los justificó. `territori:purgar-datos` aplica esa política en tres frentes:
+
+| Frente | Qué hace | Plazo |
+|--------|----------|-------|
+| Cierre de campaña | Un tenant en `estado = 'cerrada'` pierde la PII de sus electores (scrub + baja lógica) | `RETENCION_CAMPANA_CERRADA_DIAS` (180) |
+| Cancelados antiguos | Borrado físico de las filas ya scrubbeadas por una Cancelación ARCO | `RETENCION_ELECTORES_CANCELADOS_DIAS` (365) |
+| Sesiones | Borra `sessions` con `last_activity` fuera del `SESSION_LIFETIME` | — |
+
+```bash
+php artisan territori:purgar-datos --dry-run
+```
+
+Está programado a diario a las 03:30 en [`routes/console.php`](../routes/console.php),
+así que **producción necesita el scheduler corriendo** (`php artisan schedule:work`
+como proceso supervisado, o una entrada de cron a `schedule:run` cada minuto). Sin él
+no se suprime nada y el incumplimiento es silencioso.
+
+El comando recorre las campañas fijando el `TenantContext` una por una: `TenantScope`
+es fail-closed, así que sin contexto no vería ninguna fila. Cada purga queda registrada
+en `bitacora_accesos` (sin actor: no hay usuario detrás de un comando).
+
+## ⚠️ Rotación de `APP_KEY`
+
+`APP_KEY` cifra `telefono`/`email`/`domicilio`/`observaciones`/`ubicacion` de
+`electores` y `titular_contacto` de `solicitudes_arco` (casts `encrypted`), y firma
+el HMAC de `telefono_hash`. **Cambiarla sin migrar los datos no produce ningún error
+al arrancar**: la PII queda ilegible al leerla y, peor, la deduplicación se rompe en
+silencio — los hashes nuevos no coinciden con los guardados, así que cada contacto ya
+registrado se puede volver a capturar como si fuera nuevo.
+
+```bash
+# 1. Respaldo de la base ANTES de tocar nada. El proceso no es reversible sin él.
+pg_dump territori > territori-pre-rotacion.sql
+
+# 2. Guardar la clave actual y generar la nueva. `key:generate` reescribe el .env,
+#    así que la anterior hay que copiarla antes.
+grep '^APP_KEY=' .env                      # anotar el valor: base64:...
+php artisan key:generate --force
+
+# 3. Poner la app en mantenimiento: durante la migración conviven datos con
+#    las dos claves y cualquier lectura fallaría.
+php artisan down
+
+# 4. Ensayo en seco y migración real (descifra con la anterior, cifra con la nueva
+#    y recalcula telefono_hash con el salt por campaña).
+php artisan territori:recifrar-pii --clave-anterior='base64:LA_ANTERIOR' --dry-run
+php artisan territori:recifrar-pii --clave-anterior='base64:LA_ANTERIOR'
+
+# 5. Verificar que la PII se lee y que el dedup responde 409 ante un duplicado.
+php artisan up
+```
+
+Si el paso 4 falla a mitad, restaurar el respaldo y volver a poner la `APP_KEY`
+anterior en el `.env`: los valores ya migrados usan la clave nueva y los pendientes la
+vieja, y no hay forma de distinguirlos.
+
+El mismo comando **sin** `--clave-anterior` solo recalcula `telefono_hash`; es lo que
+hace falta cuando cambia la forma del hash pero no la clave (p. ej. el alta del salt
+por campaña). `--tenant=` acota a una campaña.
+
+`PASSKEYS_USER_HANDLE_SECRET` cae a `APP_KEY` si no está definida: si se rota la clave
+sin haberla fijado aparte, **las passkeys registradas dejan de resolver**. Definirla
+con un secreto propio antes de la primera rotación.
 
 ## ⚠️ Exponer la instancia local por un túnel (ngrok)
 

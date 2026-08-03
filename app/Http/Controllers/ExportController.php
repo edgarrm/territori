@@ -30,7 +30,12 @@ class ExportController extends Controller
             'hasta' => ['nullable', 'date'],
         ]);
 
-        $query = Elector::query()->with('seccion:id,numero')->latest();
+        // no_contactar excluye a quien ejerció Oposición (P9): el CSV existe para
+        // contactar, así que exportarlo sería justo lo que el titular negó.
+        $query = Elector::query()
+            ->with('seccion:id,numero')
+            ->where('no_contactar', false)
+            ->latest();
 
         if (! empty($validado['seccion_id'])) {
             $query->where('seccion_id', (int) $validado['seccion_id']);

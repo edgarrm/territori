@@ -27,6 +27,10 @@ type Solicitud = {
     elector: { id: number; nombre: string } | null;
     solicitado_en: string | null;
     atendido_en: string | null;
+    /** Plazo legal de respuesta: 20 días hábiles (LFPDPPP art. 32). */
+    vence_el: string;
+    dias_restantes: number;
+    vencida: boolean;
 };
 
 const props = defineProps<{
@@ -72,6 +76,31 @@ function fecha(iso: string | null): string {
         month: 'short',
         year: 'numeric',
     });
+}
+
+/**
+ * LFPDPPP art. 32: la respuesta al titular vence a los 20 días hábiles. Se
+ * avisa desde los 5 días restantes para que la coordinación pueda reaccionar.
+ */
+function etiquetaDePlazo(s: Solicitud): string {
+    if (s.vencida) {
+        return `Vencida (${fecha(s.vence_el)})`;
+    }
+
+    return s.dias_restantes === 0
+        ? 'Vence hoy'
+        : `${s.dias_restantes} días hábiles`;
+}
+
+function claseDePlazo(s: Solicitud): string {
+    if (s.vencida) {
+        return 'bg-red-500/15 text-red-700 dark:text-red-300';
+    }
+    if (s.dias_restantes <= 5) {
+        return 'bg-amber-500/15 text-amber-700 dark:text-amber-300';
+    }
+
+    return 'bg-muted text-muted-foreground';
 }
 
 function cambiarFiltro(estado: 'pendiente' | 'atendida') {
@@ -166,6 +195,9 @@ async function atender(s: Solicitud) {
                         <th class="p-2 text-left">Tipo</th>
                         <th class="p-2 text-left">Elector</th>
                         <th class="p-2 text-left">Solicitado</th>
+                        <th v-if="props.estado === 'pendiente'" class="p-2 text-left">
+                            Plazo legal
+                        </th>
                         <th class="p-2 text-left">
                             {{ props.estado === 'atendida' ? 'Atendido' : 'Acción' }}
                         </th>
@@ -204,6 +236,14 @@ async function atender(s: Solicitud) {
                         <td class="p-2 text-muted-foreground">
                             {{ fecha(s.solicitado_en) }}
                         </td>
+                        <td v-if="props.estado === 'pendiente'" class="p-2">
+                            <span
+                                class="rounded-full px-2.5 py-0.5 text-xs font-semibold"
+                                :class="claseDePlazo(s)"
+                            >
+                                {{ etiquetaDePlazo(s) }}
+                            </span>
+                        </td>
                         <td class="p-2">
                             <span
                                 v-if="s.estado === 'atendida'"
@@ -211,23 +251,36 @@ async function atender(s: Solicitud) {
                             >
                                 {{ fecha(s.atendido_en) }}
                             </span>
-                            <Button
-                                v-else
-                                size="sm"
-                                :variant="
-                                    s.tipo === 'cancelacion'
-                                        ? 'destructive'
-                                        : 'outline'
-                                "
-                                :disabled="procesando === s.id"
-                                @click="atender(s)"
-                            >
-                                {{
-                                    s.tipo === 'cancelacion'
-                                        ? 'Atender y dar de baja'
-                                        : 'Marcar atendida'
-                                }}
-                            </Button>
+                            <div v-else class="flex flex-wrap items-center gap-2">
+                                <!-- Derecho de Acceso: el reporte que se le
+                                     entrega al titular con todo lo que la
+                                     campaña guarda sobre él. -->
+                                <a
+                                    v-if="s.tipo === 'acceso' && s.elector_id"
+                                    :href="`/api/electores/${s.elector_id}/reporte-acceso`"
+                                    target="_blank"
+                                    rel="noopener"
+                                    class="text-xs underline underline-offset-2"
+                                >
+                                    Ver reporte
+                                </a>
+                                <Button
+                                    size="sm"
+                                    :variant="
+                                        s.tipo === 'cancelacion'
+                                            ? 'destructive'
+                                            : 'outline'
+                                    "
+                                    :disabled="procesando === s.id"
+                                    @click="atender(s)"
+                                >
+                                    {{
+                                        s.tipo === 'cancelacion'
+                                            ? 'Atender y dar de baja'
+                                            : 'Marcar atendida'
+                                    }}
+                                </Button>
+                            </div>
                         </td>
                     </tr>
                 </tbody>

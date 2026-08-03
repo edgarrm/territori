@@ -38,7 +38,7 @@ class UpdateElectorRequest extends FormRequest
             ],
             'email' => ['sometimes', 'nullable', 'email', 'max:160'],
             'domicilio' => ['sometimes', 'nullable', 'string', 'max:255'],
-            'observaciones' => ['sometimes', 'nullable', 'string'],
+            'observaciones' => ['sometimes', 'nullable', 'string', 'max:2000'],
         ];
     }
 }

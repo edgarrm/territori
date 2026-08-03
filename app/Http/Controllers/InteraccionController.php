@@ -103,6 +103,11 @@ class InteraccionController extends Controller
         return Interaccion::query()
             ->pendientes()
             ->with(['elector:id,nombre,seccion_id', 'elector.seccion:id,numero'])
+            // La agenda es la superficie desde la que se contacta: quien ejerció
+            // Oposición (no_contactar) sale de ella (P9). El whereHas exige
+            // además un elector vivo, así que los cancelados por ARCO tampoco
+            // arrastran su seguimiento pendiente.
+            ->whereHas('elector', fn (Builder $elector) => $elector->where('no_contactar', false))
             ->when(
                 $membership->esBrigadista(),
                 fn (Builder $query) => $query->where('membership_id', $membership->id),

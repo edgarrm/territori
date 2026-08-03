@@ -88,6 +88,76 @@ class VisibilidadPiiTest extends TestCase
         $this->assertNotSame('Calle Falsa 123', $response->json('domicilio'));
     }
 
+    /**
+     * `observaciones` es texto libre: el campo con más probabilidad de contener
+     * datos sensibles del art. 9 (P5). `nombre` completo + sección + últimos 4
+     * dígitos reidentifica trivialmente (P6).
+     */
+    public function test_brigadista_no_ve_observaciones_ni_nombre_completo_de_elector_ajeno(): void
+    {
+        [$tenant, , $seccion, $aviso] = $this->setupCampana();
+        [$user, $membership] = $this->miembro($tenant, 'brigadista');
+        [, $otro] = $this->miembro($tenant, 'brigadista');
+        $membership->secciones()->attach($seccion->id, ['tenant_id' => $tenant->id]);
+        $elector = $this->elector($tenant, $otro, $seccion, $aviso, '5511112222', 'Calle Falsa 123');
+        $elector->forceFill([
+            'nombre' => 'Juan Carlos Pérez García',
+            'observaciones' => 'Diabético, vota siempre con su hermana',
+            'email' => 'juan@correo.com',
+        ])->save();
+
+        $response = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->getJson("/api/electores/{$elector->id}");
+
+        $response->assertOk();
+        $response->assertJsonPath('observaciones', '•••');
+        $response->assertJsonPath('nombre', 'J. C. Pérez G.');
+        $response->assertJsonPath('pii_visible', false);
+        $this->assertStringNotContainsString('Diabético', $response->getContent());
+        $this->assertStringNotContainsString('García', $response->getContent());
+    }
+
+    public function test_brigadista_ve_observaciones_y_nombre_de_su_propio_elector(): void
+    {
+        [$tenant, , $seccion, $aviso] = $this->setupCampana();
+        [$user, $membership] = $this->miembro($tenant, 'brigadista');
+        $elector = $this->elector($tenant, $membership, $seccion, $aviso, '5511112222', 'Calle Falsa 123');
+        $elector->forceFill([
+            'nombre' => 'Juan Carlos Pérez García',
+            'observaciones' => 'Pidió información del programa de becas',
+        ])->save();
+
+        $response = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->getJson("/api/electores/{$elector->id}");
+
+        $response->assertOk();
+        $response->assertJsonPath('observaciones', 'Pidió información del programa de becas');
+        $response->assertJsonPath('nombre', 'Juan Carlos Pérez García');
+        $response->assertJsonPath('pii_visible', true);
+    }
+
+    public function test_lista_compartida_enmascara_el_nombre_de_ajenos_para_brigadista(): void
+    {
+        [$tenant, , $seccion, $aviso] = $this->setupCampana();
+        [$user, $membership] = $this->miembro($tenant, 'brigadista');
+        [, $otro] = $this->miembro($tenant, 'brigadista');
+        $membership->secciones()->attach($seccion->id, ['tenant_id' => $tenant->id]);
+
+        $evento = Evento::factory()->create(['tenant_id' => $tenant->id, 'seccion_id' => $seccion->id]);
+        $propio = $this->elector($tenant, $membership, $seccion, $aviso, '5511112222', 'Mi Calle 1');
+        $ajeno = $this->elector($tenant, $otro, $seccion, $aviso, '5599998888', 'Otra Calle 2');
+        Elector::query()->whereKey($propio->id)->update(['nombre' => 'Ana María López Ruiz', 'evento_id' => $evento->id]);
+        Elector::query()->whereKey($ajeno->id)->update(['nombre' => 'Beto Sánchez Díaz', 'evento_id' => $evento->id]);
+
+        $response = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->getJson("/api/eventos/{$evento->id}/asistentes");
+
+        $response->assertOk();
+        $porId = collect($response->json('data'))->keyBy('id');
+        $this->assertSame('Ana María López Ruiz', $porId[$propio->id]['nombre']);
+        $this->assertSame('B. Sánchez D.', $porId[$ajeno->id]['nombre']);
+    }
+
     public function test_coordinador_ve_pii_completa_de_cualquier_elector(): void
     {
         [$tenant, , $seccion, $aviso] = $this->setupCampana();

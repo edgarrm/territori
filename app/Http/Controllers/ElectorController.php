@@ -263,12 +263,20 @@ class ElectorController extends Controller
             'id' => $elector->id,
             'seccion_id' => $elector->seccion_id,
             'modo_captura' => $elector->modo_captura,
-            'nombre' => $elector->nombre,
+            'nombre' => $verPii ? $elector->nombre : Pii::enmascararNombre($elector->nombre),
             'telefono' => $verPii ? $elector->telefono : Pii::enmascararTelefono($elector->telefono),
             'email' => $verPii ? $elector->email : Pii::enmascararEmail($elector->email),
             'domicilio' => $verPii ? $elector->domicilio : Pii::enmascararDomicilio($elector->domicilio),
-            'observaciones' => $elector->observaciones,
+            // Dentro del ternario: es el campo con más probabilidad de contener
+            // datos sensibles del art. 9 (salud, creencias, filiación).
+            'observaciones' => $verPii ? $elector->observaciones : Pii::enmascararTexto($elector->observaciones),
+            // El viewer sin PII recibe los campos enmascarados: el formulario de
+            // la ficha los oculta para no reenviar los bullets como valor real.
+            'pii_visible' => $verPii,
             'consentimiento' => $elector->consentimiento,
+            'consentimiento_en' => $elector->consentimiento_en?->toIso8601String(),
+            'consentimiento_via' => $elector->consentimiento_via,
+            'no_contactar' => $elector->no_contactar,
             'verificado' => $elector->verificado_en !== null,
             'verificado_via' => $elector->verificado_via,
             'verificado_en' => $elector->verificado_en?->toIso8601String(),

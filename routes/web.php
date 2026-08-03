@@ -107,6 +107,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
                 // Bandeja de solicitudes ARCO: listar y atender (LFPDPPP, ADR-004).
                 Route::get('solicitudes-arco', [SolicitudArcoController::class, 'index'])->middleware('2fa')->name('solicitudes-arco.index');
                 Route::put('api/solicitudes-arco/{solicitud}/atendido', [SolicitudArcoController::class, 'atendido'])->middleware('2fa')->name('solicitudes-arco.atendido');
+                // Derecho de Acceso: volcado sin enmascarar de todo lo que la
+                // campaña guarda sobre una persona, para entregarlo al titular.
+                // Mismo criterio que el export: gestión + 2FA + traza.
+                Route::get('api/electores/{elector}/reporte-acceso', [SolicitudArcoController::class, 'reporteAcceso'])
+                    ->middleware('2fa')
+                    ->name('electores.reporte-acceso');
 
                 // Lista global de capturados (todos los electores del municipio),
                 // paginada y con filtros por nombre, tipo de captura y sección.

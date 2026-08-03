@@ -10,18 +10,18 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
-use MatanYadaev\EloquentSpatial\Objects\Point;
-use MatanYadaev\EloquentSpatial\Traits\HasSpatial;
 
 /**
  * Entidad central de Territori: un contacto georreferenciado capturado por un
- * brigadista (membership) en una sección. telefono/domicilio cifrados en reposo
- * (ADR-004); telefono_hash determinista separado para dedup.
+ * brigadista (membership) en una sección. telefono/email/domicilio/ubicacion/
+ * observaciones cifrados en reposo (ADR-004); telefono_hash determinista
+ * separado para dedup. `nombre` queda fuera del cifrado: la búsqueda ILIKE de
+ * las listas lo impide sin rediseñar el índice.
  *
  * @property int $id
  * @property int $tenant_id
  * @property int $seccion_id
- * @property int $membership_id
+ * @property int|null $membership_id
  * @property string $modo_captura
  * @property int|null $loteria_id
  * @property int|null $evento_id
@@ -31,9 +31,12 @@ use MatanYadaev\EloquentSpatial\Traits\HasSpatial;
  * @property string|null $telefono_hash
  * @property string|null $email
  * @property string|null $domicilio
- * @property Point|null $ubicacion
+ * @property array{lat: float, lng: float}|null $ubicacion
  * @property string|null $observaciones
  * @property bool $consentimiento
+ * @property Carbon|null $consentimiento_en
+ * @property string|null $consentimiento_via
+ * @property bool $no_contactar
  * @property int $aviso_privacidad_id
  * @property Carbon|null $verificado_en
  * @property string|null $verificado_via
@@ -49,7 +52,6 @@ class Elector extends Model
     /** @use HasFactory<ElectorFactory> */
     use HasFactory;
 
-    use HasSpatial;
     use SoftDeletes;
 
     protected $table = 'electores';
@@ -69,6 +71,9 @@ class Elector extends Model
         'ubicacion',
         'observaciones',
         'consentimiento',
+        'consentimiento_en',
+        'consentimiento_via',
+        'no_contactar',
         'aviso_privacidad_id',
         'verificado_en',
         'verificado_via',
@@ -89,6 +94,7 @@ class Elector extends Model
         'domicilio',
         'telefono_hash',
         'ubicacion',
+        'observaciones',
     ];
 
     /**
@@ -100,8 +106,14 @@ class Elector extends Model
             'telefono' => 'encrypted',
             'email' => 'encrypted',
             'domicilio' => 'encrypted',
+            'observaciones' => 'encrypted',
             'consentimiento' => 'boolean',
-            'ubicacion' => Point::class,
+            'consentimiento_en' => 'datetime',
+            'no_contactar' => 'boolean',
+            // Ya no es un Point: una coordenada exacta identifica el domicilio,
+            // así que se guarda cifrada como {lat, lng} (P7). Nada la consulta
+            // por geometría.
+            'ubicacion' => 'encrypted:array',
             'verificado_en' => 'datetime',
         ];
     }

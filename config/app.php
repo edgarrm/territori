@@ -82,6 +82,30 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Retención de datos personales (LFPDPPP art. 11)
+    |--------------------------------------------------------------------------
+    |
+    | Los datos personales deben suprimirse cuando dejan de ser necesarios para
+    | la finalidad que los justificó. `territori:purgar-datos` aplica estos dos
+    | plazos, en días:
+    |
+    | - electores_cancelados_dias: cuánto se conserva la fila ya scrubbeada de
+    |   una Cancelación ARCO (solo ids y fechas, sin dato personal) antes del
+    |   borrado físico. Existe para poder acreditar que la cancelación se
+    |   ejecutó; pasado el plazo ya no aporta nada.
+    | - campana_cerrada_dias: cuánto sobreviven los electores de una campaña en
+    |   estado 'cerrada' antes de que se les borre la PII. Al cerrar la campaña
+    |   se agota la finalidad del tratamiento.
+    |
+    */
+
+    'retencion' => [
+        'electores_cancelados_dias' => (int) env('RETENCION_ELECTORES_CANCELADOS_DIAS', 365),
+        'campana_cerrada_dias' => (int) env('RETENCION_CAMPANA_CERRADA_DIAS', 180),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
     |

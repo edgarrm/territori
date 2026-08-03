@@ -19,6 +19,7 @@ class CancelarElector
     public function __construct(
         private RecalcularCoberturaSeccion $recalcular,
         private RegistrarAcceso $bitacora,
+        private BorrarPiiDelElector $borrarPii,
     ) {}
 
     /**
@@ -32,16 +33,8 @@ class CancelarElector
         $seccionId = $elector->seccion_id;
 
         DB::transaction(function () use ($elector, $seccionId, $solicitud): void {
-            // Scrub de PII antes de la baja lógica (deja de existir el dato personal).
-            // nombre/telefono son NOT NULL → cadena vacía; el resto a null.
-            $elector->forceFill([
-                'nombre' => '',
-                'telefono' => '',
-                'telefono_hash' => null,
-                'domicilio' => null,
-                'ubicacion' => null,
-                'observaciones' => null,
-            ])->save();
+            // Scrub antes de la baja lógica: deja de existir el dato personal.
+            $this->borrarPii->handle($elector);
 
             $elector->delete();
 
