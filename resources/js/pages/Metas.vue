@@ -10,9 +10,17 @@ const exportDesde = ref('');
 const exportHasta = ref('');
 const urlExport = computed(() => {
     const params = new URLSearchParams();
-    if (exportDesde.value) params.set('desde', exportDesde.value);
-    if (exportHasta.value) params.set('hasta', exportHasta.value);
+
+    if (exportDesde.value) {
+        params.set('desde', exportDesde.value);
+    }
+
+    if (exportHasta.value) {
+        params.set('hasta', exportHasta.value);
+    }
+
     const qs = params.toString();
+
     return '/api/export/electores.csv' + (qs ? `?${qs}` : '');
 });
 

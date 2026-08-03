@@ -80,18 +80,22 @@ const datos = reactive<Record<Campo, string>>({
     telefono: puedeEditarPii.value ? props.elector.telefono : '',
     email: puedeEditarPii.value ? (props.elector.email ?? '') : '',
     domicilio: puedeEditarPii.value ? (props.elector.domicilio ?? '') : '',
-    observaciones: puedeEditarPii.value ? (props.elector.observaciones ?? '') : '',
+    observaciones: puedeEditarPii.value
+        ? (props.elector.observaciones ?? '')
+        : '',
 });
 
 // Solo se envían los campos que el usuario tocó: un PUT con el payload entero
 // reescribiría con valores que nunca vio.
 const tocados = reactive(new Set<Campo>());
+
 for (const campo of CAMPOS) {
     watch(
         () => datos[campo],
         () => tocados.add(campo),
     );
 }
+
 const hayCambios = computed(() => tocados.size > 0);
 
 const guardando = ref(false);
@@ -132,18 +136,23 @@ async function guardarElector() {
     if (tocados.size === 0) {
         return;
     }
+
     guardando.value = true;
     errorEdicion.value = null;
+
     try {
         const cambios: Partial<Record<Campo, string>> = {};
+
         for (const campo of tocados) {
             cambios[campo] = datos[campo];
         }
+
         const res = await fetch(`/api/electores/${props.elector.id}`, {
             method: 'PUT',
             headers: headers(),
             body: JSON.stringify(cambios),
         });
+
         if (res.status === 409) {
             errorEdicion.value =
                 'Ese teléfono ya pertenece a otro elector de la campaña.';
@@ -159,29 +168,42 @@ async function guardarElector() {
 
 async function registrarInteraccion() {
     registrando.value = true;
+
     try {
         const verificar = nueva.tipo !== 'nota' && nueva.verificar;
         const body: Record<string, unknown> = { tipo: nueva.tipo };
+
         if (nueva.tipo !== 'nota' && nueva.resultado) {
             body.resultado = nueva.resultado;
         }
-        if (nueva.nota) body.nota = nueva.nota;
-        if (nueva.proximo_seguimiento)
+
+        if (nueva.nota) {
+            body.nota = nueva.nota;
+        }
+
+        if (nueva.proximo_seguimiento) {
             body.proximo_seguimiento = nueva.proximo_seguimiento;
-        if (verificar) body.verificar = true;
+        }
+
+        if (verificar) {
+            body.verificar = true;
+        }
 
         const res = await fetch(
             `/api/electores/${props.elector.id}/interacciones`,
             { method: 'POST', headers: headers(), body: JSON.stringify(body) },
         );
+
         if (res.ok) {
             const creada: Interaccion = await res.json();
             timeline.value.unshift(creada);
+
             if (verificar) {
                 verificacion.verificado = true;
                 verificacion.via = creada.tipo;
                 verificacion.en = creada.fecha;
             }
+
             nueva.resultado = '';
             nueva.nota = '';
             nueva.proximo_seguimiento = '';
@@ -194,11 +216,13 @@ async function registrarInteraccion() {
 
 async function quitarVerificacion() {
     quitandoVerificacion.value = true;
+
     try {
         const res = await fetch(
             `/api/electores/${props.elector.id}/verificacion`,
             { method: 'DELETE', headers: headers() },
         );
+
         if (res.ok) {
             verificacion.verificado = false;
             verificacion.via = null;
@@ -219,6 +243,7 @@ const procesandoArco = ref(false);
 async function registrarSolicitudArco() {
     procesandoArco.value = true;
     arcoMensaje.value = null;
+
     try {
         const res = await fetch('/api/solicitudes-arco', {
             method: 'POST',
@@ -244,12 +269,14 @@ function cancelarElector() {
     ) {
         return;
     }
+
     procesandoArco.value = true;
     fetch(`/api/electores/${props.elector.id}`, {
         method: 'DELETE',
         headers: headers(),
     }).then((res) => {
         procesandoArco.value = false;
+
         if (res.ok) {
             router.visit('/agenda');
         } else {
@@ -356,8 +383,8 @@ function cancelarElector() {
                     </div>
                 </dl>
                 <p class="text-xs text-muted-foreground">
-                    Solo quien registró a este contacto (o la coordinación) puede
-                    ver y editar sus datos personales.
+                    Solo quien registró a este contacto (o la coordinación)
+                    puede ver y editar sus datos personales.
                 </p>
             </template>
 

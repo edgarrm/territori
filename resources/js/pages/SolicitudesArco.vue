@@ -96,6 +96,7 @@ function claseDePlazo(s: Solicitud): string {
     if (s.vencida) {
         return 'bg-red-500/15 text-red-700 dark:text-red-300';
     }
+
     if (s.dias_restantes <= 5) {
         return 'bg-amber-500/15 text-amber-700 dark:text-amber-300';
     }
@@ -177,7 +178,10 @@ async function atender(s: Solicitud) {
             (LFPDPPP). El brigadista registra; coordinación las atiende.
         </p>
 
-        <div v-if="props.solicitudes.length === 0" class="text-sm text-muted-foreground">
+        <div
+            v-if="props.solicitudes.length === 0"
+            class="text-sm text-muted-foreground"
+        >
             {{
                 props.estado === 'pendiente'
                     ? 'No hay solicitudes pendientes. ✅'
@@ -195,11 +199,18 @@ async function atender(s: Solicitud) {
                         <th class="p-2 text-left">Tipo</th>
                         <th class="p-2 text-left">Elector</th>
                         <th class="p-2 text-left">Solicitado</th>
-                        <th v-if="props.estado === 'pendiente'" class="p-2 text-left">
+                        <th
+                            v-if="props.estado === 'pendiente'"
+                            class="p-2 text-left"
+                        >
                             Plazo legal
                         </th>
                         <th class="p-2 text-left">
-                            {{ props.estado === 'atendida' ? 'Atendido' : 'Acción' }}
+                            {{
+                                props.estado === 'atendida'
+                                    ? 'Atendido'
+                                    : 'Acción'
+                            }}
                         </th>
                     </tr>
                 </thead>
@@ -251,7 +262,10 @@ async function atender(s: Solicitud) {
                             >
                                 {{ fecha(s.atendido_en) }}
                             </span>
-                            <div v-else class="flex flex-wrap items-center gap-2">
+                            <div
+                                v-else
+                                class="flex flex-wrap items-center gap-2"
+                            >
                                 <!-- Derecho de Acceso: el reporte que se le
                                      entrega al titular con todo lo que la
                                      campaña guarda sobre él. -->
