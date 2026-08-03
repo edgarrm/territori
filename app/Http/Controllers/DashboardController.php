@@ -69,7 +69,7 @@ class DashboardController extends Controller
                 'id' => $evento->id,
                 'nombre' => $evento->nombre,
                 'tipo' => $evento->tipo,
-                'fecha' => $evento->fecha?->toDateString(),
+                'fecha' => $evento->fecha->toDateString(),
                 'lugar' => $evento->lugar,
             ])
             ->all();

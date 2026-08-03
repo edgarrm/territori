@@ -129,18 +129,29 @@ class InteraccionController extends Controller
             ->orderBy('proximo_seguimiento')
             ->paginate(25)
             ->withQueryString()
-            ->through(fn (Interaccion $i): array => [
-                'id' => $i->id,
-                'tipo' => $i->tipo,
-                'nota' => $i->nota,
-                'proximo_seguimiento' => $i->proximo_seguimiento?->toDateString(),
-                'elector' => [
-                    'id' => $i->elector->id,
-                    'nombre' => $i->elector->nombre,
-                    'seccion_id' => $i->elector->seccion_id,
-                    'seccion_numero' => $i->elector->seccion?->numero,
-                ],
-            ]);
+            ->through(fn (Interaccion $i): array => $this->presentarPendiente($i));
+    }
+
+    /**
+     * Fila de la agenda: la interacción pendiente + los datos mínimos del
+     * elector que la lista necesita mostrar.
+     *
+     * @return array<string, mixed>
+     */
+    private function presentarPendiente(Interaccion $i): array
+    {
+        return [
+            'id' => $i->id,
+            'tipo' => $i->tipo,
+            'nota' => $i->nota,
+            'proximo_seguimiento' => $i->proximo_seguimiento?->toDateString(),
+            'elector' => [
+                'id' => $i->elector->id,
+                'nombre' => $i->elector->nombre,
+                'seccion_id' => $i->elector->seccion_id,
+                'seccion_numero' => $i->elector->seccion?->numero,
+            ],
+        ];
     }
 
     /**

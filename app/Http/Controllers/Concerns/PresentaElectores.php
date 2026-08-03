@@ -49,6 +49,14 @@ trait PresentaElectores
      * request (`q` nombre ILIKE, `secciones[]`, `modos[]`) y transformando cada
      * fila a la forma estándar de capturados. El caller define el scope base
      * (p. ej. `where('loteria_id', ...)`).
+     *
+     * El trait es específico de `Elector` (todos los callers parten de
+     * `Elector::query()`), no genérico sobre cualquier modelo: se tipa el
+     * builder como tal en vez de introducir un `@template TModel` que ningún
+     * caller usaría con otro modelo.
+     *
+     * @param  Builder<Elector>  $query
+     * @return LengthAwarePaginator<int, array<string, mixed>>
      */
     protected function paginarElectores(Builder $query, Request $request, ?Membership $viewer, int $porPagina = 25): LengthAwarePaginator
     {

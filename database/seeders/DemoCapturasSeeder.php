@@ -378,8 +378,12 @@ class DemoCapturasSeeder extends Seeder
 
             [$min, $max] = $rangos[$seccion->tipo] ?? [400, 1500];
             $span = $max - $min;
+            // $min es siempre positivo y crc32() % positivo nunca es negativo,
+            // así que $valor no puede bajar de $min; max(0, ...) solo deja
+            // explícito ante el análisis estático lo que la aritmética ya
+            // garantiza (Seccion::$lista_nominal es unsigned).
             $valor = $min + (int) (crc32((string) $seccion->numero) % ($span + 1));
-            $valor = (int) (round($valor / 10) * 10);
+            $valor = max(0, (int) (round($valor / 10) * 10));
 
             DB::table('secciones')->where('id', $seccion->id)->update(['lista_nominal' => $valor]);
             $seccion->lista_nominal = $valor;

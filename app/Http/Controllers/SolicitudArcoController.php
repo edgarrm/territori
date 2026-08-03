@@ -48,7 +48,7 @@ class SolicitudArcoController extends Controller
                 'estado' => $solicitud->estado,
                 'elector_id' => $solicitud->elector_id,
                 'elector' => $solicitud->elector ? ['id' => $solicitud->elector->id, 'nombre' => $solicitud->elector->nombre] : null,
-                'solicitado_en' => $solicitud->solicitado_en?->toIso8601String(),
+                'solicitado_en' => $solicitud->solicitado_en->toIso8601String(),
                 'atendido_en' => $solicitud->atendido_en?->toIso8601String(),
                 // Plazo legal de respuesta: 20 días hábiles (LFPDPPP art. 32).
                 'vence_el' => $solicitud->venceEl()->toDateString(),

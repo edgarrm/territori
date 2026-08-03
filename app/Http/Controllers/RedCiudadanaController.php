@@ -117,8 +117,8 @@ class RedCiudadanaController extends Controller
             'activa' => $red->activa,
             'enlace' => [
                 'membership_id' => $red->enlace_membership_id,
-                'nombre' => $red->enlace?->user?->name,
-                'rol' => $red->enlace?->rol,
+                'nombre' => $red->enlace->user->name,
+                'rol' => $red->enlace->rol,
             ],
             'registros_count' => $red->electores_count ?? 0,
         ];
