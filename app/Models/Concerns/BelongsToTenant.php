@@ -13,9 +13,12 @@ trait BelongsToTenant
         static::addGlobalScope(new TenantScope);
 
         static::creating(function ($model) {
-            if (! $model->tenant_id) {
-                $model->tenant_id = TenantContext::get()?->id;
-            }
+            // Incondicional a propósito: tenant_id nunca es fillable en estos
+            // modelos, así que un valor explícito aquí solo puede venir de código
+            // interno (factories/seeders) que debe fijar el TenantContext, no del
+            // propio atributo. Evita el salto de tenant si algún día se vuelve
+            // fillable por error (A5).
+            $model->tenant_id = TenantContext::get()?->id;
         });
     }
 

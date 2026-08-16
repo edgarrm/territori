@@ -19,21 +19,21 @@ class SeccionDetalleTest extends TestCase
     /**
      * @return array{0: Tenant, 1: User, 2: Municipio, 3: Membership}
      */
-    private function tenantConMiembro(string $rol = 'brigadista'): array
+    private function tenantConMiembro(string $rol = 'coordinador'): array
     {
         $municipio = Municipio::factory()->create();
         $tenant = Tenant::factory()->create(['municipio_id' => $municipio->id]);
-        $user = User::factory()->create();
+        // 2FA confirmada: /api/secciones/{s}/electores la exige (trae PII).
+        $user = User::factory()->withTwoFactor()->create();
         $membership = Membership::create(['tenant_id' => $tenant->id, 'user_id' => $user->id, 'rol' => $rol]);
 
         return [$tenant, $user, $municipio, $membership];
     }
 
-    public function test_pagina_detalle_renderiza_para_miembro(): void
+    public function test_pagina_detalle_renderiza_para_gestion(): void
     {
-        [$tenant, $user, $municipio, $brigadista] = $this->tenantConMiembro();
+        [$tenant, $user, $municipio] = $this->tenantConMiembro();
         $seccion = Seccion::factory()->create(['municipio_id' => $municipio->id]);
-        $brigadista->secciones()->attach($seccion->id, ['tenant_id' => $tenant->id]);
 
         $response = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
             ->get("/secciones/{$seccion->id}");
@@ -68,13 +68,13 @@ class SeccionDetalleTest extends TestCase
 
     public function test_electores_scoped_por_tenant(): void
     {
-        [$tenantA, $userA, $municipio] = $this->tenantConMiembro();
-        [$tenantB, $userB, , $brigadistaB] = $this->tenantConMiembro();
+        [$tenantA, , $municipio] = $this->tenantConMiembro();
+        [$tenantB, $userB] = $this->tenantConMiembro();
         Tenant::query()->whereKey($tenantB->id)->update(['municipio_id' => $municipio->id]);
 
+        // El coordinador de B ve todas las secciones del municipio, pero no los
+        // electores de A.
         $seccion = Seccion::factory()->create(['municipio_id' => $municipio->id]);
-        // El brigadista de B tiene la sección asignada, pero no verá electores de A.
-        $brigadistaB->secciones()->attach($seccion->id, ['tenant_id' => $tenantB->id]);
 
         TenantContext::set($tenantA);
         Elector::factory()->create(['tenant_id' => $tenantA->id, 'seccion_id' => $seccion->id]);

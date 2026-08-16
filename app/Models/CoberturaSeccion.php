@@ -43,7 +43,6 @@ class CoberturaSeccion extends Model
     protected $primaryKey = null;
 
     protected $fillable = [
-        'tenant_id',
         'seccion_id',
         'capturados',
         'meta',

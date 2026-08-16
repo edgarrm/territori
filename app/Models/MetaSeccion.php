@@ -29,7 +29,6 @@ class MetaSeccion extends Model
     protected $table = 'metas_seccion';
 
     protected $fillable = [
-        'tenant_id',
         'seccion_id',
         'meta_capturas',
         'fuente_meta',

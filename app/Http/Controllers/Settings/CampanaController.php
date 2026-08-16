@@ -23,6 +23,9 @@ class CampanaController extends Controller
             'partidos' => Partido::query()->orderBy('nombre')->get(['id', 'siglas', 'nombre', 'color']),
             'partidoId' => $tenant?->partido_id,
             'configuracion' => $tenant?->configuracion(),
+            // Para el aviso del cierre de campaña: cuántos días sobreviven los
+            // datos personales tras agotarse la finalidad (LFPDPPP art. 11).
+            'diasRetencion' => (int) config('app.retencion.campana_cerrada_dias'),
         ]);
     }
 

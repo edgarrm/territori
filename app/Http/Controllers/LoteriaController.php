@@ -92,11 +92,18 @@ class LoteriaController extends Controller
     public function electores(Request $request, string $loteria): JsonResponse
     {
         $modelo = Loteria::query()->findOrFail($loteria);
+        $viewer = $this->membership();
+        $esGestion = $viewer->esGestion();
+
+        abort_unless(
+            $esGestion || $modelo->membership_id === $viewer->id || $modelo->creada_por_membership_id === $viewer->id,
+            403,
+        );
 
         $electores = $this->paginarElectores(
             Elector::query()->where('loteria_id', $modelo->id),
             $request,
-            $this->membership(),
+            $viewer,
         );
 
         return response()->json($electores);

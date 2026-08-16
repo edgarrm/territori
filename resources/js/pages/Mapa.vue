@@ -3,9 +3,11 @@ import { Head, Link, usePage } from '@inertiajs/vue3';
 // Solo los tipos en la carga del módulo: Leaflet toca `window` al importarse y
 // rompería el render en servidor (SSR). El runtime se carga dinámicamente en
 // onMounted (solo en el cliente). Ver leaflet-src.js / SSR.
+import { useMediaQuery } from '@vueuse/core';
 import type * as L from 'leaflet';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import 'leaflet/dist/leaflet.css';
+import SelectorModosMapa from '@/components/SelectorModosMapa.vue';
 import { fmt, formatoDiferenciaCompetitividad, pct } from '@/lib/formato';
 import { dashboard } from '@/routes';
 import { cobertura as coberturaRoute } from '@/routes/mapa';
@@ -238,7 +240,9 @@ function bucketPenetracion(valor: number) {
 function bucketMovilizacionVerificada(valor: number) {
     return (
         ESCALA_MOVILIZACION_VERIFICADA.find((b) => valor >= b.min) ??
-        ESCALA_MOVILIZACION_VERIFICADA[ESCALA_MOVILIZACION_VERIFICADA.length - 1]
+        ESCALA_MOVILIZACION_VERIFICADA[
+            ESCALA_MOVILIZACION_VERIFICADA.length - 1
+        ]
     );
 }
 
@@ -287,7 +291,11 @@ const categoriasCompetitividad = computed(
 );
 
 function bucketEstatusPartido(p: FeatureProps) {
-    return { key: p.estatus_slug, label: p.estatus_label, color: p.estatus_color };
+    return {
+        key: p.estatus_slug,
+        label: p.estatus_label,
+        color: p.estatus_color,
+    };
 }
 
 function bucketTipoSeccion(p: FeatureProps) {
@@ -328,6 +336,11 @@ const modo = ref<Modo>('cobertura');
 const seccionSel = ref<SeccionSel | null>(null);
 const busqueda = ref('');
 const features = ref<FeatureProps[]>([]);
+
+// Debajo de `lg` el panel lateral no cabe junto al mapa: se muestra como cajón
+// inferior (drawer) que se abre al elegir una sección o desde la barra compacta.
+const esCompacto = useMediaQuery('(max-width: 1023px)');
+const panelAbierto = ref(false);
 
 function colorFeature(p: FeatureProps): string {
     switch (modo.value) {
@@ -696,6 +709,10 @@ async function seleccionar(p: FeatureProps) {
     // Acerca automáticamente a la sección para ubicarla y ver sus calles.
     enfocarSeccion(p.seccion_id);
 
+    if (esCompacto.value) {
+        panelAbierto.value = true;
+    }
+
     const respuesta = await fetch(resumenRoute.url(p.seccion_id));
     const resumen = await respuesta.json();
 
@@ -727,10 +744,12 @@ function buscar() {
     seleccionar(objetivo);
 }
 
-function cambiarModo(nuevo: Modo) {
-    modo.value = nuevo;
+function cambiarModo(nuevo: string) {
+    modo.value = nuevo as Modo;
     capa?.setStyle(estiloFeature);
 }
+
+let observadorTamano: ResizeObserver | null = null;
 
 onMounted(async () => {
     leaflet = await import('leaflet');
@@ -772,6 +791,15 @@ onMounted(async () => {
         )
         .addTo(mapa);
 
+    // El contenedor cambia de tamaño al pasar de una a dos columnas (breakpoint
+    // `lg`) sin que medie un resize de ventana: Leaflet necesita el aviso.
+    const contenedor = document.getElementById('mapa-cobertura');
+
+    if (contenedor) {
+        observadorTamano = new ResizeObserver(() => mapa?.invalidateSize());
+        observadorTamano.observe(contenedor);
+    }
+
     // Deep-link: si otra vista enlazó con ?seccion={id}, cargamos la capa sin
     // encuadre global y enfocamos directamente esa sección (si el rol la ve).
     const seccionFoco = props.seccionInicial;
@@ -790,6 +818,7 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+    observadorTamano?.disconnect();
     mapa?.remove();
 });
 </script>
@@ -797,10 +826,60 @@ onBeforeUnmount(() => {
 <template>
     <Head title="Mapa de cobertura" />
 
-    <div class="flex h-[calc(100dvh-5rem)] min-h-0 gap-4 p-4">
-        <!-- Panel de control -->
+    <div
+        class="flex h-[calc(100dvh-4rem)] min-h-0 flex-col gap-3 p-3 lg:flex-row lg:gap-4 lg:p-4"
+    >
+        <!-- Barra compacta (solo móvil/tablet): modos, búsqueda y acceso al panel -->
+        <div
+            class="flex shrink-0 flex-col gap-2 lg:hidden"
+            dusk="mapa-barra-movil"
+        >
+            <SelectorModosMapa
+                :modo="modo"
+                :modos="modos"
+                variante="chips"
+                @cambiar="cambiarModo"
+            />
+            <div class="flex gap-2">
+                <input
+                    v-model="busqueda"
+                    type="search"
+                    inputmode="numeric"
+                    placeholder="Buscar sección…"
+                    class="min-w-0 flex-1 rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    @keyup.enter="buscar"
+                />
+                <button
+                    type="button"
+                    class="shrink-0 rounded-lg px-4 py-2 text-sm font-semibold text-white"
+                    :style="{ backgroundColor: brandColor }"
+                    dusk="mapa-abrir-panel"
+                    @click="panelAbierto = true"
+                >
+                    {{
+                        seccionSel ? `Sección ${seccionSel.numero}` : 'Resumen'
+                    }}
+                </button>
+            </div>
+        </div>
+
+        <!-- Fondo oscuro del cajón inferior en móvil -->
+        <div
+            v-if="panelAbierto"
+            class="fixed inset-0 z-[1090] bg-black/40 lg:hidden"
+            @click="panelAbierto = false"
+        />
+
+        <!-- Panel de control: columna fija en escritorio, cajón inferior en móvil -->
         <aside
-            class="flex w-[22rem] shrink-0 flex-col gap-3 overflow-y-auto rounded-2xl border border-sidebar-border/70 bg-card shadow-sm dark:border-sidebar-border"
+            class="flex flex-col gap-3 overflow-y-auto border-sidebar-border/70 bg-card shadow-sm transition-transform duration-300 dark:border-sidebar-border"
+            :class="[
+                'fixed inset-x-0 bottom-0 z-[1100] max-h-[80dvh] rounded-t-2xl border-t',
+                panelAbierto ? 'translate-y-0' : 'translate-y-full',
+                'lg:static lg:z-auto lg:max-h-none lg:w-[22rem] lg:shrink-0 lg:translate-y-0 lg:rounded-2xl lg:border',
+            ]"
+            :inert="esCompacto && !panelAbierto"
+            dusk="mapa-panel"
         >
             <!-- Header de marca -->
             <header
@@ -816,29 +895,26 @@ onBeforeUnmount(() => {
                     <h1 class="text-lg font-semibold tracking-tight">
                         {{ page.props.marca?.nombre ?? 'Territori' }}
                     </h1>
+                    <button
+                        type="button"
+                        class="ml-auto rounded-md px-2 py-1 text-xs font-semibold text-white/90 hover:bg-white/15 lg:hidden"
+                        dusk="mapa-cerrar-panel"
+                        @click="panelAbierto = false"
+                    >
+                        Cerrar ✕
+                    </button>
                 </div>
                 <p class="mt-1 text-xs text-white/80">{{ subtitulo }}</p>
             </header>
 
             <div class="flex flex-col gap-3 px-4 pb-4">
-                <!-- Toggle de modo -->
-                <div
-                    class="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1 text-sm"
-                >
-                    <button
-                        v-for="opcion in modos"
-                        :key="opcion.key"
-                        type="button"
-                        class="rounded-md px-2 py-1.5 font-medium transition-colors"
-                        :class="
-                            modo === opcion.key
-                                ? 'bg-background text-foreground shadow-sm'
-                                : 'text-muted-foreground hover:text-foreground'
-                        "
-                        @click="cambiarModo(opcion.key)"
-                    >
-                        {{ opcion.label }}
-                    </button>
+                <!-- Toggle de modo (en móvil vive en la barra compacta) -->
+                <div class="hidden lg:block">
+                    <SelectorModosMapa
+                        :modo="modo"
+                        :modos="modos"
+                        @cambiar="cambiarModo"
+                    />
                 </div>
 
                 <!-- Aviso: modo competitividad sin partido configurado -->
@@ -959,13 +1035,13 @@ onBeforeUnmount(() => {
                     </div>
                 </div>
 
-                <!-- Buscador -->
+                <!-- Buscador (en móvil vive en la barra compacta) -->
                 <input
                     v-model="busqueda"
                     type="search"
                     inputmode="numeric"
                     placeholder="Buscar sección por número…"
-                    class="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    class="hidden w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring lg:block"
                     @keyup.enter="buscar"
                 />
 
@@ -1240,13 +1316,15 @@ onBeforeUnmount(() => {
                                     </span>
                                 </dd>
                             </div>
-                            <div class="flex items-center justify-between gap-2 py-1.5">
+                            <div
+                                class="flex items-center justify-between gap-2 py-1.5"
+                            >
                                 <dt class="text-muted-foreground">
                                     Movilización verificada
                                 </dt>
                                 <dd class="shrink-0">
                                     <span
-                                        class="whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold text-white"
+                                        class="rounded-full px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap text-white"
                                         :style="{
                                             backgroundColor:
                                                 bucketMovilizacionVerificada(
@@ -1362,7 +1440,7 @@ onBeforeUnmount(() => {
 
                     <Link
                         :href="detalleRoute(seccionSel.seccion_id).url"
-                        class="mt-4 flex w-full items-center justify-center gap-1 rounded-lg px-3 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+                        class="mt-4 flex min-h-11 w-full items-center justify-center gap-1 rounded-lg px-3 text-sm font-semibold text-white transition-opacity hover:opacity-90"
                         :style="{ backgroundColor: brandColor }"
                     >
                         Ver detalle de la sección →
@@ -1389,13 +1467,13 @@ onBeforeUnmount(() => {
 
         <!-- Mapa -->
         <div
-            class="relative flex-1 overflow-hidden rounded-2xl border border-sidebar-border/70 shadow-sm dark:border-sidebar-border"
+            class="relative min-h-0 flex-1 overflow-hidden rounded-2xl border border-sidebar-border/70 shadow-sm dark:border-sidebar-border"
         >
             <div id="mapa-cobertura" class="h-full w-full" />
 
-            <!-- Leyenda -->
+            <!-- Leyenda (en móvil su desglose ya aparece dentro del panel) -->
             <div
-                class="absolute right-3 bottom-3 z-[1000] rounded-xl border border-black/5 bg-background/95 p-3 shadow-lg backdrop-blur"
+                class="absolute right-3 bottom-3 z-[1000] hidden rounded-xl border border-black/5 bg-background/95 p-3 shadow-lg backdrop-blur lg:block"
             >
                 <div
                     class="mb-2 text-[0.7rem] font-semibold tracking-wide text-muted-foreground uppercase"

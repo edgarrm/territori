@@ -1,24 +1,19 @@
 <script setup lang="ts">
 import { Head, router, usePage } from '@inertiajs/vue3';
-import { computed, reactive, ref } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { dashboard } from '@/routes';
+import { useBreadcrumbs } from '@/composables/useBreadcrumbs';
 
 const page = usePage<{ auth: { rol: string | null } }>();
 const esGestion = computed(() =>
     ['coordinador', 'admin'].includes(page.props.auth?.rol ?? ''),
 );
 
-defineOptions({
-    layout: {
-        breadcrumbs: [
-            { title: 'Dashboard', href: dashboard() },
-            { title: 'Agenda', href: '/agenda' },
-            { title: 'Ficha de elector', href: '#' },
-        ],
-    },
-});
+useBreadcrumbs([
+    { title: 'Agenda', href: '/agenda' },
+    { title: 'Ficha de elector', href: '#' },
+]);
 
 type Elector = {
     id: number;
@@ -28,6 +23,10 @@ type Elector = {
     email: string | null;
     domicilio: string | null;
     observaciones: string | null;
+    /** Falso cuando el servidor entregó los campos enmascarados (••••). */
+    pii_visible: boolean;
+    /** Oposición ARCO ejercida: fuera de la agenda y del export. */
+    no_contactar: boolean;
     verificado: boolean;
     verificado_via: string | null;
     verificado_en: string | null;
@@ -61,13 +60,44 @@ const RESULTADOS = [
 
 const timeline = ref<Interaccion[]>([...props.interacciones]);
 
-const datos = reactive({
-    nombre: props.elector.nombre,
-    telefono: props.elector.telefono,
-    email: props.elector.email ?? '',
-    domicilio: props.elector.domicilio ?? '',
-    observaciones: props.elector.observaciones ?? '',
+// Cuando el viewer no puede ver la PII, el servidor entrega los campos
+// enmascarados. Precargarlos en el formulario haría que "Guardar" reenviara
+// los bullets como si fueran el valor real (P15), así que no se precargan ni
+// se muestran los inputs: se enseña el valor enmascarado como texto.
+const puedeEditarPii = computed(() => props.elector.pii_visible);
+
+const CAMPOS = [
+    'nombre',
+    'telefono',
+    'email',
+    'domicilio',
+    'observaciones',
+] as const;
+type Campo = (typeof CAMPOS)[number];
+
+const datos = reactive<Record<Campo, string>>({
+    nombre: puedeEditarPii.value ? props.elector.nombre : '',
+    telefono: puedeEditarPii.value ? props.elector.telefono : '',
+    email: puedeEditarPii.value ? (props.elector.email ?? '') : '',
+    domicilio: puedeEditarPii.value ? (props.elector.domicilio ?? '') : '',
+    observaciones: puedeEditarPii.value
+        ? (props.elector.observaciones ?? '')
+        : '',
 });
+
+// Solo se envían los campos que el usuario tocó: un PUT con el payload entero
+// reescribiría con valores que nunca vio.
+const tocados = reactive(new Set<Campo>());
+
+for (const campo of CAMPOS) {
+    watch(
+        () => datos[campo],
+        () => tocados.add(campo),
+    );
+}
+
+const hayCambios = computed(() => tocados.size > 0);
+
 const guardando = ref(false);
 const errorEdicion = ref<string | null>(null);
 
@@ -103,19 +133,33 @@ function headers() {
 }
 
 async function guardarElector() {
+    if (tocados.size === 0) {
+        return;
+    }
+
     guardando.value = true;
     errorEdicion.value = null;
+
     try {
+        const cambios: Partial<Record<Campo, string>> = {};
+
+        for (const campo of tocados) {
+            cambios[campo] = datos[campo];
+        }
+
         const res = await fetch(`/api/electores/${props.elector.id}`, {
             method: 'PUT',
             headers: headers(),
-            body: JSON.stringify(datos),
+            body: JSON.stringify(cambios),
         });
+
         if (res.status === 409) {
             errorEdicion.value =
                 'Ese teléfono ya pertenece a otro elector de la campaña.';
         } else if (!res.ok) {
             errorEdicion.value = 'No se pudo guardar.';
+        } else {
+            tocados.clear();
         }
     } finally {
         guardando.value = false;
@@ -124,29 +168,42 @@ async function guardarElector() {
 
 async function registrarInteraccion() {
     registrando.value = true;
+
     try {
         const verificar = nueva.tipo !== 'nota' && nueva.verificar;
         const body: Record<string, unknown> = { tipo: nueva.tipo };
+
         if (nueva.tipo !== 'nota' && nueva.resultado) {
             body.resultado = nueva.resultado;
         }
-        if (nueva.nota) body.nota = nueva.nota;
-        if (nueva.proximo_seguimiento)
+
+        if (nueva.nota) {
+            body.nota = nueva.nota;
+        }
+
+        if (nueva.proximo_seguimiento) {
             body.proximo_seguimiento = nueva.proximo_seguimiento;
-        if (verificar) body.verificar = true;
+        }
+
+        if (verificar) {
+            body.verificar = true;
+        }
 
         const res = await fetch(
             `/api/electores/${props.elector.id}/interacciones`,
             { method: 'POST', headers: headers(), body: JSON.stringify(body) },
         );
+
         if (res.ok) {
             const creada: Interaccion = await res.json();
             timeline.value.unshift(creada);
+
             if (verificar) {
                 verificacion.verificado = true;
                 verificacion.via = creada.tipo;
                 verificacion.en = creada.fecha;
             }
+
             nueva.resultado = '';
             nueva.nota = '';
             nueva.proximo_seguimiento = '';
@@ -159,11 +216,13 @@ async function registrarInteraccion() {
 
 async function quitarVerificacion() {
     quitandoVerificacion.value = true;
+
     try {
         const res = await fetch(
             `/api/electores/${props.elector.id}/verificacion`,
             { method: 'DELETE', headers: headers() },
         );
+
         if (res.ok) {
             verificacion.verificado = false;
             verificacion.via = null;
@@ -184,6 +243,7 @@ const procesandoArco = ref(false);
 async function registrarSolicitudArco() {
     procesandoArco.value = true;
     arcoMensaje.value = null;
+
     try {
         const res = await fetch('/api/solicitudes-arco', {
             method: 'POST',
@@ -209,12 +269,14 @@ function cancelarElector() {
     ) {
         return;
     }
+
     procesandoArco.value = true;
     fetch(`/api/electores/${props.elector.id}`, {
         method: 'DELETE',
         headers: headers(),
     }).then((res) => {
         procesandoArco.value = false;
+
         if (res.ok) {
             router.visit('/agenda');
         } else {
@@ -233,6 +295,14 @@ function cancelarElector() {
             <h1 class="text-xl font-semibold">{{ elector.nombre }}</h1>
             <p class="text-sm text-muted-foreground">
                 Sección {{ elector.seccion_id }}
+            </p>
+
+            <p
+                v-if="elector.no_contactar"
+                class="rounded-lg border border-violet-600/30 bg-violet-600/10 px-3 py-2 text-sm text-violet-700 dark:text-violet-300"
+            >
+                Ejerció su derecho de Oposición: no debe contactarse. Queda
+                fuera de la agenda de seguimientos y del export.
             </p>
 
             <div
@@ -257,32 +327,66 @@ function cancelarElector() {
                 </button>
             </div>
 
-            <label class="text-sm font-medium">Nombre</label>
-            <Input v-model="datos.nombre" />
+            <template v-if="puedeEditarPii">
+                <label class="text-sm font-medium">Nombre</label>
+                <Input v-model="datos.nombre" />
 
-            <label class="text-sm font-medium">Teléfono</label>
-            <Input v-model="datos.telefono" />
+                <label class="text-sm font-medium">Teléfono</label>
+                <Input v-model="datos.telefono" />
 
-            <label class="text-sm font-medium">Email</label>
-            <Input v-model="datos.email" type="email" />
+                <label class="text-sm font-medium">Email</label>
+                <Input v-model="datos.email" type="email" />
 
-            <label class="text-sm font-medium">Domicilio</label>
-            <Input v-model="datos.domicilio" />
+                <label class="text-sm font-medium">Domicilio</label>
+                <Input v-model="datos.domicilio" />
 
-            <label class="text-sm font-medium">Observaciones</label>
-            <textarea
-                v-model="datos.observaciones"
-                rows="3"
-                class="rounded-md border bg-background p-2 text-sm"
-            />
+                <label class="text-sm font-medium">Observaciones</label>
+                <textarea
+                    v-model="datos.observaciones"
+                    rows="3"
+                    class="rounded-md border bg-background p-2 text-sm"
+                />
 
-            <p v-if="errorEdicion" class="text-sm text-destructive">
-                {{ errorEdicion }}
-            </p>
+                <p v-if="errorEdicion" class="text-sm text-destructive">
+                    {{ errorEdicion }}
+                </p>
 
-            <Button :disabled="guardando" @click="guardarElector">
-                Guardar cambios
-            </Button>
+                <Button
+                    :disabled="guardando || !hayCambios"
+                    @click="guardarElector"
+                >
+                    Guardar cambios
+                </Button>
+            </template>
+
+            <!-- Sin permiso de PII el servidor entrega los campos enmascarados:
+                 se muestran como texto y no hay formulario que los reenvíe. -->
+            <template v-else>
+                <dl class="flex flex-col gap-2 text-sm">
+                    <div>
+                        <dt class="font-medium">Teléfono</dt>
+                        <dd class="text-muted-foreground">
+                            {{ elector.telefono }}
+                        </dd>
+                    </div>
+                    <div v-if="elector.email">
+                        <dt class="font-medium">Email</dt>
+                        <dd class="text-muted-foreground">
+                            {{ elector.email }}
+                        </dd>
+                    </div>
+                    <div v-if="elector.domicilio">
+                        <dt class="font-medium">Domicilio</dt>
+                        <dd class="text-muted-foreground">
+                            {{ elector.domicilio }}
+                        </dd>
+                    </div>
+                </dl>
+                <p class="text-xs text-muted-foreground">
+                    Solo quien registró a este contacto (o la coordinación)
+                    puede ver y editar sus datos personales.
+                </p>
+            </template>
 
             <!-- Derechos ARCO (ADR-004) -->
             <div

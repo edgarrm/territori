@@ -51,6 +51,14 @@ const loteriasItem: NavItem = {
     icon: Ticket,
 };
 
+const campoNavItems: NavItem[] = [
+    { title: 'Captura', href: '/captura', icon: ClipboardList },
+    { title: 'Agenda', href: '/agenda', icon: CalendarCheck },
+    { title: 'Eventos', href: '/eventos', icon: CalendarDays },
+    loteriasItem,
+    redesItem,
+];
+
 const mainNavItems = computed<NavItem[]>(() => {
     if (esEnlace.value) {
         return [redesItem];
@@ -60,31 +68,29 @@ const mainNavItems = computed<NavItem[]>(() => {
         return [loteriasItem];
     }
 
-    const items: NavItem[] = [
+    // El brigadista tiene perfil de captura: aterriza en sus capturados y no ve
+    // las vistas de análisis (dashboard, mapa, prioridades).
+    if (!esGestion.value) {
+        return [
+            { title: 'Mis capturados', href: '/mis-capturados', icon: Contact },
+            ...campoNavItems,
+        ];
+    }
+
+    return [
         { title: 'Dashboard', href: dashboard(), icon: LayoutGrid },
         { title: 'Mapa', href: '/mapa', icon: Map },
         { title: 'Prioridades', href: '/prioridades', icon: Crosshair },
-        { title: 'Captura', href: '/captura', icon: ClipboardList },
-        { title: 'Agenda', href: '/agenda', icon: CalendarCheck },
-        { title: 'Eventos', href: '/eventos', icon: CalendarDays },
-        loteriasItem,
-        redesItem,
+        ...campoNavItems,
+        { title: 'Capturados', href: '/capturados', icon: Contact },
+        { title: 'Metas', href: '/metas', icon: Target },
+        { title: 'Miembros', href: '/brigadistas', icon: Users },
+        {
+            title: 'Solicitudes ARCO',
+            href: '/solicitudes-arco',
+            icon: ShieldCheck,
+        },
     ];
-
-    if (esGestion.value) {
-        items.push(
-            { title: 'Capturados', href: '/capturados', icon: Contact },
-            { title: 'Metas', href: '/metas', icon: Target },
-            { title: 'Miembros', href: '/brigadistas', icon: Users },
-            {
-                title: 'Solicitudes ARCO',
-                href: '/solicitudes-arco',
-                icon: ShieldCheck,
-            },
-        );
-    }
-
-    return items;
 });
 
 const footerNavItems: NavItem[] = [

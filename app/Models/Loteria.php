@@ -18,7 +18,7 @@ use Illuminate\Support\Carbon;
  *
  * @property int $id
  * @property int $tenant_id
- * @property int $membership_id
+ * @property int|null $membership_id
  * @property int|null $creada_por_membership_id
  * @property int $seccion_id
  * @property string $nombre
@@ -36,7 +36,6 @@ class Loteria extends Model
     protected $table = 'loterias';
 
     protected $fillable = [
-        'tenant_id',
         'membership_id',
         'creada_por_membership_id',
         'seccion_id',

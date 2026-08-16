@@ -2,6 +2,7 @@
 import { Head, useForm } from '@inertiajs/vue3';
 import { ArrowDown, ArrowUp, Plus, Trash2 } from '@lucide/vue';
 import { computed } from 'vue';
+import CerrarCampana from '@/components/CerrarCampana.vue';
 import Heading from '@/components/Heading.vue';
 import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
@@ -37,6 +38,7 @@ const props = defineProps<{
     partidos: Partido[];
     partidoId: number | null;
     configuracion: Configuracion;
+    diasRetencion: number;
 }>();
 
 defineOptions({
@@ -357,5 +359,7 @@ function guardar() {
                 >
             </div>
         </form>
+
+        <CerrarCampana :dias-retencion="props.diasRetencion" />
     </div>
 </template>

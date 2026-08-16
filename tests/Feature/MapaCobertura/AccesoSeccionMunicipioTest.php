@@ -25,7 +25,9 @@ class AccesoSeccionMunicipioTest extends TestCase
     {
         $municipio = Municipio::factory()->create();
         $tenant = Tenant::factory()->create(['municipio_id' => $municipio->id]);
-        $user = User::factory()->create();
+        // Con 2FA confirmada: la lista de electores por sección la exige, y sin
+        // ella el 403 taparía el 404 que este test quiere comprobar.
+        $user = User::factory()->withTwoFactor()->create();
         Membership::create(['tenant_id' => $tenant->id, 'user_id' => $user->id, 'rol' => 'admin']);
 
         return [$user, $tenant, $municipio];

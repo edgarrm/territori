@@ -2,10 +2,13 @@ import { usePage } from '@inertiajs/vue3';
 import type { ComputedRef } from 'vue';
 import { computed } from 'vue';
 
-// Roles con acceso a las rutas de mapa (routes/web.php: grupo rol:brigadista,coordinador,admin).
-const ROLES_CON_MAPA = ['brigadista', 'coordinador', 'admin'];
-// Mismo grupo de rutas cubre la ficha del elector (electores.page/show/update, interacciones.*).
-const ROLES_CON_FICHA_ELECTOR = ROLES_CON_MAPA;
+// Roles con acceso a las rutas de mapa y detalle de sección (routes/web.php:
+// grupo rol:coordinador,admin). El brigadista quedó fuera: su perfil es de
+// captura y no incluye las vistas de análisis.
+const ROLES_CON_MAPA = ['coordinador', 'admin'];
+// La ficha del elector sí la conserva el brigadista: es operativa (seguimiento
+// de a quien capturó). Grupo rol:brigadista,coordinador,admin.
+const ROLES_CON_FICHA_ELECTOR = ['brigadista', 'coordinador', 'admin'];
 
 export type UsePermisosCapturadosReturn = {
     puedeVerMapa: ComputedRef<boolean>;
@@ -14,8 +17,9 @@ export type UsePermisosCapturadosReturn = {
 
 /**
  * Permisos de navegación para las listas de capturados (ListaCapturados.vue,
- * Loterias.vue): roles como "enlace" y "anfitrion" no tienen acceso a las rutas de
- * mapa ni a la ficha del elector, así que esos links no deben renderizarse para ellos.
+ * Loterias.vue, Eventos.vue): los roles sin acceso a una ruta no deben ver el
+ * link, o los llevaría a un 403. "enlace", "anfitrion" y "brigadista" no llegan
+ * al mapa; solo "enlace" y "anfitrion" quedan fuera de la ficha del elector.
  */
 export function usePermisosCapturados(): UsePermisosCapturadosReturn {
     const page = usePage<{ auth: { rol: string | null } }>();

@@ -2,6 +2,7 @@
 
 namespace App\Actions\Electores;
 
+use App\Actions\Privacidad\RegistrarAcceso;
 use App\Exceptions\ElectorDuplicado;
 use App\Models\Elector;
 use App\Support\Telefono;
@@ -14,6 +15,8 @@ use App\Support\Telefono;
  */
 class ActualizarElector
 {
+    public function __construct(private RegistrarAcceso $bitacora) {}
+
     /**
      * @param  array<string, mixed>  $datos
      *
@@ -43,13 +46,15 @@ class ActualizarElector
             $nuevoHash = Telefono::hash((string) $datos['telefono']);
 
             if ($nuevoHash !== $elector->telefono_hash) {
-                $existente = Elector::query()
+                // Solo el id: cargar el modelo completo metería PII descifrada en
+                // la excepción, y de ahí al log (P13).
+                $existenteId = Elector::query()
                     ->where('telefono_hash', $nuevoHash)
                     ->where('id', '!=', $elector->id)
-                    ->first();
+                    ->value('id');
 
-                if ($existente !== null) {
-                    throw new ElectorDuplicado($existente);
+                if ($existenteId !== null) {
+                    throw new ElectorDuplicado((int) $existenteId);
                 }
 
                 $cambios['telefono'] = $datos['telefono'];
@@ -59,6 +64,12 @@ class ActualizarElector
 
         if ($cambios !== []) {
             $elector->update($cambios);
+
+            // Solo los nombres de los campos tocados, nunca sus valores.
+            // telefono_hash es derivado de telefono: no aporta a la traza.
+            $this->bitacora->handle('elector.actualizado', 'elector', $elector->id, [
+                'campos' => array_values(array_diff(array_keys($cambios), ['telefono_hash'])),
+            ]);
         }
 
         return $elector;

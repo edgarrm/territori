@@ -29,7 +29,7 @@ class BandejaArcoTest extends TestCase
         (new CartografiaSeeder)->run(base_path('tests/Fixtures/cartografia/99-test'));
         $municipio = Municipio::query()->where('clave', 12)->first();
         $tenant = Tenant::factory()->create(['municipio_id' => $municipio->id]);
-        $user = User::factory()->create();
+        $user = User::factory()->withTwoFactor()->create();
         $membership = Membership::create(['tenant_id' => $tenant->id, 'user_id' => $user->id, 'rol' => $rol]);
         TenantContext::set($tenant);
         $seccion = Seccion::query()->where('municipio_id', $municipio->id)->where('numero', 1)->first();
@@ -161,7 +161,9 @@ class BandejaArcoTest extends TestCase
     {
         [$tenant, $user] = $this->setupCampana('coordinador');
         $otro = Tenant::factory()->create();
+        TenantContext::set($otro);
         $solOtro = SolicitudArco::factory()->create(['tenant_id' => $otro->id, 'tipo' => 'acceso', 'estado' => 'pendiente']);
+        TenantContext::set($tenant);
 
         $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
             ->putJson("/api/solicitudes-arco/{$solOtro->id}/atendido")->assertNotFound();

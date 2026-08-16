@@ -55,6 +55,9 @@ class StoreElectorRequest extends FormRequest
             ],
             'email' => ['nullable', 'email', 'max:160'],
             'consentimiento' => ['accepted'],
+            // Modalidad del consentimiento (LFPDPPP art. 8): la captura en
+            // campo es verbal salvo que se recabe firma o formulario.
+            'consentimiento_via' => ['nullable', 'in:verbal,escrito'],
             'aviso_privacidad_id' => [
                 'required',
                 Rule::exists('avisos_privacidad', 'id')->where('tenant_id', $tenantId),
@@ -65,10 +68,13 @@ class StoreElectorRequest extends FormRequest
                 Rule::exists('secciones', 'id')->where('municipio_id', $tenant?->municipio_id),
             ],
             'domicilio' => ['nullable', 'string', 'max:255'],
-            'observaciones' => ['nullable', 'string'],
+            // La columna es `text` (ilimitada): sin tope, un solo POST puede
+            // escribir megabytes de texto libre por elector.
+            'observaciones' => ['nullable', 'string', 'max:2000'],
             'ubicacion' => ['nullable', 'array'],
-            'ubicacion.lat' => ['required_with:ubicacion', 'numeric'],
-            'ubicacion.lng' => ['required_with:ubicacion', 'numeric'],
+            // Rango WGS84: fuera de él la coordenada no existe en la Tierra.
+            'ubicacion.lat' => ['required_with:ubicacion', 'numeric', 'between:-90,90'],
+            'ubicacion.lng' => ['required_with:ubicacion', 'numeric', 'between:-180,180'],
         ];
     }
 }

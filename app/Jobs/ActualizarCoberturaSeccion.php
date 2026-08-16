@@ -26,8 +26,14 @@ class ActualizarCoberturaSeccion implements ShouldQueue
     {
         TenantContext::set(Tenant::findOrFail($this->tenantId));
 
-        $seccion = Seccion::findOrFail($this->seccionId);
+        try {
+            $seccion = Seccion::findOrFail($this->seccionId);
 
-        $recalcular->handle($seccion);
+            $recalcular->handle($seccion);
+        } finally {
+            // El worker es un proceso de larga vida: sin esto, el siguiente job
+            // en la misma cola heredaría este tenant si no fija el suyo primero.
+            TenantContext::clear();
+        }
     }
 }

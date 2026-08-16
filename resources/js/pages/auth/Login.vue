@@ -23,6 +23,7 @@ defineOptions({
 defineProps<{
     status?: string;
     canResetPassword: boolean;
+    canRegister: boolean;
 }>();
 </script>
 
@@ -102,7 +103,10 @@ defineProps<{
             </Button>
         </div>
 
-        <div class="text-center text-sm text-muted-foreground">
+        <div
+            v-if="canRegister"
+            class="text-center text-sm text-muted-foreground"
+        >
             ¿No tienes una cuenta?
             <TextLink :href="register()" :tabindex="5">Regístrate</TextLink>
         </div>

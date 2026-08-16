@@ -13,6 +13,7 @@ class LoginTest extends DuskTestCase
     public function test_un_usuario_inicia_sesion_y_entra_al_dashboard(): void
     {
         [, $user] = $this->crearCampana('admin');
+        $this->confirmarDobleFactor($user);
 
         $this->browse(function (Browser $browser) use ($user) {
             $browser->visit('/login')

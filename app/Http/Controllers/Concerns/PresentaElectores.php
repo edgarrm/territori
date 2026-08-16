@@ -49,6 +49,14 @@ trait PresentaElectores
      * request (`q` nombre ILIKE, `secciones[]`, `modos[]`) y transformando cada
      * fila a la forma estándar de capturados. El caller define el scope base
      * (p. ej. `where('loteria_id', ...)`).
+     *
+     * El trait es específico de `Elector` (todos los callers parten de
+     * `Elector::query()`), no genérico sobre cualquier modelo: se tipa el
+     * builder como tal en vez de introducir un `@template TModel` que ningún
+     * caller usaría con otro modelo.
+     *
+     * @param  Builder<Elector>  $query
+     * @return LengthAwarePaginator<int, array<string, mixed>>
      */
     protected function paginarElectores(Builder $query, Request $request, ?Membership $viewer, int $porPagina = 25): LengthAwarePaginator
     {
@@ -92,16 +100,21 @@ trait PresentaElectores
      */
     protected function filaElector(Elector $elector, ?Membership $viewer): array
     {
+        $verPii = $this->puedeVerPii($elector, $viewer);
+
         return [
             'id' => $elector->id,
-            'nombre' => $elector->nombre,
+            // El nombre completo + sección + últimos 4 dígitos reidentifica
+            // trivialmente (P6): en lista ajena va reducido a iniciales.
+            'nombre' => $verPii ? $elector->nombre : Pii::enmascararNombre($elector->nombre),
             'seccion_id' => $elector->seccion_id,
             'seccion_numero' => $elector->seccion?->numero,
             'modo_captura' => $elector->modo_captura,
             'origen' => $this->origen($elector),
-            'telefono' => $this->puedeVerPii($elector, $viewer)
-                ? $elector->telefono
-                : Pii::enmascararTelefono($elector->telefono),
+            'telefono' => $verPii ? $elector->telefono : Pii::enmascararTelefono($elector->telefono),
+            // Oposición ejercida (P9): la lista lo marca para que nadie lo
+            // contacte desde ahí.
+            'no_contactar' => $elector->no_contactar,
             'capturado_en' => $elector->created_at?->toIso8601String(),
         ];
     }

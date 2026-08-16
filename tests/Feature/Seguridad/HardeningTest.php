@@ -18,7 +18,7 @@ class HardeningTest extends TestCase
      */
     private function adminConCampana(): array
     {
-        $user = User::factory()->create();
+        $user = User::factory()->withTwoFactor()->create();
         $tenant = Tenant::factory()->create();
         Membership::create(['tenant_id' => $tenant->id, 'user_id' => $user->id, 'rol' => 'admin', 'activo' => true]);
 
@@ -75,5 +75,64 @@ class HardeningTest extends TestCase
 
         $response->assertRedirect(route('dashboard'));
         $this->assertDatabaseHas('tenants', ['nombre' => 'Color válido', 'marca_color' => '#1d4ed8']);
+    }
+
+    public function test_cabeceras_de_seguridad_estan_presentes(): void
+    {
+        $response = $this->get(route('login'));
+
+        $response->assertOk();
+        $response->assertHeader('X-Frame-Options', 'DENY');
+        $response->assertHeader('X-Content-Type-Options', 'nosniff');
+        $response->assertHeader('Referrer-Policy', 'same-origin');
+        $response->assertHeader('Permissions-Policy');
+
+        $csp = $response->headers->get('Content-Security-Policy');
+        $this->assertNotNull($csp);
+        $this->assertStringContainsString("default-src 'self'", $csp);
+        $this->assertStringContainsString("frame-ancestors 'none'", $csp);
+        $this->assertMatchesRegularExpression("/script-src 'self' 'nonce-[A-Za-z0-9+\/=]+'/", $csp);
+    }
+
+    public function test_hsts_solo_se_envia_sobre_https(): void
+    {
+        $host = parse_url(config('app.url'), PHP_URL_HOST);
+        $path = route('login', absolute: false);
+
+        $this->get("http://{$host}{$path}")->assertHeaderMissing('Strict-Transport-Security');
+
+        $this->get("https://{$host}{$path}")
+            ->assertHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    }
+
+    public function test_forgot_password_aplica_throttle_tras_seis_intentos(): void
+    {
+        for ($i = 0; $i < 6; $i++) {
+            $this->post(route('password.email'), ['email' => 'nadie@example.com'])
+                ->assertStatus(302);
+        }
+
+        $this->post(route('password.email'), ['email' => 'nadie@example.com'])
+            ->assertStatus(429);
+    }
+
+    /**
+     * A6: throttle propio (20/min) en la captura de electores, más estricto que
+     * el 120/min compartido del grupo, para acotar el oráculo de enumeración del
+     * 409 por teléfono duplicado.
+     */
+    public function test_crear_elector_aplica_throttle_propio_tras_veinte_intentos(): void
+    {
+        [$user, $tenant] = $this->adminConCampana();
+
+        for ($i = 0; $i < 20; $i++) {
+            $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+                ->postJson('/api/electores', [])
+                ->assertStatus(422);
+        }
+
+        $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->postJson('/api/electores', [])
+            ->assertStatus(429);
     }
 }

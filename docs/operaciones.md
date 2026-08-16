@@ -1,6 +1,6 @@
 # Operaciones — Territori
 
-> Runbook para preparar entornos, cargar datos y mantener la app. Para el arranque local detallado y la sección de seguridad de cadena de suministro, ver [`_ai/SETUP.md`](../_ai/SETUP.md).
+> Runbook para preparar entornos, cargar datos y mantener la app. Para el arranque local detallado y la sección de seguridad de cadena de suministro, ver [`_ai/SETUP.md`](../_ai/SETUP.md). Para la matriz de controles de seguridad y privacidad (qué protege cada uno, dónde vive y qué test lo fija), ver [`seguridad.md`](seguridad.md).
 
 ## Requisitos
 
@@ -82,28 +82,136 @@ El job fija el `TenantContext` desde su `tenant_id` (los jobs no heredan el tena
 
 ## ⚠️ Checklist de hardening de producción
 
-`.env.example` viene orientado a desarrollo (`APP_DEBUG=true`, `APP_ENV=local`, `SESSION_ENCRYPT=false`, `DB_CONNECTION=sqlite`). **Copiarlo tal cual a producción filtra stack traces con datos sensibles.** En el `.env` de producción, verifica:
+`.env.example` viene orientado a desarrollo (`APP_DEBUG=true`, `APP_ENV=local`, `SESSION_ENCRYPT=false`, `DB_CONNECTION=sqlite`). **Copiarlo tal cual a producción filtra stack traces con datos sensibles.**
 
-```dotenv
-APP_ENV=production
-APP_DEBUG=false                 # crítico: evita exponer stack traces / PII en errores
-APP_KEY=base64:...              # generada (php artisan key:generate); NUNCA vacía ni en el repo
-APP_URL=https://...             # dominio real con HTTPS
+La lista completa de variables de seguridad vive en un solo sitio: el bloque
+**`# production variables`** al final de [`.env.example`](../.env.example). Está
+comentado para que copiar el archivo siga dando un entorno de desarrollo que arranca;
+al montar producción se copia ese bloque y se descomenta. Crece con cada fase de la
+remediación de seguridad, así que consúltalo ahí en vez de duplicarlo aquí.
 
-DB_CONNECTION=pgsql             # nunca sqlite en prod
+`AppServiceProvider::verificarConfiguracionDeProduccion()` aborta el arranque si en
+producción `APP_DEBUG` está activo, falta `SESSION_SECURE_COOKIE`/`SESSION_ENCRYPT`
+o `TRUSTED_PROXIES` está vacío o en `*`. Es deliberado: toda la política de seguridad
+(contraseñas de 12 con `uncompromised`, `prohibitDestructiveCommands`) cuelga de
+`isProduction()`, así que un `APP_ENV` mal puesto la degradaba en silencio.
 
-SESSION_SECURE_COOKIE=true      # cookies solo por HTTPS
-SESSION_ENCRYPT=true            # opcional pero recomendado (sesión en DB)
-SESSION_SAME_SITE=lax
-
-LOG_LEVEL=warning               # no 'debug' en prod
-```
-
+- **`APP_URL` con el dominio real** antes de nada: alimenta la validación de la
+  cabecera `Host` (`trustHosts`) y el `relying_party_id` de las passkeys. Si queda
+  apuntando a un túnel de desarrollo, las passkeys se registran contra el dominio
+  equivocado y dejan de validar.
+- **`TRUSTED_PROXIES` con el CIDR del balanceador**, nunca `*`: con `*` cualquier
+  cliente falsea su IP vía `X-Forwarded-For`, se salta el rate limit de login y
+  escribe la IP que quiera en la bitácora de accesos.
 - Forzar **HTTPS** (redirección + HSTS) a nivel de plataforma/servidor.
 - `composer install --no-dev --optimize-autoloader` (excluye Boost y herramientas de dev).
 - Cola persistente real (`QUEUE_CONNECTION=redis|database`) + worker (`queue:work`) para los jobs de cobertura.
-- Rotación de `APP_KEY` solo con plan de migración: re-cifra `telefono`/`domicilio` (cast `encrypted`) **y** invalida los `telefono_hash` (HMAC con APP_KEY) → habría que recalcularlos.
+- **Scheduler corriendo** (`php artisan schedule:work` supervisado, o cron a
+  `schedule:run` cada minuto) — si no, `territori:purgar-datos` nunca se
+  dispara y el incumplimiento del art. 11 (retención de datos personales)
+  queda silencioso: no hay error, log ni alerta, la app sigue funcionando
+  normal. En **Laravel Cloud** esto lo gestiona la plataforma; en cualquier
+  otro hosting hay que montarlo a mano. Ver §Retención de datos personales.
+- Rotación de `APP_KEY`: **nunca a mano**, ver §Rotación de APP_KEY más abajo.
 - Mantener `min-release-age`/`ignore-scripts` del `.npmrc` y los lockfiles commiteados (ver §Seguridad de cadena de suministro).
+
+## Retención de datos personales (LFPDPPP art. 11)
+
+Los datos personales se suprimen cuando dejan de ser necesarios para la finalidad
+que los justificó. `territori:purgar-datos` aplica esa política en tres frentes:
+
+| Frente | Qué hace | Plazo |
+|--------|----------|-------|
+| Cierre de campaña | Un tenant en `estado = 'cerrada'` pierde la PII de sus electores (scrub + baja lógica) | `RETENCION_CAMPANA_CERRADA_DIAS` (180) desde `cerrada_en` |
+| Cancelados antiguos | Borrado físico de las filas ya scrubbeadas por una Cancelación ARCO | `RETENCION_ELECTORES_CANCELADOS_DIAS` (365) |
+| Sesiones | Borra `sessions` con `last_activity` fuera del `SESSION_LIFETIME` | — |
+
+El cierre se hace **desde la aplicación**: Ajustes → Campaña → *Cerrar campaña*
+(admin, con 2FA y reconfirmación de contraseña). Fija `estado` y `cerrada_en`, y
+deja traza `campana.cerrada` en la bitácora. El plazo se mide desde `cerrada_en`
+y no desde `updated_at`, precisamente para que guardar cualquier ajuste de la
+campaña no aplace el borrado. Una campaña cerrada sin `cerrada_en` **no se purga**
+(fail-closed): más vale conservar de más que borrar por una fecha que nadie registró.
+
+```bash
+php artisan territori:purgar-datos --dry-run
+```
+
+Está programado a diario a las 03:30 en [`routes/console.php`](../routes/console.php),
+así que **producción necesita el scheduler corriendo** (`php artisan schedule:work`
+como proceso supervisado, o una entrada de cron a `schedule:run` cada minuto). Sin él
+no se suprime nada y el incumplimiento es silencioso.
+
+El comando recorre las campañas fijando el `TenantContext` una por una: `TenantScope`
+es fail-closed, así que sin contexto no vería ninguna fila. Cada purga queda registrada
+en `bitacora_accesos` (sin actor: no hay usuario detrás de un comando).
+
+## ⚠️ Rotación de `APP_KEY`
+
+`APP_KEY` cifra `telefono`/`email`/`domicilio`/`observaciones`/`ubicacion` de
+`electores` y `titular_contacto` de `solicitudes_arco` (casts `encrypted`), y firma
+el HMAC de `telefono_hash`. **Cambiarla sin migrar los datos no produce ningún error
+al arrancar**: la PII queda ilegible al leerla y, peor, la deduplicación se rompe en
+silencio — los hashes nuevos no coinciden con los guardados, así que cada contacto ya
+registrado se puede volver a capturar como si fuera nuevo.
+
+```bash
+# 1. Respaldo de la base ANTES de tocar nada. El proceso no es reversible sin él.
+pg_dump territori > territori-pre-rotacion.sql
+
+# 2. Guardar la clave actual y generar la nueva. `key:generate` reescribe el .env,
+#    así que la anterior hay que copiarla antes.
+grep '^APP_KEY=' .env                      # anotar el valor: base64:...
+php artisan key:generate --force
+
+# 3. Poner la app en mantenimiento: durante la migración conviven datos con
+#    las dos claves y cualquier lectura fallaría.
+php artisan down
+
+# 4. Ensayo en seco y migración real (descifra con la anterior, cifra con la nueva
+#    y recalcula telefono_hash con el salt por campaña).
+php artisan territori:recifrar-pii --clave-anterior='base64:LA_ANTERIOR' --dry-run
+php artisan territori:recifrar-pii --clave-anterior='base64:LA_ANTERIOR'
+
+# 5. Verificar que la PII se lee y que el dedup responde 409 ante un duplicado.
+php artisan up
+```
+
+Si el paso 4 falla a mitad, restaurar el respaldo y volver a poner la `APP_KEY`
+anterior en el `.env`: los valores ya migrados usan la clave nueva y los pendientes la
+vieja, y no hay forma de distinguirlos.
+
+El mismo comando **sin** `--clave-anterior` solo recalcula `telefono_hash`; es lo que
+hace falta cuando cambia la forma del hash pero no la clave (p. ej. el alta del salt
+por campaña). `--tenant=` acota a una campaña.
+
+`PASSKEYS_USER_HANDLE_SECRET` cae a `APP_KEY` si no está definida: si se rota la clave
+sin haberla fijado aparte, **las passkeys registradas dejan de resolver**. Definirla
+con un secreto propio antes de la primera rotación.
+
+## ⚠️ Exponer la instancia local por un túnel (ngrok)
+
+Publicar el entorno de desarrollo en internet es lo más peligroso que se le puede hacer
+a esta app, porque `laravel/dusk` y `laravel/boost` registran rutas **sin autenticación**
+en cuanto `APP_ENV` no es `production`:
+
+| Ruta | Riesgo |
+|------|--------|
+| `GET /_dusk/login/{userId}` | Autentica como cualquier usuario sin contraseña ni 2FA → acceso total al padrón |
+| `GET /_dusk/logout`, `/_dusk/user` | Manipulación de sesión sin auth |
+| `POST /_boost/browser-logs` | Sin auth **ni CSRF**: log injection y llenado de disco |
+
+`App\Http\Middleware\BloqueaRutasDeDesarrollo` (stack global, primero) las cierra con 404:
+`_dusk/*` solo responde en `testing`/`dusk`/`dusk.local`, y `_boost/*` solo cuando la app
+está en `local` **y** el socket viene de loopback — se lee `REMOTE_ADDR` a propósito, sin
+pasar por la resolución de proxies, porque `X-Forwarded-For` lo escribe el cliente.
+
+Aun así, antes de levantar un túnel:
+
+- `composer install --no-dev` para que los paquetes ni existan.
+- Nunca con datos reales de personas: usa seeders de demo.
+- Acota `TRUSTED_PROXIES`; con `'*'` cualquier cliente es un "proxy confiable" y puede
+  rotar `X-Forwarded-For` para saltarse el rate limit de login.
 
 ## Seguridad de cadena de suministro
 

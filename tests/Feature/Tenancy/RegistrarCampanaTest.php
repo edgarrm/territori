@@ -35,6 +35,30 @@ class RegistrarCampanaTest extends TestCase
         $this->assertNotNull($user->membershipEn($tenant)?->activado_en);
     }
 
+    /**
+     * Crear una campaña abre un tratamiento de datos personales nuevo: es el
+     * acto que hay que poder acreditar ante el INAI, y no dejaba traza.
+     */
+    public function test_crear_campana_deja_traza_en_la_bitacora(): void
+    {
+        $user = User::factory()->create();
+        $municipio = Municipio::factory()->create();
+
+        $tenant = app(RegistrarCampana::class)->handle($user, [
+            'nombre' => 'Mi Campaña',
+            'municipio_id' => $municipio->id,
+        ]);
+
+        // La bitácora es tenant-scoped: la traza vive dentro de la campaña recién
+        // creada, no de la que estuviera activa antes.
+        $this->assertDatabaseHas('bitacora_accesos', [
+            'tenant_id' => $tenant->id,
+            'accion' => 'campana.creada',
+            'recurso_tipo' => 'tenant',
+            'recurso_id' => $tenant->id,
+        ]);
+    }
+
     public function test_subdominio_duplicado_hace_rollback_completo(): void
     {
         $user = User::factory()->create();

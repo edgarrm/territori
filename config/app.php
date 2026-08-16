@@ -68,6 +68,52 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Trusted Proxies
+    |--------------------------------------------------------------------------
+    |
+    | Proxies de los que se aceptan las cabeceras X-Forwarded-*. Con '*'
+    | cualquier cliente cuenta como proxy y puede falsear su IP para saltarse
+    | el rate limit de login, así que en producción debe ser el CIDR real del
+    | balanceador. Lista separada por comas o '*'.
+    |
+    | Sin default a propósito: el valor por omisión era '*', que falla ABIERTO.
+    | Con él, `X-Forwarded-For` controlaba por completo la IP que ve la app —
+    | el limiter de login firma por `email|ip`, así que rotar la cabecera daba
+    | fuerza bruta ilimitada, y la IP de `bitacora_accesos` (la traza LFPDPPP)
+    | quedaba escrita por el atacante. `null` = no se confía en ningún proxy;
+    | `AppServiceProvider::verificarConfiguracionDeProduccion()` además impide
+    | arrancar en producción si sigue vacío o en '*'.
+    |
+    */
+
+    'trusted_proxies' => env('TRUSTED_PROXIES'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Retención de datos personales (LFPDPPP art. 11)
+    |--------------------------------------------------------------------------
+    |
+    | Los datos personales deben suprimirse cuando dejan de ser necesarios para
+    | la finalidad que los justificó. `territori:purgar-datos` aplica estos dos
+    | plazos, en días:
+    |
+    | - electores_cancelados_dias: cuánto se conserva la fila ya scrubbeada de
+    |   una Cancelación ARCO (solo ids y fechas, sin dato personal) antes del
+    |   borrado físico. Existe para poder acreditar que la cancelación se
+    |   ejecutó; pasado el plazo ya no aporta nada.
+    | - campana_cerrada_dias: cuánto sobreviven los electores de una campaña en
+    |   estado 'cerrada' antes de que se les borre la PII. Al cerrar la campaña
+    |   se agota la finalidad del tratamiento.
+    |
+    */
+
+    'retencion' => [
+        'electores_cancelados_dias' => (int) env('RETENCION_ELECTORES_CANCELADOS_DIAS', 365),
+        'campana_cerrada_dias' => (int) env('RETENCION_CAMPANA_CERRADA_DIAS', 180),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
     |

@@ -18,6 +18,7 @@ use Illuminate\Support\Str;
  * @property int|null $partido_id
  * @property string $plan
  * @property string $estado
+ * @property Carbon|null $cerrada_en
  * @property int|null $limite_brigadistas
  * @property string|null $marca_nombre
  * @property string|null $marca_logo_url
@@ -87,7 +88,25 @@ class Tenant extends Model
     {
         return [
             'settings' => 'array',
+            'cerrada_en' => 'datetime',
         ];
+    }
+
+    /**
+     * Cierra la campaña: se agota la finalidad del tratamiento y arranca el
+     * plazo de retención (LFPDPPP art. 11) que aplica `territori:purgar-datos`.
+     *
+     * `cerrada_en` es deliberadamente distinto de `updated_at`: cualquier otra
+     * escritura sobre el tenant movería `updated_at` y aplazaría el borrado.
+     * Idempotente: recerrar no reinicia el reloj.
+     */
+    public function cerrar(): void
+    {
+        if ($this->estado === 'cerrada') {
+            return;
+        }
+
+        $this->forceFill(['estado' => 'cerrada', 'cerrada_en' => now()])->save();
     }
 
     /**
@@ -133,29 +152,77 @@ class Tenant extends Model
     }
 
     /**
+     * Igual que `configuracion()['categorias_competitividad']`, pero con el
+     * tipo preciso: `configuracion()` devuelve `array<string, mixed>` (une
+     * campos de forma heterogénea vía `array_replace_recursive`), así que
+     * cualquier caller que necesite la lista tipada de verdad —como
+     * `CalcularCompetitividadSeccion::handle()`, que exige `slug` presente y
+     * la lista no vacía— debe pasar por aquí en vez de extraerla del array
+     * suelto.
+     *
+     * @return non-empty-list<array{nombre: string, color: string, umbral: int|float|null, slug: string}>
+     */
+    public function categoriasCompetitividad(): array
+    {
+        return $this->normalizarCategorias($this->settings ?? []);
+    }
+
+    /**
      * Resuelve `categorias_competitividad` con `slug` precomputado (para no
      * recalcularlo por sección al evaluar competitividad). Si el tenant no
      * tiene categorías propias pero sí el `umbral_ganada_franca` legado
      * (shape previo a que las categorías fueran configurables), sintetiza la
      * lista default con ese umbral aplicado a la primera categoría.
      *
+     * `$settings` viene de la columna jsonb `tenants.settings`, sin tipo
+     * estático: `CampanaUpdateRequest` ya garantiza en runtime que, cuando
+     * `categorias_competitividad` está presente, es un array no vacío con
+     * `nombre`/`color`/`umbral` por elemento. Se reconstruye campo a campo en
+     * vez de `collect()->map()`, para que el tipo de retorno se apoye en esos
+     * casts explícitos y no en que PHPStan infiera genéricos de un `mixed`.
+     *
      * @param  array<string, mixed>  $settings
-     * @return list<array{nombre: string, color: string, umbral: int|float|null, slug: string}>
+     * @return non-empty-list<array{nombre: string, color: string, umbral: int|float|null, slug: string}>
      */
     private function normalizarCategorias(array $settings): array
     {
         $categorias = $settings['categorias_competitividad'] ?? null;
 
-        if ($categorias === null && isset($settings['umbral_ganada_franca'])) {
+        if (! is_array($categorias) && isset($settings['umbral_ganada_franca'])) {
             $categorias = self::CATEGORIAS_COMPETITIVIDAD_DEFAULT;
             $categorias[0]['umbral'] = $settings['umbral_ganada_franca'];
         }
 
-        $categorias ??= self::CATEGORIAS_COMPETITIVIDAD_DEFAULT;
+        if (! is_array($categorias) || $categorias === []) {
+            $categorias = self::CATEGORIAS_COMPETITIVIDAD_DEFAULT;
+        }
 
-        return collect($categorias)
-            ->map(fn (array $categoria): array => [...$categoria, 'slug' => Str::slug($categoria['nombre'])])
-            ->all();
+        return array_values(array_map(
+            fn (array $categoria): array => $this->normalizarCategoria($categoria),
+            $categorias,
+        ));
+    }
+
+    /**
+     * Normaliza un elemento crudo (del jsonb de `settings`, sin tipo estático,
+     * o de `CATEGORIAS_COMPETITIVIDAD_DEFAULT`) al shape que ya valida
+     * `CampanaUpdateRequest` al guardar: nombre/color como texto, umbral como
+     * número o null, más el slug derivado del nombre.
+     *
+     * @param  array<string, mixed>  $categoria
+     * @return array{nombre: string, color: string, umbral: int|float|null, slug: string}
+     */
+    private function normalizarCategoria(array $categoria): array
+    {
+        $nombre = (string) ($categoria['nombre'] ?? '');
+        $umbral = $categoria['umbral'] ?? null;
+
+        return [
+            'nombre' => $nombre,
+            'color' => (string) ($categoria['color'] ?? ''),
+            'umbral' => is_int($umbral) || is_float($umbral) ? $umbral : null,
+            'slug' => Str::slug($nombre),
+        ];
     }
 
     /**

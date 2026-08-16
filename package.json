@@ -10,6 +10,7 @@
         "format:check": "prettier --check resources/",
         "lint": "eslint . --fix",
         "lint:check": "eslint .",
+        "share": "npm run build && concurrently -k -n servidor,ngrok -c blue,magenta \"php artisan serve --host=127.0.0.1 --port=8000\" \"ngrok http --url=sulphuric-botanical-uproar.ngrok-free.dev 8000\"",
         "types:check": "vue-tsc --noEmit"
     },
     "devDependencies": {

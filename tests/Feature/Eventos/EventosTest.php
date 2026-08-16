@@ -174,6 +174,7 @@ class EventosTest extends TestCase
     {
         [$tenant, $user, $m, $municipio, $aviso] = $this->setupCampana();
         $seccion = Seccion::query()->where('municipio_id', $municipio->id)->where('numero', 1)->first();
+        $m->secciones()->attach($seccion->id, ['tenant_id' => $tenant->id]);
         $evento = Evento::factory()->create(['tenant_id' => $tenant->id, 'seccion_id' => $seccion->id]);
         $otro = Evento::factory()->create(['tenant_id' => $tenant->id, 'seccion_id' => $seccion->id]);
 
@@ -197,6 +198,7 @@ class EventosTest extends TestCase
     {
         [$tenant, $user, $m, $municipio, $aviso] = $this->setupCampana();
         $seccion = Seccion::query()->where('municipio_id', $municipio->id)->where('numero', 1)->first();
+        $m->secciones()->attach($seccion->id, ['tenant_id' => $tenant->id]);
         $evento = Evento::factory()->create(['tenant_id' => $tenant->id, 'seccion_id' => $seccion->id]);
 
         Elector::factory()->create([
@@ -221,7 +223,9 @@ class EventosTest extends TestCase
     {
         [$tenant, $user, $m, $municipio] = $this->setupCampana();
         $otroTenant = Tenant::factory()->create(['municipio_id' => $municipio->id]);
+        TenantContext::set($otroTenant);
         $eventoAjeno = Evento::factory()->create(['tenant_id' => $otroTenant->id]);
+        TenantContext::set($tenant);
 
         $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
             ->getJson("/api/eventos/{$eventoAjeno->id}/asistentes")

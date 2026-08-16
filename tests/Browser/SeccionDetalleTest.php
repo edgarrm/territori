@@ -3,6 +3,7 @@
 namespace Tests\Browser;
 
 use App\Models\Coalicion;
+use App\Models\Elector;
 use App\Models\EstadisticaSeccion;
 use App\Models\Partido;
 use App\Models\Seccion;
@@ -17,6 +18,8 @@ class SeccionDetalleTest extends DuskTestCase
     public function test_detalle_de_seccion_carga(): void
     {
         [, $user, , $municipio] = $this->crearCampana('admin');
+        // El detalle de sección exige 2FA: incluye la lista de electores (PII).
+        $this->confirmarDobleFactor($user);
         $seccion = Seccion::query()->where('municipio_id', $municipio->id)->orderBy('numero')->firstOrFail();
 
         $this->browse(function (Browser $browser) use ($user, $seccion) {
@@ -35,6 +38,8 @@ class SeccionDetalleTest extends DuskTestCase
     public function test_card_de_desglose_aparece_entre_eleccion_y_perfil_por_edad(): void
     {
         [$tenant, $user, , $municipio] = $this->crearCampana('admin');
+        // El detalle de sección exige 2FA: incluye la lista de electores (PII).
+        $this->confirmarDobleFactor($user);
         $partido = Partido::factory()->create(['siglas' => 'MORENA']);
         $tenant->update(['partido_id' => $partido->id]);
         Coalicion::factory()->create(['nombre' => 'Sigamos Haciendo Historia', 'anio' => 2024, 'partidos' => ['MORENA', 'PVEM']]);
@@ -73,6 +78,8 @@ class SeccionDetalleTest extends DuskTestCase
     public function test_boton_agregar_elector_vive_en_la_card_electores(): void
     {
         [, $user, , $municipio] = $this->crearCampana('admin');
+        // El detalle de sección exige 2FA: incluye la lista de electores (PII).
+        $this->confirmarDobleFactor($user);
         $seccion = Seccion::query()->where('municipio_id', $municipio->id)->orderBy('numero')->firstOrFail();
 
         $this->browse(function (Browser $browser) use ($user, $seccion) {
@@ -95,6 +102,36 @@ class SeccionDetalleTest extends DuskTestCase
 
             $browser->press('Agregar elector')
                 ->waitForText("Agregar elector a la sección {$seccion->numero}");
+        });
+    }
+
+    /**
+     * En móvil el detalle cabe a lo ancho y la lista de electores se muestra
+     * como tarjetas (la tabla queda oculta debajo de `sm`).
+     */
+    public function test_el_detalle_es_legible_en_movil(): void
+    {
+        [$tenant, $user, $membership, $municipio] = $this->crearCampana('admin');
+        // El detalle de sección exige 2FA: incluye la lista de electores (PII).
+        $this->confirmarDobleFactor($user);
+        $seccion = Seccion::query()->where('municipio_id', $municipio->id)->orderBy('numero')->firstOrFail();
+        Elector::factory()->create([
+            'tenant_id' => $tenant->id,
+            'seccion_id' => $seccion->id,
+            'membership_id' => $membership->id,
+            'nombre' => 'Juana Pérez',
+        ]);
+
+        $this->browse(function (Browser $browser) use ($user, $seccion) {
+            $browser->loginAs($user)
+                ->resize(...$this->viewportMovil)
+                ->visit("/secciones/{$seccion->id}")
+                ->waitForText("Sección {$seccion->numero}")
+                ->waitForText('Cobertura')
+                ->waitForText('Juana Pérez')
+                ->assertMissing('table');
+
+            $this->assertSinScrollHorizontal($browser);
         });
     }
 }

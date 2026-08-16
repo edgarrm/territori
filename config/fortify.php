@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\BloqueaRegistroPublico;
 use Laravel\Fortify\Features;
 
 return [
@@ -101,7 +102,20 @@ return [
     |
     */
 
-    'middleware' => ['web'],
+    'middleware' => ['web', BloqueaRegistroPublico::class],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Registro público
+    |--------------------------------------------------------------------------
+    |
+    | Permite el auto-registro desde /register. Se apaga cuando la instancia
+    | queda expuesta a internet (p. ej. compartida por un túnel), para que las
+    | altas de miembros pasen solo por la gestión en /brigadistas.
+    |
+    */
+
+    'registro_publico' => (bool) env('REGISTRO_PUBLICO', true),
 
     /*
     |--------------------------------------------------------------------------

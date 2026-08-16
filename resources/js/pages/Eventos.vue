@@ -14,20 +14,17 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
-import { dashboard, mapa } from '@/routes';
+import { useBreadcrumbs } from '@/composables/useBreadcrumbs';
+import { usePermisosCapturados } from '@/composables/usePermisosCapturados';
+import { mapa } from '@/routes';
 import {
     asistentes as eventosAsistentes,
     data as eventosData,
 } from '@/routes/eventos';
 
-defineOptions({
-    layout: {
-        breadcrumbs: [
-            { title: 'Dashboard', href: dashboard() },
-            { title: 'Eventos', href: '/eventos' },
-        ],
-    },
-});
+useBreadcrumbs([{ title: 'Eventos', href: '/eventos' }]);
+
+const { puedeVerMapa } = usePermisosCapturados();
 
 type Evento = {
     id: number;
@@ -297,7 +294,7 @@ function verAsistentes(id: number) {
                         <div class="flex flex-wrap items-center gap-2">
                             <span class="font-medium">{{ evento.nombre }}</span>
                             <Link
-                                v-if="evento.seccion_id !== null"
+                                v-if="evento.seccion_id !== null && puedeVerMapa"
                                 :href="
                                     mapa.url({
                                         query: { seccion: evento.seccion_id },
@@ -307,6 +304,12 @@ function verAsistentes(id: number) {
                             >
                                 {{ seccionLabel(evento.seccion_id) }}
                             </Link>
+                            <span
+                                v-else-if="evento.seccion_id !== null"
+                                class="rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-800 dark:bg-sky-900/40 dark:text-sky-200"
+                            >
+                                {{ seccionLabel(evento.seccion_id) }}
+                            </span>
                             <span
                                 v-else
                                 class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-200"

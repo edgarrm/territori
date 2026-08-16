@@ -6,6 +6,7 @@ use App\Actions\Electores\ActualizarElector;
 use App\Actions\Electores\CapturarElector;
 use App\Actions\Electores\VerificarElector;
 use App\Actions\Privacidad\CancelarElector;
+use App\Actions\Privacidad\RegistrarAcceso;
 use App\Exceptions\ElectorDuplicado;
 use App\Http\Controllers\Concerns\PresentaElectores;
 use App\Http\Requests\StoreElectorRequest;
@@ -24,13 +25,18 @@ class ElectorController extends Controller
 {
     use PresentaElectores;
 
-    public function store(StoreElectorRequest $request, CapturarElector $capturar): JsonResponse
+    public function store(StoreElectorRequest $request, CapturarElector $capturar, RegistrarAcceso $bitacora): JsonResponse
     {
         $membership = $request->user()->membershipEn(TenantContext::get());
 
         try {
             $elector = $capturar->handle($membership, $request->validated());
         } catch (ElectorDuplicado $e) {
+            // El 409 es un oráculo de enumeración por teléfono (A6): la respuesta
+            // no revela contra quién chocó, pero la bitácora sí, que es lo que
+            // permite detectar el barrido a posteriori.
+            $bitacora->handle('elector.duplicado', 'elector', $e->electorId);
+
             return response()->json([
                 'message' => 'Ya existe un contacto con ese teléfono en esta campaña.',
             ], 409);
@@ -44,12 +50,17 @@ class ElectorController extends Controller
      * que ResolveTenant en el stack web, así que un modelo tenant-scoped bindeado
      * implícitamente se resolvería sin TenantContext. Aquí ya hay tenant activo.
      */
-    public function show(string $elector): JsonResponse
+    public function show(string $elector, RegistrarAcceso $bitacora): JsonResponse
     {
         $modelo = Elector::query()->findOrFail($elector);
         $viewer = $this->miMembership();
 
         abort_unless($viewer !== null && $viewer->puedeAccederElector($modelo), 403);
+
+        $bitacora->handle('elector.consultado', 'elector', $modelo->id, [
+            'via' => 'api',
+            'pii_visible' => $this->puedeVerPii($modelo, $viewer),
+        ]);
 
         return response()->json($this->presentar($modelo, $viewer));
     }
@@ -105,12 +116,17 @@ class ElectorController extends Controller
     /**
      * Ficha del elector (Inertia): datos editables + timeline de interacciones.
      */
-    public function page(string $elector): Response
+    public function page(string $elector, RegistrarAcceso $bitacora): Response
     {
         $modelo = Elector::query()->with(['interacciones', 'redCiudadana'])->findOrFail($elector);
         $viewer = $this->miMembership();
 
         abort_unless($viewer !== null && $viewer->puedeAccederElector($modelo), 403);
+
+        $bitacora->handle('elector.consultado', 'elector', $modelo->id, [
+            'via' => 'ficha',
+            'pii_visible' => $this->puedeVerPii($modelo, $viewer),
+        ]);
 
         return Inertia::render('Elector', [
             'elector' => $this->presentar($modelo, $viewer),
@@ -167,6 +183,43 @@ class ElectorController extends Controller
         return response()->json($electores);
     }
 
+    /**
+     * Vista personal de capturados: solo los electores que registró el propio
+     * usuario. Es la pantalla de aterrizaje del brigadista, cuyo perfil es de
+     * captura y no tiene acceso a las vistas de análisis.
+     */
+    public function mios(): Response
+    {
+        $viewer = $this->miMembership();
+
+        abort_if($viewer === null, 403);
+
+        return Inertia::render('MisCapturados', [
+            'seccionesFiltro' => $viewer->seccionesDisponibles(),
+            'modos' => $this->catalogoModos(),
+        ]);
+    }
+
+    /**
+     * Lista paginada de los capturados propios. Mismos filtros que la lista
+     * global (`q`, `modos`, `secciones`); el scope base por `membership_id` es
+     * lo único que la distingue.
+     */
+    public function misDatos(Request $request): JsonResponse
+    {
+        $viewer = $this->miMembership();
+
+        abort_if($viewer === null, 403);
+
+        $electores = $this->paginarElectores(
+            Elector::query()->where('membership_id', $viewer->id),
+            $request,
+            $viewer,
+        );
+
+        return response()->json($electores);
+    }
+
     public function indexPorSeccion(Request $request, Seccion $seccion): JsonResponse
     {
         $viewer = $this->miMembership();
@@ -176,7 +229,7 @@ class ElectorController extends Controller
         abort_if($seccion->municipio_id !== TenantContext::get()?->municipio_id, 404);
 
         // El brigadista solo consulta electores de sus zonas asignadas.
-        abort_if($viewer !== null && ! $viewer->puedeCapturarEnSeccion($seccion->id), 403);
+        abort_unless($viewer !== null && $viewer->puedeCapturarEnSeccion($seccion->id), 403);
 
         $electores = $this->paginarElectores(
             Elector::query()->where('seccion_id', $seccion->id),
@@ -210,12 +263,20 @@ class ElectorController extends Controller
             'id' => $elector->id,
             'seccion_id' => $elector->seccion_id,
             'modo_captura' => $elector->modo_captura,
-            'nombre' => $elector->nombre,
+            'nombre' => $verPii ? $elector->nombre : Pii::enmascararNombre($elector->nombre),
             'telefono' => $verPii ? $elector->telefono : Pii::enmascararTelefono($elector->telefono),
             'email' => $verPii ? $elector->email : Pii::enmascararEmail($elector->email),
             'domicilio' => $verPii ? $elector->domicilio : Pii::enmascararDomicilio($elector->domicilio),
-            'observaciones' => $elector->observaciones,
+            // Dentro del ternario: es el campo con más probabilidad de contener
+            // datos sensibles del art. 9 (salud, creencias, filiación).
+            'observaciones' => $verPii ? $elector->observaciones : Pii::enmascararTexto($elector->observaciones),
+            // El viewer sin PII recibe los campos enmascarados: el formulario de
+            // la ficha los oculta para no reenviar los bullets como valor real.
+            'pii_visible' => $verPii,
             'consentimiento' => $elector->consentimiento,
+            'consentimiento_en' => $elector->consentimiento_en?->toIso8601String(),
+            'consentimiento_via' => $elector->consentimiento_via,
+            'no_contactar' => $elector->no_contactar,
             'verificado' => $elector->verificado_en !== null,
             'verificado_via' => $elector->verificado_via,
             'verificado_en' => $elector->verificado_en?->toIso8601String(),

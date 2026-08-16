@@ -9,8 +9,10 @@ use App\Models\Municipio;
 use App\Models\Seccion;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Support\Telefono;
 use App\Support\Tenancy\TenantContext;
 use Database\Seeders\CartografiaSeeder;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\Concerns\AsignaZonas;
@@ -281,5 +283,150 @@ class CapturaElectorTest extends TestCase
         $elector = Elector::query()->first();
         $this->assertSame('5512345678', $elector->telefono);
         $this->assertSame('Calle Falsa 123', $elector->domicilio);
+    }
+
+    /**
+     * P17: el consentimiento se guardaba hardcodeado a `true`, sin fecha ni
+     * modalidad, así que era indemostrable ante el INAI.
+     */
+    public function test_registra_cuando_y_como_se_otorgo_el_consentimiento(): void
+    {
+        [$tenant, $user, $municipio, $aviso] = $this->setupCampana();
+        $seccion = Seccion::query()->where('municipio_id', $municipio->id)->where('numero', 1)->first();
+
+        $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->postJson('/api/electores', [
+                'modo_captura' => 'enlace_seccional',
+                'seccion_id' => $seccion->id,
+                'nombre' => 'Con Consentimiento',
+                'telefono' => '5512345678',
+                'consentimiento' => true,
+                'consentimiento_via' => 'escrito',
+                'aviso_privacidad_id' => $aviso->id,
+            ])->assertCreated();
+
+        TenantContext::set($tenant);
+        $elector = Elector::query()->first();
+        $this->assertTrue($elector->consentimiento);
+        $this->assertNotNull($elector->consentimiento_en);
+        $this->assertSame('escrito', $elector->consentimiento_via);
+    }
+
+    public function test_la_modalidad_de_consentimiento_por_defecto_es_verbal(): void
+    {
+        [$tenant, $user, $municipio, $aviso] = $this->setupCampana();
+        $seccion = Seccion::query()->where('municipio_id', $municipio->id)->where('numero', 1)->first();
+
+        $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->postJson('/api/electores', [
+                'modo_captura' => 'enlace_seccional',
+                'seccion_id' => $seccion->id,
+                'nombre' => 'Sin Modalidad',
+                'telefono' => '5512345678',
+                'consentimiento' => true,
+                'aviso_privacidad_id' => $aviso->id,
+            ])->assertCreated();
+
+        TenantContext::set($tenant);
+        $this->assertSame('verbal', Elector::query()->first()->consentimiento_via);
+    }
+
+    /**
+     * P16: la columna es `text` (ilimitada) y no había tope de longitud.
+     */
+    public function test_rechaza_observaciones_mas_largas_que_el_tope(): void
+    {
+        [$tenant, $user, $municipio, $aviso] = $this->setupCampana();
+        $seccion = Seccion::query()->where('municipio_id', $municipio->id)->where('numero', 1)->first();
+
+        $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->postJson('/api/electores', [
+                'modo_captura' => 'enlace_seccional',
+                'seccion_id' => $seccion->id,
+                'nombre' => 'Verboso',
+                'telefono' => '5512345678',
+                'observaciones' => str_repeat('a', 2001),
+                'consentimiento' => true,
+                'aviso_privacidad_id' => $aviso->id,
+            ])->assertJsonValidationErrors('observaciones');
+    }
+
+    public function test_rechaza_coordenadas_fuera_del_rango_wgs84(): void
+    {
+        [$tenant, $user, , $aviso] = $this->setupCampana();
+
+        $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->postJson('/api/electores', [
+                'modo_captura' => 'enlace_seccional',
+                'nombre' => 'Fuera del planeta',
+                'telefono' => '5512345678',
+                'ubicacion' => ['lat' => 999, 'lng' => -500],
+                'consentimiento' => true,
+                'aviso_privacidad_id' => $aviso->id,
+            ])->assertJsonValidationErrors(['ubicacion.lat', 'ubicacion.lng']);
+    }
+
+    /**
+     * P18: el dedup era un SELECT seguido de un INSERT, así que dos peticiones
+     * simultáneas con el mismo número creaban dos filas. El índice único
+     * parcial es la red que sí es atómica.
+     */
+    public function test_la_base_impide_dos_electores_vivos_con_el_mismo_telefono(): void
+    {
+        [$tenant, $user, $municipio, $aviso] = $this->setupCampana();
+        $seccion = Seccion::query()->where('municipio_id', $municipio->id)->where('numero', 1)->first();
+        $membership = Membership::query()->where('user_id', $user->id)->first();
+
+        $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->postJson('/api/electores', [
+                'modo_captura' => 'enlace_seccional',
+                'seccion_id' => $seccion->id,
+                'nombre' => 'Primero',
+                'telefono' => '5512345678',
+                'consentimiento' => true,
+                'aviso_privacidad_id' => $aviso->id,
+            ])->assertCreated();
+
+        TenantContext::set($tenant);
+
+        // Se esquiva la comprobación de la aplicación (que ya responde 409) para
+        // comprobar que la base sostiene el invariante por sí sola.
+        $this->expectException(UniqueConstraintViolationException::class);
+
+        Elector::query()->create([
+            'seccion_id' => $seccion->id,
+            'membership_id' => $membership->id,
+            'modo_captura' => 'enlace_seccional',
+            'nombre' => 'Duplicado',
+            'telefono' => '5512345678',
+            'telefono_hash' => Telefono::hash('5512345678'),
+            'consentimiento' => true,
+            'aviso_privacidad_id' => $aviso->id,
+        ]);
+    }
+
+    public function test_el_mismo_telefono_se_puede_recapturar_tras_una_cancelacion(): void
+    {
+        [$tenant, $user, $municipio, $aviso] = $this->setupCampana('coordinador');
+        $seccion = Seccion::query()->where('municipio_id', $municipio->id)->where('numero', 1)->first();
+
+        $datos = [
+            'modo_captura' => 'enlace_seccional',
+            'seccion_id' => $seccion->id,
+            'nombre' => 'Primero',
+            'telefono' => '5512345678',
+            'consentimiento' => true,
+            'aviso_privacidad_id' => $aviso->id,
+        ];
+
+        $id = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->postJson('/api/electores', $datos)->assertCreated()->json('id');
+
+        $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->deleteJson("/api/electores/{$id}")->assertOk();
+
+        // El índice es parcial (solo vivos), así que la recaptura no choca.
+        $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->postJson('/api/electores', [...$datos, 'nombre' => 'Recapturado'])->assertCreated();
     }
 }

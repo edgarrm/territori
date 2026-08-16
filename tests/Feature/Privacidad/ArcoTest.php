@@ -5,6 +5,7 @@ namespace Tests\Feature\Privacidad;
 use App\Models\AvisoPrivacidad;
 use App\Models\CoberturaSeccion;
 use App\Models\Elector;
+use App\Models\Interaccion;
 use App\Models\Membership;
 use App\Models\Municipio;
 use App\Models\Seccion;
@@ -61,6 +62,9 @@ class ArcoTest extends TestCase
         $this->assertNotNull($trashed->deleted_at);
         $this->assertSame('', $trashed->nombre);
         $this->assertNull($trashed->telefono_hash);
+        $this->assertSame('', $trashed->telefono);
+        $this->assertNull($trashed->domicilio);
+        $this->assertNull($trashed->observaciones);
         // Solicitud ARCO registrada como cancelación atendida.
         $sol = SolicitudArco::query()->where('elector_id', $e1->id)->first();
         $this->assertSame('cancelacion', $sol->tipo);
@@ -68,6 +72,44 @@ class ArcoTest extends TestCase
         // Cobertura recalculada: queda 1 vivo en la sección.
         $this->assertSame(1, Elector::query()->where('seccion_id', $s->id)->count());
         $this->assertSame(1, (int) CoberturaSeccion::query()->where('seccion_id', $s->id)->value('capturados'));
+    }
+
+    /**
+     * El scrub debe alcanzar todo dato personal, no solo los tres campos que
+     * existían cuando se escribió la Cancelación: `email` se agregó después
+     * (P1) y las notas del timeline son texto libre sobre la persona (P2).
+     */
+    public function test_la_cancelacion_borra_email_y_las_notas_del_timeline(): void
+    {
+        [$tenant, $user, $m, $s, $a] = $this->setupCampana('coordinador');
+        $e1 = $this->elector($tenant, $m, $s, $a, '5511112222');
+        $e1->forceFill(['email' => 'juan@correo.com', 'observaciones' => 'Vive con su madre'])->save();
+
+        $interaccion = Interaccion::factory()->create([
+            'tenant_id' => $tenant->id,
+            'elector_id' => $e1->id,
+            'membership_id' => $m->id,
+            'nota' => 'Pidió que le llamemos al celular de su hija',
+        ]);
+
+        // Otro elector con nota: el scrub no debe tocar interacciones ajenas.
+        $e2 = $this->elector($tenant, $m, $s, $a, '5533334444');
+        $ajena = Interaccion::factory()->create([
+            'tenant_id' => $tenant->id,
+            'elector_id' => $e2->id,
+            'membership_id' => $m->id,
+            'nota' => 'Nota de otro elector',
+        ]);
+
+        $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->deleteJson("/api/electores/{$e1->id}")->assertOk();
+
+        TenantContext::set($tenant);
+        $trashed = Elector::withTrashed()->find($e1->id);
+        $this->assertNull($trashed->email);
+        $this->assertNull($trashed->observaciones);
+        $this->assertNull(Interaccion::query()->find($interaccion->id)->nota);
+        $this->assertSame('Nota de otro elector', Interaccion::query()->find($ajena->id)->nota);
     }
 
     public function test_brigadista_no_puede_cancelar(): void

@@ -27,13 +27,24 @@ class ExportElectoresTest extends TestCase
         (new CartografiaSeeder)->run(base_path('tests/Fixtures/cartografia/99-test'));
         $municipio = Municipio::query()->where('clave', 12)->first();
         $tenant = Tenant::factory()->create(['municipio_id' => $municipio->id]);
-        $user = User::factory()->create();
+        $user = User::factory()->withTwoFactor()->create();
         $membership = Membership::create(['tenant_id' => $tenant->id, 'user_id' => $user->id, 'rol' => $rol]);
         TenantContext::set($tenant);
         $seccion = Seccion::query()->where('municipio_id', $municipio->id)->where('numero', 1)->first();
         $aviso = AvisoPrivacidad::factory()->create(['tenant_id' => $tenant->id]);
 
         return [$tenant, $user, $membership, $seccion, $aviso];
+    }
+
+    /**
+     * La ruta de export exige RequirePassword además de 2FA (P4): la sesión debe
+     * llevar la contraseña reconfirmada.
+     *
+     * @return array<string, mixed>
+     */
+    private function sesionDeExport(Tenant $tenant): array
+    {
+        return ['tenant_id' => $tenant->id, 'auth.password_confirmed_at' => time()];
     }
 
     public function test_coordinador_exporta_csv_con_telefono_descifrado(): void
@@ -45,7 +56,7 @@ class ExportElectoresTest extends TestCase
             'telefono_hash' => Telefono::hash('5512345678'),
         ]);
 
-        $response = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+        $response = $this->actingAs($user)->withSession($this->sesionDeExport($tenant))
             ->get('/api/export/electores.csv');
         $response->assertOk();
         $csv = $response->streamedContent();
@@ -79,7 +90,7 @@ class ExportElectoresTest extends TestCase
         ]);
         $cancelado->delete();
 
-        $response = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+        $response = $this->actingAs($user)->withSession($this->sesionDeExport($tenant))
             ->get('/api/export/electores.csv');
         $csv = $response->streamedContent();
 
@@ -103,7 +114,7 @@ class ExportElectoresTest extends TestCase
             'telefono_hash' => Telefono::hash('5522220000'),
         ]);
 
-        $response = $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+        $response = $this->actingAs($user)->withSession($this->sesionDeExport($tenant))
             ->get("/api/export/electores.csv?seccion_id={$s->id}");
         $csv = $response->streamedContent();
 

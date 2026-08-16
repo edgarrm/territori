@@ -2,12 +2,15 @@
 
 namespace App\Http\Controllers;
 
+use App\Actions\Campana\CerrarCampana;
 use App\Actions\Campana\RegistrarCampana;
 use App\Http\Requests\StoreCampanaRequest;
 use App\Models\Entidad;
 use App\Models\Municipio;
 use App\Models\User;
+use App\Support\Tenancy\TenantContext;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -51,5 +54,25 @@ class CampanaController extends Controller
         $request->session()->put('tenant_id', $tenant->id);
 
         return redirect()->route('dashboard');
+    }
+
+    /**
+     * Cierra la campaña activa: se agota la finalidad del tratamiento y arranca
+     * el plazo de retención tras el cual se borra la PII de sus electores
+     * (LFPDPPP art. 11). Es irreversible desde la app, por eso la ruta exige
+     * admin + 2FA + reconfirmar contraseña.
+     */
+    public function cerrar(Request $request, CerrarCampana $cerrar): RedirectResponse
+    {
+        $tenant = TenantContext::get();
+        abort_if($tenant === null, 403);
+
+        $cerrar->handle($tenant);
+
+        // La campaña cerrada ya no resuelve como tenant activo en el siguiente
+        // request; se saca de la sesión para no dejarla colgando.
+        $request->session()->forget('tenant_id');
+
+        return redirect()->route('campanas.seleccionar');
     }
 }

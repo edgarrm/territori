@@ -76,7 +76,8 @@ class ResolveTenantMiddlewareTest extends TestCase
         $this->actingAs($user);
         $response = $this->post(route('campanas.seleccionar.store'), ['tenant_id' => $tenantB->id]);
 
-        $response->assertRedirect(route('dashboard'));
+        // En B es brigadista: aterriza en sus capturados, no en el dashboard.
+        $response->assertRedirect(route('mis-capturados'));
         $this->assertEquals($tenantB->id, session('tenant_id'));
     }
 
@@ -85,7 +86,7 @@ class ResolveTenantMiddlewareTest extends TestCase
         config(['app.tenant_domain' => 'territori.test']);
 
         $tenant = Tenant::create(['nombre' => 'A', 'municipio_id' => $this->municipioId(), 'subdominio' => 'campania-a']);
-        $user = User::factory()->create();
+        $user = User::factory()->withTwoFactor()->create();
         Membership::create(['tenant_id' => $tenant->id, 'user_id' => $user->id, 'rol' => 'coordinador']);
 
         $response = $this->actingAs($user)

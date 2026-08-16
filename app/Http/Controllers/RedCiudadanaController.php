@@ -115,6 +115,9 @@ class RedCiudadanaController extends Controller
             'nombre' => $red->nombre,
             'descripcion' => $red->descripcion,
             'activa' => $red->activa,
+            // El enlace puede haber quedado en null: la FK es SET NULL desde que
+            // se unificó la política de borrado (borrar la cuenta ya no arrastra
+            // la red entera). La red sobrevive sin responsable asignado.
             'enlace' => [
                 'membership_id' => $red->enlace_membership_id,
                 'nombre' => $red->enlace?->user?->name,

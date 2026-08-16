@@ -31,7 +31,7 @@ class CalcularCompetitividadSeccion
     /**
      * @param  array<string, int>|null  $votosPartidos  opción de boleta => votos
      * @param  Collection<int, Coalicion>  $coaliciones  coaliciones del año a considerar
-     * @param  list<array{nombre: string, color: string, umbral: int|float|null, slug?: string}>  $categorias  ordenada desc por umbral; la última es catch-all
+     * @param  non-empty-list<array{nombre: string, color: string, umbral: int|float|null, slug: string}>  $categorias  ordenada desc por umbral; la última es catch-all
      * @param  'votos'|'porcentaje'  $modoCalculo
      * @param  int|null  $totalVotosSeccion  total de votos emitidos en la sección; requerido en modo 'porcentaje'
      * @return array{estatus_slug: string, estatus_label: string, estatus_color: string, diferencia_votos: int|null, diferencia_pct: float|null, votos_bloque_propio: int|null, votos_mejor_rival: int|null, bloque_propio: string|null}
@@ -86,7 +86,13 @@ class CalcularCompetitividadSeccion
      * primera cuyo umbral alcance `$valor` gana; la última de la lista es
      * catch-all (siempre matchea, sin importar su `umbral`).
      *
-     * @param  list<array{nombre: string, color: string, umbral: int|float|null, slug?: string}>  $categorias
+     * `slug` es requerido, no opcional: las categorías siempre llegan ya
+     * normalizadas por `Tenant::normalizarCategorias()`, que lo calcula. La
+     * lista tampoco puede llegar vacía: `normalizarCategorias()` siempre cae
+     * al default de 4 categorías si el tenant no configuró las suyas, así que
+     * siempre hay al menos un catch-all que evaluar.
+     *
+     * @param  non-empty-list<array{nombre: string, color: string, umbral: int|float|null, slug: string}>  $categorias
      * @return array{nombre: string, color: string, umbral: int|float|null, slug: string}
      */
     private function resolverCategoria(array $categorias, int|float $valor): array

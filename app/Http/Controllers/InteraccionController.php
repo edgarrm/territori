@@ -4,9 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Actions\Electores\VerificarElector;
 use App\Actions\Interacciones\RegistrarInteraccion;
+use App\Http\Controllers\Concerns\PresentaElectores;
 use App\Http\Requests\StoreInteraccionRequest;
 use App\Models\Elector;
 use App\Models\Interaccion;
+use App\Models\Membership;
+use App\Support\Pii;
 use App\Support\Tenancy\TenantContext;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
@@ -17,6 +20,8 @@ use Inertia\Response;
 
 class InteraccionController extends Controller
 {
+    use PresentaElectores;
+
     /**
      * Timeline de un elector (desc por fecha). Resolución manual: el binding
      * implícito correría antes de ResolveTenant (patrón Sprint 4).
@@ -27,8 +32,10 @@ class InteraccionController extends Controller
 
         $this->asegurarAccesoElector($modelo);
 
+        $verPii = $this->puedeVerPii($modelo, $this->miMembership());
+
         return response()->json(
-            $modelo->interacciones()->get()->map(fn (Interaccion $i): array => $this->presentar($i))->all()
+            $modelo->interacciones()->get()->map(fn (Interaccion $i): array => $this->presentar($i, $verPii))->all()
         );
     }
 
@@ -45,7 +52,8 @@ class InteraccionController extends Controller
             $verificar->marcar($modelo, $interaccion->tipo, $membership);
         }
 
-        return response()->json($this->presentar($interaccion), 201);
+        // Quien acaba de escribir la nota puede leerla de vuelta sin enmascarar.
+        return response()->json($this->presentar($interaccion, true), 201);
     }
 
     /**
@@ -61,7 +69,10 @@ class InteraccionController extends Controller
             $modelo->update(['atendido_en' => now()]);
         }
 
-        return response()->json($this->presentar($modelo));
+        return response()->json($this->presentar(
+            $modelo,
+            $modelo->elector !== null && $this->puedeVerPii($modelo->elector, $this->miMembership()),
+        ));
     }
 
     /**
@@ -102,7 +113,20 @@ class InteraccionController extends Controller
 
         return Interaccion::query()
             ->pendientes()
-            ->with(['elector:id,nombre,seccion_id', 'elector.seccion:id,numero'])
+            // `membership_id` y `red_ciudadana_id` son los que decide `puedeVerPii`
+            // (quién capturó / de qué red es): sin ellos en el select, el
+            // enmascarado se evaluaría con atributos ausentes. `redCiudadana`
+            // va precargada para no hacer una query por fila.
+            ->with([
+                'elector:id,nombre,seccion_id,membership_id,red_ciudadana_id',
+                'elector.seccion:id,numero',
+                'elector.redCiudadana:id,enlace_membership_id',
+            ])
+            // La agenda es la superficie desde la que se contacta: quien ejerció
+            // Oposición (no_contactar) sale de ella (P9). El whereHas exige
+            // además un elector vivo, así que los cancelados por ARCO tampoco
+            // arrastran su seguimiento pendiente.
+            ->whereHas('elector', fn (Builder $elector) => $elector->where('no_contactar', false))
             ->when(
                 $membership->esBrigadista(),
                 fn (Builder $query) => $query->where('membership_id', $membership->id),
@@ -124,18 +148,48 @@ class InteraccionController extends Controller
             ->orderBy('proximo_seguimiento')
             ->paginate(25)
             ->withQueryString()
-            ->through(fn (Interaccion $i): array => [
-                'id' => $i->id,
-                'tipo' => $i->tipo,
-                'nota' => $i->nota,
-                'proximo_seguimiento' => $i->proximo_seguimiento?->toDateString(),
-                'elector' => [
-                    'id' => $i->elector->id,
-                    'nombre' => $i->elector->nombre,
-                    'seccion_id' => $i->elector->seccion_id,
-                    'seccion_numero' => $i->elector->seccion?->numero,
-                ],
-            ]);
+            ->through(fn (Interaccion $i): array => $this->presentarPendiente($i, $membership));
+    }
+
+    /**
+     * Fila de la agenda: la interacción pendiente + los datos mínimos del
+     * elector que la lista necesita mostrar.
+     *
+     * El nombre y la nota siguen la misma regla que las listas de capturados:
+     * `puedeVerPii` (propiedad del registro), no `puedeAccederElector` (zona).
+     * La agenda mostraba el nombre completo de un elector ajeno que las listas
+     * ya reducían a iniciales (P6), y la nota es donde más caen datos del art. 9.
+     *
+     * @return array<string, mixed>
+     */
+    private function presentarPendiente(Interaccion $i, ?Membership $viewer): array
+    {
+        $verPii = $this->puedeVerPii($i->elector, $viewer);
+
+        return [
+            'id' => $i->id,
+            'tipo' => $i->tipo,
+            'nota' => $verPii ? $i->nota : Pii::enmascararTexto($i->nota),
+            'proximo_seguimiento' => $i->proximo_seguimiento?->toDateString(),
+            'elector' => [
+                'id' => $i->elector->id,
+                'nombre' => $verPii ? $i->elector->nombre : Pii::enmascararNombre($i->elector->nombre),
+                'seccion_id' => $i->elector->seccion_id,
+                'seccion_numero' => $i->elector->seccion?->numero,
+            ],
+        ];
+    }
+
+    /**
+     * Membresía activa del usuario en el tenant actual. El rol vive en la
+     * membership, nunca en el user.
+     */
+    private function miMembership(): ?Membership
+    {
+        $user = request()->user();
+        $tenant = TenantContext::get();
+
+        return ($user !== null && $tenant !== null) ? $user->membershipEn($tenant) : null;
     }
 
     /**
@@ -160,9 +214,14 @@ class InteraccionController extends Controller
     }
 
     /**
+     * La nota es texto libre escrito por el equipo de campo: es donde más
+     * probablemente aparecen datos del art. 9 (salud, creencias, filiación).
+     * Se enmascara con el mismo criterio que `observaciones` del elector, para
+     * que el timeline no sea la puerta trasera de la ficha.
+     *
      * @return array<string, mixed>
      */
-    private function presentar(Interaccion $interaccion): array
+    private function presentar(Interaccion $interaccion, bool $verPii): array
     {
         return [
             'id' => $interaccion->id,
@@ -170,7 +229,7 @@ class InteraccionController extends Controller
             'membership_id' => $interaccion->membership_id,
             'tipo' => $interaccion->tipo,
             'resultado' => $interaccion->resultado,
-            'nota' => $interaccion->nota,
+            'nota' => $verPii ? $interaccion->nota : Pii::enmascararTexto($interaccion->nota),
             'fecha' => $interaccion->fecha->toIso8601String(),
             'proximo_seguimiento' => $interaccion->proximo_seguimiento?->toDateString(),
             'atendido_en' => $interaccion->atendido_en?->toIso8601String(),

@@ -40,7 +40,6 @@ class Evento extends Model
     protected $table = 'eventos';
 
     protected $fillable = [
-        'tenant_id',
         'nombre',
         'tipo',
         'fecha',

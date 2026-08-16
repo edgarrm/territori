@@ -42,11 +42,14 @@ class CapturarElector
         $existente = Elector::query()->where('telefono_hash', $telefonoHash)->first();
 
         if ($existente !== null) {
-            throw new ElectorDuplicado($existente);
+            throw new ElectorDuplicado($existente->id);
         }
 
+        // Cifrada como {lat, lng} (P7): la columna ya no es geometry y nada la
+        // consulta espacialmente; el ST_Contains de resolverSeccionCruda opera
+        // sobre el punto de entrada contra secciones.geom.
         $ubicacion = isset($datos['ubicacion'])
-            ? new Point((float) $datos['ubicacion']['lat'], (float) $datos['ubicacion']['lng'], Srid::WGS84)
+            ? ['lat' => (float) $datos['ubicacion']['lat'], 'lng' => (float) $datos['ubicacion']['lng']]
             : null;
 
         $elector = Elector::create([
@@ -63,7 +66,12 @@ class CapturarElector
             'domicilio' => $datos['domicilio'] ?? null,
             'ubicacion' => $ubicacion,
             'observaciones' => $datos['observaciones'] ?? null,
+            // El consentimiento lo garantiza la regla `accepted` del
+            // FormRequest; lo que faltaba era poder acreditar *cuándo* y *cómo*
+            // se otorgó (P17). Sin fecha ni modalidad era indemostrable.
             'consentimiento' => true,
+            'consentimiento_en' => now(),
+            'consentimiento_via' => $datos['consentimiento_via'] ?? 'verbal',
             'aviso_privacidad_id' => $datos['aviso_privacidad_id'],
         ]);
 

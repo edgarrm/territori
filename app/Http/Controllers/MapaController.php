@@ -366,6 +366,8 @@ class MapaController extends Controller
 
     public function definirMeta(Request $request, Seccion $seccion): JsonResponse
     {
+        $this->asegurarAccesoSeccion($seccion);
+
         $data = $request->validate([
             'fuente_meta' => ['required', 'in:manual,lista_nominal_pct'],
             'meta_capturas' => ['required_if:fuente_meta,manual', 'integer', 'min:0'],
@@ -398,8 +400,8 @@ class MapaController extends Controller
 
         $viewer = $this->miMembership();
 
-        abort_if(
-            $viewer !== null && ! $viewer->puedeCapturarEnSeccion($seccion->id),
+        abort_unless(
+            $viewer !== null && $viewer->puedeCapturarEnSeccion($seccion->id),
             403,
         );
     }
@@ -420,17 +422,23 @@ class MapaController extends Controller
      * partido + coaliciones 2024 + categorías + modo de cálculo, para no
      * repetir queries ni recomputar slugs en el loop de secciones.
      *
-     * @return array{partidoSiglas: string|null, coaliciones: Collection<int, Coalicion>, categorias: list<array{nombre: string, color: string, umbral: int|float|null, slug: string}>, modoCalculo: string, umbralAlfa: int, umbralBeta: int, indicadores: array<string, bool>}
+     * @return array{partidoSiglas: string|null, coaliciones: Collection<int, Coalicion>, categorias: non-empty-list<array{nombre: string, color: string, umbral: int|float|null, slug: string}>, modoCalculo: 'votos'|'porcentaje', umbralAlfa: int, umbralBeta: int, indicadores: array<string, bool>}
      */
     private function configuracionCompetitividad(?Tenant $tenant): array
     {
-        $configuracion = $tenant?->configuracion();
+        // Sin tenant activo no hay partido, así que handle() corta antes de
+        // tocar categorías/umbrales (primer check: partidoSiglas === null).
+        // Aun así se resuelve una config completa —no `?? []` sueltos— para
+        // que el tipo de cada campo sea el mismo con o sin tenant.
+        $efectivo = $tenant ?? new Tenant;
+        $configuracion = $efectivo->configuracion();
+        $modoCalculo = $configuracion['modo_calculo_competitividad'] ?? 'votos';
 
         return [
             'partidoSiglas' => $tenant?->partido?->siglas,
             'coaliciones' => Coalicion::where('anio', 2024)->get(),
-            'categorias' => $configuracion['categorias_competitividad'] ?? [],
-            'modoCalculo' => $configuracion['modo_calculo_competitividad'] ?? 'votos',
+            'categorias' => $efectivo->categoriasCompetitividad(),
+            'modoCalculo' => $modoCalculo === 'porcentaje' ? 'porcentaje' : 'votos',
             'umbralAlfa' => $configuracion['umbral_alfa'] ?? 1000,
             'umbralBeta' => $configuracion['umbral_beta'] ?? 500,
             'indicadores' => $configuracion['indicadores'] ?? [
@@ -444,7 +452,7 @@ class MapaController extends Controller
 
     /**
      * @param  array<string, int>|string|null  $votosPartidos  array (cast Eloquent) o string jsonb crudo (DB::table)
-     * @param  array{partidoSiglas: string|null, coaliciones: Collection<int, Coalicion>, categorias: list<array{nombre: string, color: string, umbral: int|float|null, slug: string}>, modoCalculo: string, umbralAlfa: int, umbralBeta: int, indicadores: array<string, bool>}  $config
+     * @param  array{partidoSiglas: string|null, coaliciones: Collection<int, Coalicion>, categorias: non-empty-list<array{nombre: string, color: string, umbral: int|float|null, slug: string}>, modoCalculo: 'votos'|'porcentaje', umbralAlfa: int, umbralBeta: int, indicadores: array<string, bool>}  $config
      * @return array{estatus_slug: string, estatus_label: string, estatus_color: string, diferencia_votos: int|null, diferencia_pct: float|null, votos_bloque_propio: int|null, votos_mejor_rival: int|null, bloque_propio: string|null}
      */
     private function calcularCompetitividad(array|string|null $votosPartidos, ?int $totalVotos, array $config): array

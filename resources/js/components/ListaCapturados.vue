@@ -258,10 +258,69 @@ const hayFiltros = () =>
         </div>
 
         <template v-else>
+            <!-- Móvil: tarjetas (la tabla no cabe en pantallas angostas) -->
+            <div class="flex flex-col gap-2 sm:hidden">
+                <div
+                    v-for="c in pagina.data"
+                    :key="c.id"
+                    class="rounded-xl border border-sidebar-border/70 p-3 dark:border-sidebar-border"
+                >
+                    <div class="flex items-start justify-between gap-2">
+                        <a
+                            v-if="puedeVerFichaElector"
+                            :href="`/electores/${c.id}`"
+                            class="font-medium hover:underline"
+                        >
+                            {{ c.nombre }}
+                        </a>
+                        <span v-else class="font-medium">{{ c.nombre }}</span>
+                        <a
+                            v-if="puedeVerFichaElector"
+                            :href="`/electores/${c.id}`"
+                            class="shrink-0 text-sm font-medium text-primary hover:underline"
+                        >
+                            Ver ficha
+                        </a>
+                    </div>
+                    <div
+                        class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground"
+                    >
+                        <Link
+                            v-if="c.seccion_id !== null && puedeVerMapa"
+                            :href="
+                                mapa.url({ query: { seccion: c.seccion_id } })
+                            "
+                            class="text-primary hover:underline"
+                        >
+                            Sección
+                            {{
+                                c.seccion_numero ?? seccionNumero(c.seccion_id)
+                            }}
+                        </Link>
+                        <span v-else-if="c.seccion_id !== null">
+                            Sección
+                            {{
+                                c.seccion_numero ?? seccionNumero(c.seccion_id)
+                            }}
+                        </span>
+                        <span>· {{ modoLabel(c.modo_captura) }}</span>
+                        <span>· {{ c.origen }}</span>
+                        <span v-if="c.telefono">· {{ c.telefono }}</span>
+                        <span v-if="c.capturado_en">
+                            ·
+                            {{ new Date(c.capturado_en).toLocaleDateString() }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+
             <div
-                class="overflow-x-auto rounded-xl border border-sidebar-border/70 dark:border-sidebar-border"
+                class="hidden overflow-x-auto rounded-xl border border-sidebar-border/70 sm:block dark:border-sidebar-border"
             >
-                <table class="w-full text-sm" :dusk="dusk ? `${dusk}-tabla` : undefined">
+                <table
+                    class="w-full text-sm"
+                    :dusk="dusk ? `${dusk}-tabla` : undefined"
+                >
                     <thead
                         class="border-b border-sidebar-border/70 text-left text-muted-foreground dark:border-sidebar-border"
                     >
@@ -272,7 +331,7 @@ const hayFiltros = () =>
                             <th class="p-3 font-medium">Origen</th>
                             <th class="p-3 font-medium">Teléfono</th>
                             <th class="p-3 font-medium">Capturado</th>
-                            <th class="p-3 font-medium text-right">Ficha</th>
+                            <th class="p-3 text-right font-medium">Ficha</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -289,7 +348,9 @@ const hayFiltros = () =>
                                 >
                                     {{ c.nombre }}
                                 </a>
-                                <span v-else class="font-medium">{{ c.nombre }}</span>
+                                <span v-else class="font-medium">{{
+                                    c.nombre
+                                }}</span>
                             </td>
                             <td class="p-3 text-muted-foreground">
                                 <Link
@@ -302,11 +363,17 @@ const hayFiltros = () =>
                                     class="text-primary hover:underline"
                                 >
                                     Sección
-                                    {{ c.seccion_numero ?? seccionNumero(c.seccion_id) }}
+                                    {{
+                                        c.seccion_numero ??
+                                        seccionNumero(c.seccion_id)
+                                    }}
                                 </Link>
                                 <span v-else-if="c.seccion_id !== null">
                                     Sección
-                                    {{ c.seccion_numero ?? seccionNumero(c.seccion_id) }}
+                                    {{
+                                        c.seccion_numero ??
+                                        seccionNumero(c.seccion_id)
+                                    }}
                                 </span>
                                 <span v-else>—</span>
                             </td>

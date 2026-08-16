@@ -195,7 +195,11 @@ class ImportarEstadisticasCommand extends Command
         try {
             $encabezado = fgetcsv($manejador, null, ',', '"', '');
 
-            if ($encabezado === false || $encabezado === null) {
+            // `fgetcsv` no devuelve null con un handle válido (ya se validó
+            // arriba); lo que sí devuelve para una primera línea en blanco es
+            // `[null]` (un solo campo nulo) — es ese caso, no la lista misma,
+            // el que hay que descartar como "sin encabezado".
+            if ($encabezado === false || $encabezado[0] === null) {
                 return;
             }
 

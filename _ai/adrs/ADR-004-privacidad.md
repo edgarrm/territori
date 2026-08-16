@@ -40,6 +40,13 @@ El sistema almacena datos personales de electores (nombre, teléfono, domicilio,
 - El cifrado de columnas impide buscar por teléfono/domicilio con `LIKE` directo. Mitigación: para dedup, almacenar un **hash determinista** del teléfono normalizado (columna `telefono_hash` indexada) para comparar sin exponer; o usar cifrado determinista solo para esa columna.
 - El flujo de consentimiento añade fricción a la captura rápida. Mitigación: en modo Lotería, consentimiento verbal con registro de un solo tap, y aviso visible en pantalla.
 
+## Evidencia de implementación
+
+Este ADR declara los principios; la implementación concreta de cada uno —dónde
+vive en el código y qué test lo fija— está en la matriz de controles de
+[`docs/seguridad.md`](../../docs/seguridad.md), junto con los riesgos aceptados
+de forma consciente y los controles que dependen del despliegue.
+
 ## Pendiente de validar con abogado
 - Texto exacto del aviso de privacidad.
 - Si el responsable del tratamiento es la campaña (tenant) o el operador del SaaS, y cómo se refleja en contratos de encargo de tratamiento.

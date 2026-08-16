@@ -16,13 +16,13 @@ use Illuminate\Support\Carbon;
  *
  * @property int $id
  * @property int $tenant_id
- * @property int $enlace_membership_id
+ * @property int|null $enlace_membership_id
  * @property string $nombre
  * @property string|null $descripcion
  * @property bool $activa
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
- * @property-read Membership $enlace
+ * @property-read Membership|null $enlace
  */
 class RedCiudadana extends Model
 {
@@ -34,7 +34,6 @@ class RedCiudadana extends Model
     protected $table = 'redes_ciudadanas';
 
     protected $fillable = [
-        'tenant_id',
         'enlace_membership_id',
         'nombre',
         'descripcion',

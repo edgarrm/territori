@@ -43,7 +43,8 @@ class ListaRegistrosTest extends TestCase
         $this->aviso = AvisoPrivacidad::factory()->create(['tenant_id' => $this->tenant->id]);
         $this->seccion = Seccion::query()->where('municipio_id', $this->municipio->id)->where('numero', 1)->first();
 
-        $this->coordinador = User::factory()->create();
+        // 2FA confirmada: /capturados y su endpoint la exigen (padrón con PII).
+        $this->coordinador = User::factory()->withTwoFactor()->create();
         $this->membership = Membership::create([
             'tenant_id' => $this->tenant->id,
             'user_id' => $this->coordinador->id,
