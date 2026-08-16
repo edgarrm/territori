@@ -19,6 +19,7 @@ use App\Http\Controllers\RedCiudadanaController;
 use App\Http\Controllers\Settings\CampanaController as SettingsCampanaController;
 use App\Http\Controllers\SolicitudArcoController;
 use App\Http\Controllers\TerritorioController;
+use App\Http\Controllers\ZonaController;
 use Illuminate\Auth\Middleware\RequirePassword;
 use Illuminate\Support\Facades\Route;
 
@@ -195,6 +196,17 @@ Route::middleware(['auth', 'verified'])->group(function () {
             // y gestión del constructor de preguntas quedan solo para gestión.
             Route::get('encuestas/{encuesta}/captura', [EncuestaController::class, 'captura'])->name('encuestas.captura');
             Route::post('api/encuestas/{encuesta}/respuestas', [EncuestaRespuestaController::class, 'store'])->name('encuestas.respuestas.store');
+
+            // Zonas personalizadas (F6): lectura abierta a todo el dominio del
+            // tenant (brigadista/coordinador/admin); escritura solo gestión.
+            Route::get('zonas', [ZonaController::class, 'index'])->name('zonas.index');
+            Route::get('api/zonas.geojson', [ZonaController::class, 'geojson'])->name('zonas.geojson');
+
+            Route::middleware('rol:coordinador,admin')->group(function () {
+                Route::post('zonas', [ZonaController::class, 'store'])->name('zonas.store');
+                Route::put('api/zonas/{zona}', [ZonaController::class, 'update'])->name('zonas.update');
+                Route::delete('api/zonas/{zona}', [ZonaController::class, 'destroy'])->name('zonas.destroy');
+            });
         });
     });
 });

@@ -19,6 +19,7 @@ import {
     geojson as territorioGeojsonRoute,
     resumen as territorioResumenRoute,
 } from '@/routes/territorio';
+import { geojson as zonasGeojsonRoute } from '@/routes/zonas';
 
 defineOptions({
     layout: {
@@ -437,6 +438,36 @@ function colorFeature(p: FeatureProps): string {
 let leaflet: typeof import('leaflet');
 let mapa: L.Map | null = null;
 let capa: L.GeoJSON | null = null;
+
+// F6: overlay opcional de zonas personalizadas, superpuesto a las secciones
+// sin reemplazarlas (checkbox independiente del modo/nivel).
+const mostrarZonas = ref(false);
+let capaZonas: L.GeoJSON | null = null;
+
+async function toggleZonas() {
+    if (!mostrarZonas.value) {
+        capaZonas?.remove();
+        capaZonas = null;
+
+        return;
+    }
+
+    const geojson = await fetch(zonasGeojsonRoute.url()).then((r) => r.json());
+    capaZonas = leaflet
+        .geoJSON(geojson, {
+            style: {
+                color: '#a855f7',
+                weight: 2,
+                fillOpacity: 0.05,
+                dashArray: '4',
+            },
+            onEachFeature: (feature, layer) => {
+                const nombre = feature.properties?.nombre ?? 'Zona';
+                (layer as L.Path).bindTooltip(nombre, { sticky: true });
+            },
+        })
+        .addTo(mapa as L.Map);
+}
 
 const estadisticas = computed(() => {
     const f = features.value;
@@ -1108,6 +1139,19 @@ onBeforeUnmount(() => {
                         @cambiar="cambiarModo"
                     />
                 </div>
+
+                <!-- F6: overlay opcional de zonas personalizadas -->
+                <label
+                    class="flex items-center gap-2 text-xs text-muted-foreground"
+                    dusk="mapa-toggle-zonas"
+                >
+                    <input
+                        v-model="mostrarZonas"
+                        type="checkbox"
+                        @change="toggleZonas"
+                    />
+                    Mostrar zonas personalizadas
+                </label>
 
                 <!-- Aviso: modo competitividad sin partido configurado -->
                 <p

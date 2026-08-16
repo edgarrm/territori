@@ -16,6 +16,7 @@ import {
     Target,
     Ticket,
     Users,
+    Layers,
 } from '@lucide/vue';
 import { computed } from 'vue';
 import CampanaSwitcher from '@/components/CampanaSwitcher.vue';
@@ -56,6 +57,7 @@ const campoNavItems: NavItem[] = [
     { title: 'Captura', href: '/captura', icon: ClipboardList },
     { title: 'Agenda', href: '/agenda', icon: CalendarCheck },
     { title: 'Eventos', href: '/eventos', icon: CalendarDays },
+    { title: 'Zonas', href: '/zonas', icon: Layers },
     loteriasItem,
     redesItem,
 ];
