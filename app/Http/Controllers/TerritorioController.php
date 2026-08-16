@@ -81,6 +81,7 @@ class TerritorioController extends Controller
         $features = match ($data['nivel']) {
             'municipio' => $this->featuresMunicipio($data['id'] ?? $tenant?->municipio_id),
             'entidad' => $this->featuresEntidad($data['id'] ?? $tenant?->municipio?->entidad_id),
+            default => abort(422, 'Nivel no soportado.'),
         };
 
         return response()->json([
@@ -97,6 +98,7 @@ class TerritorioController extends Controller
         return match ($nivel) {
             'municipio' => $this->seccionesDeMunicipio($id ?? $tenant?->municipio_id),
             'entidad' => $this->seccionesDeEntidad($id ?? $tenant?->municipio?->entidad_id),
+            default => abort(422, 'Nivel no soportado.'),
         };
     }
 
@@ -137,7 +139,7 @@ class TerritorioController extends Controller
      */
     private function featuresMunicipio(?int $municipioId): array
     {
-        return DB::table('municipios')
+        return array_values(DB::table('municipios')
             ->where('id', $municipioId)
             ->select([
                 'id as municipio_id',
@@ -150,10 +152,10 @@ class TerritorioController extends Controller
                 'geometry' => $fila->geom_json ? json_decode((string) $fila->geom_json) : null,
                 'properties' => [
                     'municipio_id' => (int) $fila->municipio_id,
-                    'nombre' => $fila->nombre,
+                    'nombre' => (string) $fila->nombre,
                 ],
             ])
-            ->all();
+            ->all());
     }
 
     /**
@@ -164,7 +166,7 @@ class TerritorioController extends Controller
      */
     private function featuresEntidad(?int $entidadId): array
     {
-        return DB::table('municipios')
+        return array_values(DB::table('municipios')
             ->where('entidad_id', $entidadId)
             ->select([
                 'id as municipio_id',
@@ -177,10 +179,10 @@ class TerritorioController extends Controller
                 'geometry' => $fila->geom_json ? json_decode((string) $fila->geom_json) : null,
                 'properties' => [
                     'municipio_id' => (int) $fila->municipio_id,
-                    'nombre' => $fila->nombre,
+                    'nombre' => (string) $fila->nombre,
                 ],
             ])
-            ->all();
+            ->all());
     }
 
     /**

@@ -143,9 +143,9 @@ class AgregarEstadisticaTerritorial
         foreach ($estadisticas as $estadistica) {
             foreach ($estadistica->grupos_edad ?? [] as $bucket => $datos) {
                 $sumas[$bucket] ??= ['ln' => 0, 'votos' => 0, 'potencial' => 0];
-                $sumas[$bucket]['ln'] += (int) ($datos['ln'] ?? 0);
-                $sumas[$bucket]['votos'] += (int) ($datos['votos'] ?? 0);
-                $sumas[$bucket]['potencial'] += (int) ($datos['potencial'] ?? 0);
+                $sumas[$bucket]['ln'] += (int) $datos['ln'];
+                $sumas[$bucket]['votos'] += (int) $datos['votos'];
+                $sumas[$bucket]['potencial'] += (int) $datos['potencial'];
             }
         }
 
