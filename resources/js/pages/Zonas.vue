@@ -9,10 +9,12 @@ import 'leaflet/dist/leaflet.css';
 import 'leaflet-draw/dist/leaflet.draw.css';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { fmt, pct } from '@/lib/formato';
 import { dashboard } from '@/routes';
 import {
     destroy as destroyRoute,
     geojson as geojsonRoute,
+    resumen as resumenRoute,
     store as storeRoute,
     update as updateRoute,
 } from '@/routes/zonas';
@@ -40,6 +42,82 @@ type Zona = {
 };
 
 const props = defineProps<{ zonas: Zona[] }>();
+
+// --- Resumen de zona (F7): estadísticas + cobertura agregadas ---
+type BloqueVotos = {
+    nombre: string;
+    color: string;
+    total: number;
+    es_bloque_propio: boolean;
+};
+
+type Competitividad = {
+    estatus_slug: string;
+    estatus_label: string;
+    estatus_color: string;
+} | null;
+
+type ZonaResumen = {
+    zona_id: number;
+    zona_nombre: string;
+    secciones_total: number;
+    estadistica: {
+        total_votos: number | null;
+        participacion_pct: number | null;
+        competitividad: Competitividad;
+        desglose: { total_votos: number | null; bloques: BloqueVotos[] } | null;
+        secciones_incluidas: number;
+    };
+    cobertura: {
+        capturados: number;
+        meta: number;
+        verificados: number;
+        cobertura: number;
+        movilizacion_verificada: number;
+        penetracion: number;
+    };
+};
+
+const ESCALA_COBERTURA = [
+    { label: 'Meta cumplida', color: '#0ea5e9', min: 1 },
+    { label: 'Buen avance', color: '#16a34a', min: 0.7 },
+    { label: 'En proceso', color: '#84cc16', min: 0.4 },
+    { label: 'Rezagada', color: '#f59e0b', min: 0.0001 },
+    { label: 'Desértica', color: '#ef4444', min: 0 },
+] as const;
+
+function bucketCobertura(valor: number) {
+    return (
+        ESCALA_COBERTURA.find((b) => valor >= b.min) ??
+        ESCALA_COBERTURA[ESCALA_COBERTURA.length - 1]
+    );
+}
+
+const zonaSeleccionada = ref<Zona | null>(null);
+const resumenZona = ref<ZonaResumen | null>(null);
+const cargandoResumen = ref(false);
+
+async function verResumen(zona: Zona) {
+    if (zonaSeleccionada.value?.id === zona.id) {
+        zonaSeleccionada.value = null;
+        resumenZona.value = null;
+
+        return;
+    }
+
+    zonaSeleccionada.value = zona;
+    resumenZona.value = null;
+    cargandoResumen.value = true;
+
+    try {
+        const resp = await fetch(resumenRoute.url(zona.id), {
+            headers: { Accept: 'application/json' },
+        });
+        resumenZona.value = await resp.json();
+    } finally {
+        cargandoResumen.value = false;
+    }
+}
 
 function csrf(): string {
     return (
@@ -442,37 +520,149 @@ onBeforeUnmount(() => {
                     </tr>
                 </thead>
                 <tbody>
-                    <tr v-for="z in props.zonas" :key="z.id" class="border-t">
-                        <td class="p-2 font-medium">{{ z.nombre }}</td>
-                        <td class="p-2">{{ z.clave ?? '—' }}</td>
-                        <td class="p-2">{{ z.tipo }}</td>
-                        <td class="p-2">{{ z.zona_padre_nombre ?? '—' }}</td>
-                        <td class="p-2">{{ z.fuente }}</td>
-                        <td class="p-2">
-                            {{ z.tiene_geometria ? 'Sí' : 'Sin polígono' }}
-                        </td>
-                        <td class="p-2">
-                            <button
-                                class="rounded px-2 py-1 text-xs"
-                                :class="
-                                    z.activa
-                                        ? 'bg-emerald-500/20 text-emerald-700'
-                                        : 'bg-muted text-muted-foreground'
-                                "
-                                @click="alternarActiva(z)"
-                            >
-                                {{ z.activa ? 'Activa' : 'Inactiva' }}
-                            </button>
-                        </td>
-                        <td class="p-2">
-                            <button
-                                class="text-xs text-red-600 underline"
-                                @click="eliminarZona(z)"
-                            >
-                                Eliminar
-                            </button>
-                        </td>
-                    </tr>
+                    <template v-for="z in props.zonas" :key="z.id">
+                        <tr class="border-t">
+                            <td class="p-2 font-medium">
+                                <button
+                                    class="text-left underline-offset-2 hover:underline"
+                                    @click="verResumen(z)"
+                                >
+                                    {{ z.nombre }}
+                                </button>
+                            </td>
+                            <td class="p-2">{{ z.clave ?? '—' }}</td>
+                            <td class="p-2">{{ z.tipo }}</td>
+                            <td class="p-2">{{ z.zona_padre_nombre ?? '—' }}</td>
+                            <td class="p-2">{{ z.fuente }}</td>
+                            <td class="p-2">
+                                {{ z.tiene_geometria ? 'Sí' : 'Sin polígono' }}
+                            </td>
+                            <td class="p-2">
+                                <button
+                                    class="rounded px-2 py-1 text-xs"
+                                    :class="
+                                        z.activa
+                                            ? 'bg-emerald-500/20 text-emerald-700'
+                                            : 'bg-muted text-muted-foreground'
+                                    "
+                                    @click="alternarActiva(z)"
+                                >
+                                    {{ z.activa ? 'Activa' : 'Inactiva' }}
+                                </button>
+                            </td>
+                            <td class="p-2">
+                                <button
+                                    class="text-xs text-red-600 underline"
+                                    @click="eliminarZona(z)"
+                                >
+                                    Eliminar
+                                </button>
+                            </td>
+                        </tr>
+
+                        <!-- Panel de resumen (F7): cobertura + electoral 2024, mismo criterio visual que Seccion.vue -->
+                        <tr v-if="zonaSeleccionada?.id === z.id" class="border-t bg-muted/20">
+                            <td colspan="8" class="p-3 sm:p-4">
+                                <div v-if="cargandoResumen" class="text-sm text-muted-foreground">
+                                    Cargando resumen…
+                                </div>
+                                <div v-else-if="resumenZona" class="grid gap-4 sm:grid-cols-2">
+                                    <div class="rounded-xl border border-sidebar-border/70 bg-card p-3 dark:border-sidebar-border">
+                                        <div class="flex flex-wrap items-start justify-between gap-2">
+                                            <h3 class="text-sm font-semibold">Cobertura</h3>
+                                            <span
+                                                class="rounded-full px-2.5 py-0.5 text-xs font-semibold text-white"
+                                                :style="{ backgroundColor: bucketCobertura(resumenZona.cobertura.cobertura).color }"
+                                            >
+                                                {{ bucketCobertura(resumenZona.cobertura.cobertura).label }}
+                                            </span>
+                                        </div>
+                                        <div class="mt-2 flex items-end gap-2">
+                                            <div
+                                                class="text-2xl font-bold tabular-nums"
+                                                :style="{ color: bucketCobertura(resumenZona.cobertura.cobertura).color }"
+                                            >
+                                                {{ pct(resumenZona.cobertura.cobertura) }}
+                                            </div>
+                                            <div class="pb-0.5 text-xs text-muted-foreground">
+                                                de la meta ({{ fmt(resumenZona.cobertura.capturados) }} / {{ fmt(resumenZona.cobertura.meta) }})
+                                            </div>
+                                        </div>
+                                        <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
+                                            <div
+                                                class="h-full rounded-full"
+                                                :style="{
+                                                    width: `${Math.min(resumenZona.cobertura.cobertura * 100, 100)}%`,
+                                                    backgroundColor: bucketCobertura(resumenZona.cobertura.cobertura).color,
+                                                }"
+                                            />
+                                        </div>
+                                        <dl class="mt-3 space-y-1 text-xs">
+                                            <div class="flex justify-between">
+                                                <dt class="text-muted-foreground">Verificados</dt>
+                                                <dd class="font-medium tabular-nums">{{ fmt(resumenZona.cobertura.verificados) }}</dd>
+                                            </div>
+                                            <div class="flex justify-between">
+                                                <dt class="text-muted-foreground">Penetración</dt>
+                                                <dd class="font-medium tabular-nums">{{ pct(resumenZona.cobertura.penetracion) }}</dd>
+                                            </div>
+                                            <div class="flex justify-between">
+                                                <dt class="text-muted-foreground">Secciones incluidas</dt>
+                                                <dd class="font-medium tabular-nums">{{ resumenZona.secciones_total }}</dd>
+                                            </div>
+                                        </dl>
+                                    </div>
+
+                                    <div class="rounded-xl border border-sidebar-border/70 bg-card p-3 dark:border-sidebar-border">
+                                        <div class="flex flex-wrap items-start justify-between gap-2">
+                                            <h3 class="text-sm font-semibold">Elección 2024</h3>
+                                            <span
+                                                v-if="resumenZona.estadistica.competitividad"
+                                                class="rounded-full px-2.5 py-0.5 text-xs font-semibold text-white"
+                                                :style="{ backgroundColor: resumenZona.estadistica.competitividad.estatus_color }"
+                                            >
+                                                {{ resumenZona.estadistica.competitividad.estatus_label }}
+                                            </span>
+                                        </div>
+                                        <div v-if="resumenZona.estadistica.total_votos !== null" class="mt-2 space-y-2">
+                                            <div class="mt-1 space-y-1.5">
+                                                <div
+                                                    v-for="bloque in resumenZona.estadistica.desglose?.bloques ?? []"
+                                                    :key="bloque.nombre"
+                                                    class="flex items-center gap-2 text-xs"
+                                                >
+                                                    <span class="size-2 shrink-0 rounded-sm" :style="{ backgroundColor: bloque.color }" />
+                                                    <span class="min-w-0 flex-1 truncate">{{ bloque.nombre }}</span>
+                                                    <span
+                                                        v-if="bloque.es_bloque_propio"
+                                                        class="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[0.65rem] font-semibold"
+                                                    >
+                                                        Tu bloque
+                                                    </span>
+                                                    <span class="shrink-0 font-medium tabular-nums">{{ fmt(bloque.total) }}</span>
+                                                </div>
+                                            </div>
+                                            <dl class="mt-2 space-y-1 text-xs">
+                                                <div class="flex justify-between">
+                                                    <dt class="text-muted-foreground">Votos totales</dt>
+                                                    <dd class="font-medium tabular-nums">{{ fmt(resumenZona.estadistica.total_votos) }}</dd>
+                                                </div>
+                                                <div class="flex justify-between">
+                                                    <dt class="text-muted-foreground">Participación</dt>
+                                                    <dd class="font-medium tabular-nums">
+                                                        {{ resumenZona.estadistica.participacion_pct?.toFixed(1) ?? '—' }}%
+                                                    </dd>
+                                                </div>
+                                            </dl>
+                                        </div>
+                                        <p v-else class="mt-2 text-xs text-muted-foreground">
+                                            Sin datos electorales 2024 para las secciones de esta zona.
+                                        </p>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                    </template>
                 </tbody>
             </table>
         </div>

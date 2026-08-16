@@ -201,6 +201,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
             // tenant (brigadista/coordinador/admin); escritura solo gestión.
             Route::get('zonas', [ZonaController::class, 'index'])->name('zonas.index');
             Route::get('api/zonas.geojson', [ZonaController::class, 'geojson'])->name('zonas.geojson');
+            // Estadísticas + cobertura agregadas (F7): misma lectura abierta
+            // que index/geojson.
+            Route::get('api/zonas/{zona}/resumen', [ZonaController::class, 'resumen'])->name('zonas.resumen');
 
             Route::middleware('rol:coordinador,admin')->group(function () {
                 Route::post('zonas', [ZonaController::class, 'store'])->name('zonas.store');

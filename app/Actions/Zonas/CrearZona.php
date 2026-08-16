@@ -39,6 +39,12 @@ class CrearZona
 
         $this->guardarGeom($zona, $datos['geom'] ?? null);
 
+        // Solo cuando hay geom: una zona sin polígono (ej. tipo=mundial) no
+        // tiene nada que intersectar (F7).
+        if (($datos['geom'] ?? null) !== null) {
+            (new CalcularInterseccionZona)->handle($zona);
+        }
+
         return $zona->fresh();
     }
 }

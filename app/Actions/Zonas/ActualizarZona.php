@@ -39,6 +39,12 @@ class ActualizarZona
 
         if (array_key_exists('geom', $datos)) {
             $this->guardarGeom($zona, $datos['geom']);
+
+            // Solo cuando hay geom: una zona sin polígono (ej. tipo=mundial)
+            // no tiene nada que intersectar (F7).
+            if ($datos['geom'] !== null) {
+                (new CalcularInterseccionZona)->handle($zona);
+            }
         }
 
         return $zona->fresh();
