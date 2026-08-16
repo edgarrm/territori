@@ -24,9 +24,13 @@ class StoreEncuestaRequest extends FormRequest
             // 'zona' se acepta como valor aunque F6/F7 (tabla zonas) no exista
             // aún en este worktree — ver nota de la spec.
             'ambito_tipo' => ['required', 'in:seccion,zona'],
-            'canal' => ['nullable', 'in:nativo'],
+            'canal' => ['nullable', 'in:nativo,google_sheets'],
+            'configuracion_canal' => ['nullable', 'array'],
+            'configuracion_canal.spreadsheet_id' => ['required_if:canal,google_sheets', 'string'],
+            'configuracion_canal.nombre_hoja' => ['required_if:canal,google_sheets', 'string'],
+            'configuracion_canal.campo_identificador' => ['required_if:canal,google_sheets', 'string'],
             'modo_acceso' => ['required', 'in:brigadista,publico,ambos'],
-            'preguntas' => ['required', 'array', 'min:1'],
+            'preguntas' => ['required_if:canal,nativo', 'array'],
             'preguntas.*.etiqueta' => ['required', 'string', 'max:300'],
             'preguntas.*.tipo' => ['required', 'in:opcion_unica,texto_libre,numerica'],
             'preguntas.*.opciones' => ['nullable', 'array'],

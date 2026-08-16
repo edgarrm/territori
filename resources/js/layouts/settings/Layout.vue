@@ -8,6 +8,7 @@ import { useCurrentUrl } from '@/composables/useCurrentUrl';
 import { toUrl } from '@/lib/utils';
 import { edit as editAppearance } from '@/routes/appearance';
 import { edit as editCampana } from '@/routes/campana';
+import { show as editGoogle } from '@/routes/google';
 import { edit as editProfile } from '@/routes/profile';
 import { edit as editSecurity } from '@/routes/security';
 import type { NavItem } from '@/types';
@@ -29,6 +30,9 @@ const sidebarNavItems = computed<NavItem[]>(() => [
     },
     ...(page.props.auth.rol === 'admin'
         ? [{ title: 'Campaña', href: editCampana() }]
+        : []),
+    ...(page.props.auth.rol === 'coordinador' || page.props.auth.rol === 'admin'
+        ? [{ title: 'Google', href: editGoogle() }]
         : []),
 ]);
 

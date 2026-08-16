@@ -62,6 +62,17 @@ php artisan territori:recalcular-cobertura {tenant_id}
 
 Reusa la Action `RecalcularCoberturaSeccion` (la misma del job).
 
+## Encuestas: conectar el canal Google Sheets (F9)
+
+Cada tenant conecta **su propia** cuenta de Google (OAuth por tenant, no una service account de plataforma). Setup único por instalación, no automatizable:
+
+1. Google Cloud Console → *APIs & Services* → *Credentials* → *Create OAuth client ID* → tipo "Web application".
+2. *Authorized redirect URI*: `https://{dominio-real}/settings/google/callback`. No funciona con `localhost`/dominios `.test` salvo que el proyecto de GCP esté en modo testing con ese origen agregado explícitamente.
+3. Habilitar la **Google Sheets API** en el proyecto de GCP.
+4. Cargar `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` en `.env` (ver `.env.example`).
+
+Cada coordinador/admin conecta su cuenta desde `Configuración → Google` (`/settings/google`); el `refresh_token` se guarda cifrado en `conexiones_google`, una fila por tenant. Sin conexión, los intentos de sincronizar una encuesta de canal `google_sheets` fallan con un mensaje claro dirigiendo a esa pantalla.
+
 ## Colas / jobs
 
 `ElectorCapturado` encola `ActualizarCoberturaSeccion`. Configurar un worker en entornos con cola persistente (Redis/database):

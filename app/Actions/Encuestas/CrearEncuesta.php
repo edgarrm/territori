@@ -26,7 +26,10 @@ class CrearEncuesta
             $encuesta = Encuesta::create([
                 'nombre' => $datos['nombre'],
                 'canal' => $datos['canal'] ?? CanalEncuesta::Nativo->value,
-                'configuracion_canal' => null,
+                // Solo los canales pull (Google Sheets, F9+) traen algo aquí
+                // (spreadsheet_id/nombre_hoja/campo_identificador); 'nativo'
+                // siempre null.
+                'configuracion_canal' => $datos['configuracion_canal'] ?? null,
                 'ambito_tipo' => $datos['ambito_tipo'],
                 'modo_acceso' => $modoAcceso,
                 'token_publico' => in_array($modoAcceso, ['publico', 'ambos'], true) ? Str::random(40) : null,
@@ -34,7 +37,9 @@ class CrearEncuesta
                 'creado_por_membership_id' => $creadoPorMembershipId,
             ]);
 
-            foreach ($datos['preguntas'] as $orden => $pregunta) {
+            // Canales pull (Google Sheets) no traen preguntas al crear: se
+            // detectan al sincronizar (App\Actions\Encuestas\SincronizarEncuesta).
+            foreach ($datos['preguntas'] ?? [] as $orden => $pregunta) {
                 EncuestaPregunta::create([
                     'encuesta_id' => $encuesta->id,
                     'campo' => null,

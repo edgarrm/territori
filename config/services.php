@@ -35,4 +35,13 @@ return [
         ],
     ],
 
+    // OAuth por tenant para el canal de encuestas Google Sheets (F9). Cada
+    // tenant conecta su propia cuenta de Google; esto es el Client ID/Secret
+    // de la app (Google Cloud Console), no un secreto por tenant.
+    'google' => [
+        'client_id' => env('GOOGLE_CLIENT_ID'),
+        'client_secret' => env('GOOGLE_CLIENT_SECRET'),
+        'redirect' => env('GOOGLE_REDIRECT_URI', env('APP_URL').'/settings/google/callback'),
+    ],
+
 ];

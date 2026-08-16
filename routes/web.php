@@ -8,6 +8,7 @@ use App\Http\Controllers\CapturaController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ElectorController;
 use App\Http\Controllers\EncuestaController;
+use App\Http\Controllers\EncuestaPreguntaController;
 use App\Http\Controllers\EncuestaPublicaController;
 use App\Http\Controllers\EncuestaRespuestaController;
 use App\Http\Controllers\EventoController;
@@ -17,6 +18,7 @@ use App\Http\Controllers\LoteriaController;
 use App\Http\Controllers\MapaController;
 use App\Http\Controllers\RedCiudadanaController;
 use App\Http\Controllers\Settings\CampanaController as SettingsCampanaController;
+use App\Http\Controllers\Settings\GoogleConexionController;
 use App\Http\Controllers\SolicitudArcoController;
 use App\Http\Controllers\TerritorioController;
 use App\Http\Controllers\ZonaController;
@@ -129,6 +131,17 @@ Route::middleware(['auth', 'verified'])->group(function () {
                 Route::get('encuestas', [EncuestaController::class, 'index'])->name('encuestas.index');
                 Route::post('encuestas', [EncuestaController::class, 'store'])->name('encuestas.store');
                 Route::put('api/encuestas/{encuesta}', [EncuestaController::class, 'update'])->name('encuestas.update');
+                // Canales pull (F9: Google Sheets) — bajo demanda, síncrono en el request.
+                Route::post('api/encuestas/{encuesta}/verificar-acceso', [EncuestaController::class, 'verificarAcceso'])->name('encuestas.verificar-acceso');
+                Route::post('api/encuestas/{encuesta}/sincronizar', [EncuestaController::class, 'sincronizar'])->name('encuestas.sincronizar');
+                Route::put('api/encuesta-preguntas/{pregunta}', [EncuestaPreguntaController::class, 'actualizar'])->name('encuesta-preguntas.actualizar');
+
+                // Conexión Google (F9): OAuth por tenant, alimenta el canal
+                // de encuestas Google Sheets.
+                Route::get('settings/google', [GoogleConexionController::class, 'show'])->name('google.show');
+                Route::get('settings/google/conectar', [GoogleConexionController::class, 'conectar'])->name('google.conectar');
+                Route::get('settings/google/callback', [GoogleConexionController::class, 'callback'])->name('google.callback');
+                Route::post('settings/google/desconectar', [GoogleConexionController::class, 'desconectar'])->name('google.desconectar');
 
                 Route::get('brigadistas', [BrigadistaController::class, 'index'])->name('brigadistas');
                 Route::post('brigadistas', [BrigadistaController::class, 'store'])->name('brigadistas.store');

@@ -97,6 +97,15 @@ return [
             'prefix_indexes' => true,
             'search_path' => 'public',
             'sslmode' => env('DB_SSLMODE', 'prefer'),
+            // Sin esto, la sesión de Postgres usa el timezone del SO (en este
+            // entorno, MST/-07) para interpretar timestamps naive que Eloquent
+            // escribe asumiendo UTC (config('app.timezone')) — corrompe
+            // cualquier timestamptz por el offset del servidor (~7h aquí).
+            // Bug real, ya documentado como workaround puntual en Sprint 6
+            // (atendido_en/fecha) sin arreglarse de raíz; encontrado de nuevo
+            // en F9 al comparar expira_en contra now() para refrescar tokens
+            // OAuth. Fix correcto: forzar la sesión a UTC, igual que app.timezone.
+            'timezone' => 'UTC',
         ],
 
         'sqlsrv' => [

@@ -1,8 +1,21 @@
 # Spec — Canal de encuestas: Google Sheets (OAuth por tenant)
 
 - **Feature ID**: F9 (iteración "Análisis territorial multinivel + encuestas multi-canal")
-- **Estado**: Listo para implementar
+- **Estado**: Implementado
 - **Depende de**: F8 `encuestas-nucleo-canal-nativo.spec.md` (modelo `encuestas`/`encuesta_preguntas`/`encuesta_respuestas_agregadas`, Action `TabularRespuesta`)
+
+## Nota de implementación (post-hecho)
+
+Migración `conexiones_google` (🏢, único `tenant_id`) tal como el alcance: `access_token`/`refresh_token` cast `encrypted`, `$hidden` en el modelo como defensa en profundidad. `config/services.php` agrega `google` (`client_id`/`client_secret`/`redirect`). `App\Http\Controllers\Settings\GoogleConexionController` (`show`/`conectar`/`callback`/`desconectar`): `conectar` arma la URL de consentimiento con `access_type=offline`+`prompt=consent` y un `state` aleatorio en sesión; `callback` valida `state` contra sesión (403 si no coincide) e intercambia `code` por tokens; `desconectar` revoca contra Google y borra la fila. Interfaz `App\Contracts\Encuestas\FuenteEncuesta` + `App\Support\Encuestas\ResolverFuenteEncuesta` + `App\Services\Encuestas\GoogleSheetsFuente` tal como el diseño original. `App\Actions\Encuestas\SincronizarEncuesta` reusa `TabularRespuesta` de F8 en modo recuento completo (borra e inserta), resolviendo `ambito_id` por `Seccion.numero`/`Zona.clave` sin persistir nunca el identificador crudo.
+
+**Dos bugs reales encontrados y corregidos durante el cierre de este spec** (el agente que implementó el grueso de F9 se quedó sin sesión antes de llegar a esta fase de verificación; se completó y depuró después):
+
+1. **`ClienteSheets::accessTokenVigente()`** comparaba `expira_en` contra el `now()` de la sesión de Postgres en SQL crudo. En este entorno la conexión `pgsql` no tenía `'timezone'` configurado (`config/database.php`), así que Postgres asumía el timezone del sistema operativo (MST/-07) al interpretar los timestamps naive que Eloquent escribe asumiendo UTC — un token vencido hace 5 minutos se comparaba como si venciera 7 horas en el futuro, y nunca se refrescaba. Es la misma clase de defecto ya anotada como workaround puntual en Sprint 6 (`atendido_en`/`fecha`), nunca arreglada de raíz hasta ahora. **Fix real (no otro workaround)**: se agregó `'timezone' => 'UTC'` a la conexión `pgsql` en `config/database.php`, forzando la sesión de Postgres a UTC igual que `config('app.timezone')`. Verificado que no rompe nada: suite completa (584 tests, incluyendo Interacciones/Sprint 6 y Sprint 7) sigue en verde tras el cambio. `ClienteSheets` quedó comparando `$conexion->expira_en->lessThanOrEqualTo(now()->addMinute())` enteramente en PHP/Eloquent, ya sin necesidad de SQL crudo para esto.
+2. Larastan: `SincronizarEncuesta::handle()` pasaba `iterator_to_array($fuente->obtenerRespuestas($encuesta))` (preserva claves del generador, no garantiza `list<>`) a un método tipado `list<...>`. Fix: `iterator_to_array(..., false)` para descartar claves y reindexar.
+
+`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` documentados en `.env.example` y `docs/operaciones.md` (nueva sección "Encuestas: conectar el canal Google Sheets") — setup manual externo en Google Cloud Console, no automatizable; los tests de este spec usan `Http::fake()` exclusivamente, sin credenciales reales.
+
+29 tests nuevos verdes (`tests/Feature/Settings/GoogleConexionTest.php`, `tests/Feature/GoogleSheets/ClienteSheetsTest.php`, `tests/Feature/Encuestas/SincronizarEncuestaGoogleSheetsTest.php`, cubren los 13 criterios de aceptación incluido el aislamiento entre tenants del criterio 13); suite completa **584 verdes**, Larastan y Pint limpios.
 
 ## Objetivo
 Agregar Google Sheets como segundo canal de encuestas, alimentando el modelo de datos ya construido en F8 sin modificarlo, autenticando **con la propia cuenta de Google de cada tenant** (OAuth, no una service account compartida).
