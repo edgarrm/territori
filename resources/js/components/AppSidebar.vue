@@ -8,6 +8,7 @@ import {
     Contact,
     FolderGit2,
     LayoutGrid,
+    ListChecks,
     Map,
     Network,
     Crosshair,
@@ -84,6 +85,7 @@ const mainNavItems = computed<NavItem[]>(() => {
         ...campoNavItems,
         { title: 'Capturados', href: '/capturados', icon: Contact },
         { title: 'Metas', href: '/metas', icon: Target },
+        { title: 'Encuestas', href: '/encuestas', icon: ListChecks },
         { title: 'Miembros', href: '/brigadistas', icon: Users },
         {
             title: 'Solicitudes ARCO',

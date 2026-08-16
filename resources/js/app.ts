@@ -12,6 +12,9 @@ createInertiaApp({
     layout: (name) => {
         switch (true) {
             case name === 'Welcome':
+            // Formulario público de encuesta (F8): sin login, sin layout de
+            // la app (mismo criterio que Welcome).
+            case name === 'EncuestaPublica':
                 return null;
             case name.startsWith('auth/'):
                 return AuthLayout;

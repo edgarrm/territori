@@ -7,6 +7,9 @@ use App\Http\Controllers\CampanaSelectorController;
 use App\Http\Controllers\CapturaController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ElectorController;
+use App\Http\Controllers\EncuestaController;
+use App\Http\Controllers\EncuestaPublicaController;
+use App\Http\Controllers\EncuestaRespuestaController;
 use App\Http\Controllers\EventoController;
 use App\Http\Controllers\ExportController;
 use App\Http\Controllers\InteraccionController;
@@ -20,6 +23,16 @@ use Illuminate\Auth\Middleware\RequirePassword;
 use Illuminate\Support\Facades\Route;
 
 Route::inertia('/', 'Welcome')->name('home');
+
+// --- Encuestas: canal público sin login (F8) ---
+// Primera ruta de escritura pública del sistema: fuera de auth/tenant, dentro
+// del middleware `web` base (sesión + CSRF de Inertia). tenant_id se resuelve
+// del tenant_id de la Encuesta encontrada por token, nunca del request (ver
+// EncuestaPublicaController y la excepción documentada en _ai/CONTEXT.md).
+Route::get('e/{token}', [EncuestaPublicaController::class, 'show'])->name('encuestas.publica.show');
+Route::post('e/{token}/respuestas', [EncuestaPublicaController::class, 'store'])
+    ->middleware('throttle:5,1')
+    ->name('encuestas.publica.store');
 
 Route::middleware(['auth', 'verified'])->group(function () {
     // Selección de campaña: no requiere una campaña activa todavía.
@@ -111,6 +124,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
                 Route::get('metas', [MapaController::class, 'metas'])->name('metas');
                 Route::put('api/secciones/{seccion}/meta', [MapaController::class, 'definirMeta'])->name('secciones.meta');
 
+                // Encuestas (F8): alta + constructor de preguntas, gestión solo.
+                Route::get('encuestas', [EncuestaController::class, 'index'])->name('encuestas.index');
+                Route::post('encuestas', [EncuestaController::class, 'store'])->name('encuestas.store');
+                Route::put('api/encuestas/{encuesta}', [EncuestaController::class, 'update'])->name('encuestas.update');
+
                 Route::get('brigadistas', [BrigadistaController::class, 'index'])->name('brigadistas');
                 Route::post('brigadistas', [BrigadistaController::class, 'store'])->name('brigadistas.store');
                 Route::put('api/brigadistas/{membership}/activo', [BrigadistaController::class, 'activo'])->name('brigadistas.activo');
@@ -172,6 +190,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::post('eventos', [EventoController::class, 'store'])->name('eventos.store');
             Route::get('api/eventos/{evento}/asistentes', [EventoController::class, 'asistentes'])->name('eventos.asistentes');
             Route::post('api/solicitudes-arco', [SolicitudArcoController::class, 'store'])->name('solicitudes-arco.store');
+
+            // Encuestas (F8): captura brigadista dentro del grupo tenant; alta
+            // y gestión del constructor de preguntas quedan solo para gestión.
+            Route::get('encuestas/{encuesta}/captura', [EncuestaController::class, 'captura'])->name('encuestas.captura');
+            Route::post('api/encuestas/{encuesta}/respuestas', [EncuestaRespuestaController::class, 'store'])->name('encuestas.respuestas.store');
         });
     });
 });
