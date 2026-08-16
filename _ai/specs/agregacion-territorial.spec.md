@@ -1,7 +1,7 @@
 # Spec — Agregación estadística territorial (municipio/estado)
 
 - **Feature ID**: F5 (nueva iteración post F1-F4: "Análisis territorial multinivel")
-- **Estado**: Listo para implementar
+- **Estado**: Implementado
 - **Depende de**: Sprint 1 (cartografía `entidades`/`municipios`/`secciones`), Sprint 3 (`cobertura_seccion`, `MapaController::cobertura()`), F1-F3 (`Tenant::configuracion()`, `App\Support\Bloques`, `CalcularCompetitividadSeccion`, `DesglosarVotosSeccion`)
 
 ## Objetivo
@@ -47,8 +47,8 @@ Hoy el mapa y `/prioridades` solo responden "¿cómo va esta sección?". El clie
 - `Prioridades.vue`/ranking a nivel municipio/estado (el ranking sigue siendo por sección; agregarlo a otros niveles no tiene el mismo sentido de "elige dónde tocar puertas hoy").
 - Cache/tabla materializada de agregados (`estadisticas_seccion`/`cobertura_seccion` son chicas, cientos de filas por municipio — agregar on-the-fly es instantáneo; se revisita si se cargan varios estados completos).
 
-## Nota de negocio a validar con el cliente antes de cerrar el sprint
-Cada tenant opera **un solo municipio** (`tenants.municipio_id`). Esto significa que "agregado a nivel estado" siempre va a mostrar cobertura de campaña = 0 fuera del municipio propio: el valor real del agregado a nivel entidad es el **contexto electoral 2024** (dato público, sirve para comparar "mi municipio vs. el resto del estado" en la elección pasada), no una cobertura operativa multi-municipio. Confirmar con el cliente que esto es lo que espera antes de presentarlo como feature terminada — si en realidad quiere operar varios municipios desde un mismo tenant, es un cambio de arquitectura mayor (fuera de alcance de este spec).
+## Nota de negocio (ya confirmada, no bloquea)
+Cada tenant opera un solo municipio (`tenants.municipio_id`). El agregado a nivel estado es **contexto electoral 2024** (dato público, comparar "mi municipio vs. el resto del estado" en la elección pasada), NO una cobertura operativa multi-municipio. Ya validado, procede con esta interpretación.
 
 ## Criterios de aceptación (tests)
 1. Dado 3 secciones con `total_votos` 100/150/80 y `lista_nominal_2024` 300/400/250, cuando se agrega, entonces `participacion_pct` = `330/950*100` (no el promedio simple de los 3 `participacion_pct` individuales).
@@ -63,8 +63,39 @@ Cada tenant opera **un solo municipio** (`tenants.municipio_id`). Esto significa
 10. Dos tenants con partidos distintos configurados (F2) sobre el mismo municipio: `GET /api/territorio/resumen?nivel=municipio` devuelve `competitividad.estatus_slug` coherente con la perspectiva de cada tenant (sin fuga entre tenants, mismo criterio que el criterio 9 de `competitividad-seccion.spec.md`).
 
 ## Notas de implementación
-- `AgregarEstadisticaTerritorial` y `AgregarCoberturaTerritorial` son Actions puras (reciben `Collection<int>` de IDs, no dependen de request/controller) para poder reusarlas directamente en F7 (`ZonaController::resumen`) sin ningún cambio.
-- `AgregarCoberturaTerritorial` depende de `TenantContext` (igual que `RecalcularCoberturaSeccion`) — si se llama fuera de un contexto de tenant activo (ej. job de sistema), debe fijarse explícitamente antes, no asumirlo.
-- El `votos_partidos` sumado se pasa a `CalcularCompetitividadSeccion::handle()`/`DesglosarVotosSeccion::handle()` exactamente como hoy los llama `MapaController::calcularCompetitividad()`/`calcularDesglose()` (mismos parámetros: `partidoSiglas`, `coaliciones`, `categorias`, `modoCalculo`, `totalVotosSeccion` = el total ya sumado) — no se toca esa clase, es prueba de que el diseño de F5 es correcto si no requiere ningún cambio ahí.
-- `TerritorioController` resuelve `configuracionCompetitividad()` una sola vez por request, igual que `MapaController` — considerar extraer ese método (y `calcularCompetitividad`/`calcularDesglose`) a un trait o Action compartida si `TerritorioController` termina duplicándolo; no bloqueante para este spec (puede quedar duplicado en v1 y refactorizarse cuando F7 lo necesite también).
+- `AgregarEstadisticaTerritorial` y `AgregarCoberturaTerritorial` son Actions puras (reciben `Collection<int>` de IDs, no dependen de request/controller) para poder reusarlas directamente en F7 (`ZonaController::resumen`) sin ningún cambio — aunque F7 no se implementa en este worktree, diseña la firma pensando en esa reutilización.
+- `AgregarCoberturaTerritorial` depende de `TenantContext` (igual que `RecalcularCoberturaSeccion`).
+- El `votos_partidos` sumado se pasa a `CalcularCompetitividadSeccion::handle()`/`DesglosarVotosSeccion::handle()` exactamente como hoy los llama `MapaController::calcularCompetitividad()`/`calcularDesglose()` — LEE ESOS DOS MÉTODOS PRIVADOS en `app/Http/Controllers/MapaController.php` antes de escribir código, para copiar la firma exacta (parámetros: `partidoSiglas`, `coaliciones`, `categorias`, `modoCalculo`, `totalVotosSeccion`).
+- Lee también `app/Models/EstadisticaSeccion.php`, `app/Models/CoberturaSeccion.php` (ojo: `CoberturaSeccion` NO soporta `save()`/`update()` de instancia — no es relevante aquí porque solo lees, no escribes, pero no la instancies para guardar), `app/Actions/Cobertura/RecalcularCoberturaSeccion.php`, `app/Support/Bloques.php`, `app/Actions/Estadisticas/CalcularCompetitividadSeccion.php`, `app/Actions/Estadisticas/DesglosarVotosSeccion.php`, `app/Models/Seccion.php`, `app/Models/Municipio.php` para firmas y relaciones exactas.
+- `TerritorioController` resuelve `configuracionCompetitividad()` una sola vez por request (mismo patrón que `MapaController`) — puedes duplicar ese método privado en el nuevo controlador por ahora (no hay tiempo de refactor a compartido en este spec).
 - `vendor/bin/pint --dirty --format agent` al cierre.
+
+## Desviaciones respecto al texto original (implementación)
+
+- **Firma de `AgregarEstadisticaTerritorial::handle()`**: el texto del spec la
+  describe como `handle(Collection $seccionIds): array`, pero la propia spec
+  exige que internamente llame a `CalcularCompetitividadSeccion::handle()` y
+  `DesglosarVotosSeccion::handle()`, que requieren `partidoSiglas`,
+  `coaliciones`, `categorias`, `modoCalculo` y `partidos` — configuración que
+  no puede resolver una Action pura sin request/tenant. La firma final es
+  `handle(Collection $seccionIds, ?string $partidoSiglas, Collection $coaliciones, array $categorias, string $modoCalculo, Collection $partidos): array`.
+  Sigue siendo pura (recibe todo por parámetro, sin tocar `TenantContext` ni
+  el request), cumpliendo el objetivo real de la nota de reutilización para F7.
+- **Acceso a `/api/territorio/*`**: el spec dice "mismo criterio de acceso
+  que `/api/cobertura.geojson` (lectura abierta a cualquier rol autenticado
+  del tenant)", pero en el código actual `/api/cobertura.geojson` está
+  restringido a `rol:coordinador,admin` (el brigadista recibe 403, ver
+  `tests/Feature/MapaCobertura/RestriccionMapaTest.php`) — la nota del spec
+  describe un estado más antiguo del código (Sprint 3) que ya no es el actual.
+  El criterio de aceptación 8 exige explícitamente que un brigadista SÍ pueda
+  golpear el endpoint y ver solo sus secciones asignadas, así que las rutas de
+  `TerritorioController` se colocaron en el grupo `rol:brigadista,coordinador,admin`
+  (visible a brigadista/coordinador/admin, no a enlace/anfitrión, que no se
+  mencionan en ningún criterio de aceptación) en vez de replicar la
+  restricción real de `/api/cobertura.geojson`.
+- **Frontend**: al no haber `node_modules` en este worktree, no se pudo
+  correr `npm run build`/`eslint`/`prettier` sobre `Mapa.vue`. Los cambios se
+  revisaron manualmente (balance de `<section>`/`<template>`, tipos TS
+  explícitos) pero no se verificaron con el compilador ni en navegador. Sí se
+  generaron los stubs de rutas con `php artisan wayfinder:generate` (comando
+  Artisan puro, sin necesidad de `npm`).
