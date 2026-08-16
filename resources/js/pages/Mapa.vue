@@ -15,6 +15,10 @@ import {
     detalle as detalleRoute,
     resumen as resumenRoute,
 } from '@/routes/secciones';
+import {
+    geojson as territorioGeojsonRoute,
+    resumen as territorioResumenRoute,
+} from '@/routes/territorio';
 
 defineOptions({
     layout: {
@@ -136,6 +140,61 @@ type SeccionSel = FeatureProps & {
     ultimo_registro: string | null;
     demografia: Demografia;
     desglose_2024: Desglose2024;
+    cargando: boolean;
+};
+
+// F5: agregación territorial (municipio/estado). "Nivel" es ortogonal al
+// `modo` de color: cambia la granularidad de lo que se ve, no el indicador.
+type NivelMapa = 'seccion' | 'municipio' | 'entidad';
+
+const NIVELES: { key: NivelMapa; label: string }[] = [
+    { key: 'seccion', label: 'Sección' },
+    { key: 'municipio', label: 'Municipio' },
+    { key: 'entidad', label: 'Estado' },
+];
+
+type MunicipioFeatureProps = { municipio_id: number; nombre: string };
+
+type CompetitividadAgregada = {
+    estatus_slug: string;
+    estatus_label: string;
+    estatus_color: string;
+    diferencia_votos: number | null;
+    diferencia_pct: number | null;
+} | null;
+
+type EstadisticaTerritorial = {
+    total_votos: number | null;
+    lista_nominal_2024: number | null;
+    participacion_pct: number | null;
+    indice_oportunidad: number | null;
+    competitividad: CompetitividadAgregada;
+    secciones_incluidas: number;
+} | null;
+
+type CoberturaTerritorial = {
+    capturados: number;
+    meta: number;
+    verificados: number;
+    cobertura: number;
+    movilizacion_verificada: number;
+    penetracion: number;
+};
+
+type ResumenTerritorial = {
+    nivel: string;
+    secciones_total: number;
+    estadistica: EstadisticaTerritorial;
+    cobertura: CoberturaTerritorial;
+    cobertura_cartografia?: {
+        municipios_cargados: number;
+        municipios_totales: number;
+    };
+};
+
+type TerritorioSel = {
+    nombre: string;
+    resumen: ResumenTerritorial | null;
     cargando: boolean;
 };
 
@@ -336,6 +395,14 @@ const modo = ref<Modo>('cobertura');
 const seccionSel = ref<SeccionSel | null>(null);
 const busqueda = ref('');
 const features = ref<FeatureProps[]>([]);
+
+// F5: agregación territorial.
+const nivel = ref<NivelMapa>('seccion');
+const territorioSel = ref<TerritorioSel | null>(null);
+const cartografiaEntidad = ref<{
+    municipios_cargados: number;
+    municipios_totales: number;
+} | null>(null);
 
 // Debajo de `lg` el panel lateral no cabe junto al mapa: se muestra como cajón
 // inferior (drawer) que se abre al elegir una sección o desde la barra compacta.
@@ -749,6 +816,113 @@ function cambiarModo(nuevo: string) {
     capa?.setStyle(estiloFeature);
 }
 
+// F5: geometría agregada (un municipio, o un Feature por municipio del
+// estado). Sin métrica por polígono que colorear (los `modos` de color son
+// por sección), así que usa un relleno plano; el resaltado de la selección
+// reutiliza el mismo criterio visual que `estiloFeature`.
+function estiloFeatureTerritorio(feature?: GeoJSON.Feature) {
+    const p = (feature?.properties ?? {}) as MunicipioFeatureProps;
+    const seleccionado = territorioSel.value?.nombre === p.nombre;
+
+    if (seleccionado) {
+        return {
+            fillColor: brandColor.value,
+            fillOpacity: 0.15,
+            color: brandColor.value,
+            weight: 4,
+            opacity: 1,
+            lineJoin: 'round' as const,
+        };
+    }
+
+    return {
+        fillColor: brandColor.value,
+        fillOpacity: 0.35,
+        color: '#ffffff',
+        weight: 1,
+        opacity: 1,
+        lineJoin: 'round' as const,
+    };
+}
+
+async function seleccionarMunicipio(p: MunicipioFeatureProps) {
+    territorioSel.value = { nombre: p.nombre, resumen: null, cargando: true };
+    capa?.setStyle(estiloFeatureTerritorio);
+
+    if (esCompacto.value) {
+        panelAbierto.value = true;
+    }
+
+    const respuesta = await fetch(
+        territorioResumenRoute.url({
+            query: { nivel: 'municipio', id: p.municipio_id },
+        }),
+    );
+    const resumen = await respuesta.json();
+
+    if (territorioSel.value?.nombre === p.nombre) {
+        territorioSel.value = { nombre: p.nombre, resumen, cargando: false };
+    }
+}
+
+async function cargarTerritorio() {
+    const respuesta = await fetch(
+        territorioGeojsonRoute.url({ query: { nivel: nivel.value } }),
+    );
+    const geojson = await respuesta.json();
+    const featuresTerritorio = (geojson.features ?? []) as GeoJSON.Feature[];
+
+    capa?.remove();
+    capa = leaflet
+        .geoJSON(geojson, {
+            style: estiloFeatureTerritorio,
+            smoothFactor: 0.5,
+            onEachFeature: (feature, layer) => {
+                const p = feature.properties as MunicipioFeatureProps;
+                layer.on('click', () => seleccionarMunicipio(p));
+                (layer as L.Path).bindTooltip(p.nombre, { sticky: true });
+            },
+        } as L.GeoJSONOptions & { smoothFactor?: number })
+        .addTo(mapa as L.Map);
+
+    const bounds = capa.getBounds();
+
+    if (bounds.isValid()) {
+        mapa?.fitBounds(bounds, { padding: [20, 20] });
+    }
+
+    if (nivel.value === 'entidad') {
+        // Aviso de cartografía parcial: se resuelve una sola vez al cargar el
+        // estado, independiente de qué municipio se seleccione después.
+        const resumenEntidad = await fetch(
+            territorioResumenRoute.url({ query: { nivel: 'entidad' } }),
+        ).then((r) => r.json());
+        cartografiaEntidad.value = resumenEntidad.cobertura_cartografia ?? null;
+    } else {
+        cartografiaEntidad.value = null;
+    }
+
+    // A nivel municipio solo hay un polígono (el del tenant): se selecciona
+    // automáticamente para no obligar a un clic extra.
+    if (nivel.value === 'municipio' && featuresTerritorio[0]) {
+        const p = featuresTerritorio[0].properties as MunicipioFeatureProps;
+        seleccionarMunicipio(p);
+    }
+}
+
+async function cambiarNivel(nuevo: string) {
+    nivel.value = nuevo as NivelMapa;
+    seccionSel.value = null;
+    territorioSel.value = null;
+    panelAbierto.value = false;
+
+    if (nivel.value === 'seccion') {
+        await cargarCobertura();
+    } else {
+        await cargarTerritorio();
+    }
+}
+
 let observadorTamano: ResizeObserver | null = null;
 
 onMounted(async () => {
@@ -835,6 +1009,13 @@ onBeforeUnmount(() => {
             dusk="mapa-barra-movil"
         >
             <SelectorModosMapa
+                :modo="nivel"
+                :modos="NIVELES"
+                variante="chips"
+                @cambiar="cambiarNivel"
+            />
+            <SelectorModosMapa
+                v-if="nivel === 'seccion'"
                 :modo="modo"
                 :modos="modos"
                 variante="chips"
@@ -908,8 +1089,19 @@ onBeforeUnmount(() => {
             </header>
 
             <div class="flex flex-col gap-3 px-4 pb-4">
-                <!-- Toggle de modo (en móvil vive en la barra compacta) -->
+                <!-- Nivel: sección/municipio/estado (F5), ortogonal al modo de color -->
                 <div class="hidden lg:block">
+                    <SelectorModosMapa
+                        :modo="nivel"
+                        :modos="NIVELES"
+                        @cambiar="cambiarNivel"
+                    />
+                </div>
+
+                <!-- Toggle de modo (en móvil vive en la barra compacta): solo
+                     aplica a nivel Sección, los niveles agregados no tienen
+                     métrica por polígono que colorear. -->
+                <div v-if="nivel === 'seccion'" class="hidden lg:block">
                     <SelectorModosMapa
                         :modo="modo"
                         :modos="modos"
@@ -919,7 +1111,11 @@ onBeforeUnmount(() => {
 
                 <!-- Aviso: modo competitividad sin partido configurado -->
                 <p
-                    v-if="modo === 'competitividad' && !partidoConfigurado"
+                    v-if="
+                        nivel === 'seccion' &&
+                        modo === 'competitividad' &&
+                        !partidoConfigurado
+                    "
                     class="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200"
                 >
                     Configura el partido de tu campaña para ver la
@@ -932,8 +1128,25 @@ onBeforeUnmount(() => {
                     </Link>
                 </p>
 
+                <!-- Aviso: cartografía/estadística incompleta a nivel estado -->
+                <p
+                    v-if="
+                        nivel === 'entidad' &&
+                        cartografiaEntidad &&
+                        cartografiaEntidad.municipios_cargados <
+                            cartografiaEntidad.municipios_totales
+                    "
+                    class="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200"
+                >
+                    Datos completos de
+                    {{ cartografiaEntidad.municipios_cargados }} de
+                    {{ cartografiaEntidad.municipios_totales }} municipios del
+                    estado; el resto no tiene cartografía/estadística
+                    cargada.
+                </p>
+
                 <!-- Stats globales -->
-                <div class="grid grid-cols-2 gap-2">
+                <div v-if="nivel === 'seccion'" class="grid grid-cols-2 gap-2">
                     <div class="rounded-xl border bg-background p-3">
                         <div class="text-xl font-bold tabular-nums">
                             {{ fmt(estadisticas.totalCap) }}
@@ -1037,6 +1250,7 @@ onBeforeUnmount(() => {
 
                 <!-- Buscador (en móvil vive en la barra compacta) -->
                 <input
+                    v-if="nivel === 'seccion'"
                     v-model="busqueda"
                     type="search"
                     inputmode="numeric"
@@ -1045,9 +1259,121 @@ onBeforeUnmount(() => {
                     @keyup.enter="buscar"
                 />
 
+                <!-- Ficha de resumen agregado (municipio/estado, F5) -->
+                <section
+                    v-if="nivel !== 'seccion' && territorioSel"
+                    class="rounded-xl border bg-background p-4"
+                >
+                    <h2 class="text-base font-semibold">
+                        {{ territorioSel.nombre }}
+                    </h2>
+
+                    <div v-if="territorioSel.cargando" class="mt-3 text-sm text-muted-foreground">
+                        Cargando resumen…
+                    </div>
+
+                    <template v-else-if="territorioSel.resumen">
+                        <dl class="mt-3 divide-y divide-border text-sm">
+                            <div class="flex justify-between py-1.5">
+                                <dt class="text-muted-foreground">
+                                    Secciones agregadas
+                                </dt>
+                                <dd class="font-medium tabular-nums">
+                                    {{ territorioSel.resumen.secciones_total }}
+                                </dd>
+                            </div>
+                            <div class="flex justify-between py-1.5">
+                                <dt class="text-muted-foreground">Capturados</dt>
+                                <dd class="font-medium tabular-nums">
+                                    {{ fmt(territorioSel.resumen.cobertura.capturados) }}
+                                    /
+                                    {{ fmt(territorioSel.resumen.cobertura.meta) }}
+                                </dd>
+                            </div>
+                            <div class="flex justify-between py-1.5">
+                                <dt class="text-muted-foreground">Cobertura</dt>
+                                <dd class="font-medium tabular-nums">
+                                    {{ pct(territorioSel.resumen.cobertura.cobertura) }}
+                                </dd>
+                            </div>
+                            <div class="flex justify-between py-1.5">
+                                <dt class="text-muted-foreground">Penetración</dt>
+                                <dd class="font-medium tabular-nums">
+                                    {{ pct(territorioSel.resumen.cobertura.penetracion) }}
+                                </dd>
+                            </div>
+                            <template v-if="territorioSel.resumen.estadistica">
+                                <div class="flex justify-between py-1.5">
+                                    <dt class="text-muted-foreground">
+                                        Participación 2024
+                                    </dt>
+                                    <dd class="font-medium tabular-nums">
+                                        {{
+                                            territorioSel.resumen.estadistica
+                                                .participacion_pct !== null
+                                                ? `${territorioSel.resumen.estadistica.participacion_pct.toFixed(1)}%`
+                                                : '—'
+                                        }}
+                                    </dd>
+                                </div>
+                                <div
+                                    v-if="
+                                        page.props.campana?.indicadores
+                                            .competitividad &&
+                                        territorioSel.resumen.estadistica
+                                            .competitividad &&
+                                        territorioSel.resumen.estadistica
+                                            .competitividad.estatus_slug !==
+                                            'sin_datos'
+                                    "
+                                    class="flex justify-between py-1.5"
+                                >
+                                    <dt class="text-muted-foreground">Estatus</dt>
+                                    <dd
+                                        class="flex items-center gap-1.5 font-medium"
+                                    >
+                                        <span
+                                            class="size-2.5 rounded-sm"
+                                            :style="{
+                                                backgroundColor:
+                                                    territorioSel.resumen
+                                                        .estadistica
+                                                        .competitividad
+                                                        .estatus_color,
+                                            }"
+                                        />
+                                        {{
+                                            territorioSel.resumen.estadistica
+                                                .competitividad.estatus_label
+                                        }}
+                                    </dd>
+                                </div>
+                            </template>
+                        </dl>
+                        <p
+                            v-if="
+                                territorioSel.resumen.estadistica &&
+                                territorioSel.resumen.estadistica
+                                    .secciones_incluidas <
+                                    territorioSel.resumen.secciones_total
+                            "
+                            class="mt-2 text-xs text-muted-foreground"
+                        >
+                            Estadística electoral 2024 disponible en
+                            {{
+                                territorioSel.resumen.estadistica
+                                    .secciones_incluidas
+                            }}
+                            de
+                            {{ territorioSel.resumen.secciones_total }}
+                            secciones.
+                        </p>
+                    </template>
+                </section>
+
                 <!-- Ficha de sección -->
                 <section
-                    v-if="seccionSel"
+                    v-else-if="nivel === 'seccion' && seccionSel"
                     class="rounded-xl border bg-background p-4"
                 >
                     <div class="flex items-center justify-between">
@@ -1451,8 +1777,14 @@ onBeforeUnmount(() => {
                     v-else
                     class="rounded-xl border border-dashed bg-background p-4 text-sm text-muted-foreground"
                 >
-                    Haz clic en una sección del mapa para ver su detalle, o
-                    búscala por número.
+                    <template v-if="nivel === 'seccion'">
+                        Haz clic en una sección del mapa para ver su detalle,
+                        o búscala por número.
+                    </template>
+                    <template v-else>
+                        Haz clic en un municipio del mapa para ver su resumen
+                        agregado.
+                    </template>
                 </p>
 
                 <p
@@ -1471,8 +1803,11 @@ onBeforeUnmount(() => {
         >
             <div id="mapa-cobertura" class="h-full w-full" />
 
-            <!-- Leyenda (en móvil su desglose ya aparece dentro del panel) -->
+            <!-- Leyenda (en móvil su desglose ya aparece dentro del panel). Solo
+                 aplica a nivel Sección: los niveles agregados no tienen
+                 métrica por polígono que colorear. -->
             <div
+                v-if="nivel === 'seccion'"
                 class="absolute right-3 bottom-3 z-[1000] hidden rounded-xl border border-black/5 bg-background/95 p-3 shadow-lg backdrop-blur lg:block"
             >
                 <div

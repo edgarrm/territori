@@ -15,6 +15,7 @@ use App\Http\Controllers\MapaController;
 use App\Http\Controllers\RedCiudadanaController;
 use App\Http\Controllers\Settings\CampanaController as SettingsCampanaController;
 use App\Http\Controllers\SolicitudArcoController;
+use App\Http\Controllers\TerritorioController;
 use Illuminate\Auth\Middleware\RequirePassword;
 use Illuminate\Support\Facades\Route;
 
@@ -78,6 +79,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
             // Vista personal de capturados: pantalla de aterrizaje del brigadista.
             Route::get('mis-capturados', [ElectorController::class, 'mios'])->name('mis-capturados');
             Route::get('api/mis-capturados', [ElectorController::class, 'misDatos'])->name('mis-capturados.data');
+
+            // Agregación territorial (F5): resumen y geometría a nivel
+            // municipio/estado. El brigadista solo agrega sus secciones
+            // asignadas (mismo criterio que mapa.cobertura).
+            Route::get('api/territorio/resumen', [TerritorioController::class, 'resumen'])->name('territorio.resumen');
+            Route::get('api/territorio/geojson', [TerritorioController::class, 'geojson'])->name('territorio.geojson');
 
             // --- Análisis y planeación: fuera del alcance del brigadista, cuyo
             // perfil es de captura (dashboard, mapa, prioridades, detalle de
