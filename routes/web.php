@@ -209,6 +209,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
             // y gestión del constructor de preguntas quedan solo para gestión.
             Route::get('encuestas/{encuesta}/captura', [EncuestaController::class, 'captura'])->name('encuestas.captura');
             Route::post('api/encuestas/{encuesta}/respuestas', [EncuestaRespuestaController::class, 'store'])->name('encuestas.respuestas.store');
+            // Resumen de resultados tabulados por ámbito (F10): lectura
+            // abierta al mismo nivel que zonas.resumen (incluye brigadista)
+            // porque también se consume desde la ficha de zona.
+            Route::get('api/encuestas/{encuesta}/resumen', [EncuestaController::class, 'resumen'])->name('encuestas.resumen');
 
             // Zonas personalizadas (F6): lectura abierta a todo el dominio del
             // tenant (brigadista/coordinador/admin); escritura solo gestión.

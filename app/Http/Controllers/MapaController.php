@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Actions\Encuestas\ResumirEncuestasParaAmbito;
 use App\Actions\Estadisticas\CalcularCompetitividadSeccion;
 use App\Actions\Estadisticas\DesglosarVotosSeccion;
 use App\Actions\Metas\DefinirMetaSeccion;
@@ -10,6 +11,8 @@ use App\Http\Controllers\Concerns\PresentaElectores;
 use App\Models\Coalicion;
 use App\Models\CoberturaSeccion;
 use App\Models\Elector;
+use App\Models\Encuesta;
+use App\Models\EncuestaPregunta;
 use App\Models\EstadisticaSeccion;
 use App\Models\Membership;
 use App\Models\MetaSeccion;
@@ -41,6 +44,9 @@ class MapaController extends Controller
             'totalSecciones' => $municipio ? Seccion::where('municipio_id', $municipio->id)->count() : 0,
             // Sección a enfocar al abrir el mapa (deep-link desde otras vistas).
             'seccionInicial' => $request->integer('seccion') ?: null,
+            // F10: encuestas seleccionables en el modo "Encuestas" — solo
+            // activas y de ámbito sección (el mapa colorea por sección).
+            'encuestasDisponibles' => $this->encuestasDisponiblesParaMapa(),
         ]);
     }
 
@@ -214,6 +220,8 @@ class MapaController extends Controller
                 'recomendacion' => $estadistica->recomendacion,
                 'grupos_edad' => $estadistica->grupos_edad,
             ],
+            // F10: encuestas activas con al menos una respuesta en esta sección.
+            'encuestas' => (new ResumirEncuestasParaAmbito)->handle('seccion', $seccion->id),
         ]);
     }
 
@@ -495,5 +503,33 @@ class MapaController extends Controller
             $config['coaliciones'],
             Partido::all(),
         );
+    }
+
+    /**
+     * Encuestas activas de ámbito sección + su catálogo de preguntas
+     * tabulables (F10), para el sub-selector dinámico "Encuesta → Pregunta →
+     * opción" del modo "Encuestas" del mapa.
+     *
+     * @return list<array{id: int, nombre: string, preguntas: list<array{id: int, etiqueta: string, opciones: list<string>}>}>
+     */
+    private function encuestasDisponiblesParaMapa(): array
+    {
+        return array_values(Encuesta::query()
+            ->where('estado', 'activa')
+            ->where('ambito_tipo', 'seccion')
+            ->with('preguntas')
+            ->orderBy('nombre')
+            ->get()
+            ->map(fn (Encuesta $encuesta): array => [
+                'id' => $encuesta->id,
+                'nombre' => $encuesta->nombre,
+                'preguntas' => array_values($encuesta->preguntas
+                    ->filter(fn (EncuestaPregunta $p): bool => $p->esTabulable())
+                    ->map(fn (EncuestaPregunta $p): array => [
+                        'id' => $p->id,
+                        'etiqueta' => $p->etiqueta,
+                        'opciones' => array_values($p->opciones ?? []),
+                    ])->all()),
+            ])->all());
     }
 }

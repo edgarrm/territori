@@ -9,7 +9,7 @@ import 'leaflet/dist/leaflet.css';
 import 'leaflet-draw/dist/leaflet.draw.css';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { fmt, pct } from '@/lib/formato';
+import { colorPorIndice, fmt, pct } from '@/lib/formato';
 import { dashboard } from '@/routes';
 import {
     destroy as destroyRoute,
@@ -57,6 +57,22 @@ type Competitividad = {
     estatus_color: string;
 } | null;
 
+// F10: desglose de una encuesta por pregunta+opción, ya calculado por el
+// backend (App\Actions\Encuestas\ResumirEncuestasParaAmbito). Solo trae
+// encuestas activas con al menos una respuesta en esta zona.
+type OpcionEncuesta = { opcion: string; conteo: number; pct: number };
+type PreguntaEncuesta = {
+    pregunta_id: number;
+    etiqueta: string;
+    total_respuestas: number;
+    opciones: OpcionEncuesta[];
+};
+type EncuestaResumen = {
+    encuesta_id: number;
+    nombre: string;
+    preguntas: PreguntaEncuesta[];
+};
+
 type ZonaResumen = {
     zona_id: number;
     zona_nombre: string;
@@ -76,6 +92,7 @@ type ZonaResumen = {
         movilizacion_verificada: number;
         penetracion: number;
     };
+    encuestas: EncuestaResumen[];
 };
 
 const ESCALA_COBERTURA = [
@@ -658,6 +675,56 @@ onBeforeUnmount(() => {
                                         <p v-else class="mt-2 text-xs text-muted-foreground">
                                             Sin datos electorales 2024 para las secciones de esta zona.
                                         </p>
+                                    </div>
+
+                                    <!-- Encuestas (F10): una card por encuesta activa con respuestas en esta zona -->
+                                    <div
+                                        v-for="encuesta in resumenZona.encuestas"
+                                        :key="encuesta.encuesta_id"
+                                        class="rounded-xl border border-sidebar-border/70 bg-card p-3 dark:border-sidebar-border sm:col-span-2"
+                                    >
+                                        <h3 class="text-sm font-semibold">
+                                            Encuesta: {{ encuesta.nombre }}
+                                        </h3>
+                                        <div class="mt-3 space-y-3">
+                                            <div
+                                                v-for="pregunta in encuesta.preguntas"
+                                                :key="pregunta.pregunta_id"
+                                            >
+                                                <div class="flex items-center justify-between gap-2">
+                                                    <span class="text-xs font-medium">{{ pregunta.etiqueta }}</span>
+                                                    <span class="shrink-0 text-[0.65rem] text-muted-foreground tabular-nums">
+                                                        {{ fmt(pregunta.total_respuestas) }} respuestas
+                                                    </span>
+                                                </div>
+                                                <div class="mt-1.5 space-y-1 pl-2">
+                                                    <div v-for="(opcion, i) in pregunta.opciones" :key="opcion.opcion">
+                                                        <div class="flex items-center gap-2 text-xs">
+                                                            <span
+                                                                class="size-2 shrink-0 rounded-sm"
+                                                                :style="{ backgroundColor: colorPorIndice(i) }"
+                                                            />
+                                                            <span class="min-w-0 flex-1 truncate">{{ opcion.opcion }}</span>
+                                                            <span class="shrink-0 font-medium tabular-nums">
+                                                                {{ fmt(opcion.conteo) }}
+                                                                <span v-if="pregunta.total_respuestas" class="text-muted-foreground">
+                                                                    ({{ pct(opcion.pct) }})
+                                                                </span>
+                                                            </span>
+                                                        </div>
+                                                        <div class="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
+                                                            <div
+                                                                class="h-full rounded-full"
+                                                                :style="{
+                                                                    width: `${opcion.pct * 100}%`,
+                                                                    backgroundColor: colorPorIndice(i),
+                                                                }"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </td>

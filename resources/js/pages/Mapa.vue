@@ -8,8 +8,9 @@ import type * as L from 'leaflet';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import 'leaflet/dist/leaflet.css';
 import SelectorModosMapa from '@/components/SelectorModosMapa.vue';
-import { fmt, formatoDiferenciaCompetitividad, pct } from '@/lib/formato';
+import { colorPorIndice, fmt, formatoDiferenciaCompetitividad, pct } from '@/lib/formato';
 import { dashboard } from '@/routes';
+import { resumen as encuestaResumenRoute } from '@/routes/encuestas';
 import { cobertura as coberturaRoute } from '@/routes/mapa';
 import {
     detalle as detalleRoute,
@@ -30,11 +31,27 @@ defineOptions({
     },
 });
 
+// F10: catálogo de encuestas activas (ámbito sección) + sus preguntas
+// tabulables, para el sub-selector dinámico "Encuesta → Pregunta → opción"
+// del modo "Encuestas".
+type PreguntaEncuestaDisponible = {
+    id: number;
+    etiqueta: string;
+    opciones: string[];
+};
+
+type EncuestaDisponible = {
+    id: number;
+    nombre: string;
+    preguntas: PreguntaEncuestaDisponible[];
+};
+
 const props = defineProps<{
     municipio: string | null;
     estado: string | null;
     totalSecciones: number;
     seccionInicial?: number | null;
+    encuestasDisponibles: EncuestaDisponible[];
 }>();
 
 type CategoriaCompetitividad = {
@@ -77,7 +94,8 @@ type Modo =
     | 'competitividad'
     | 'tipo_seccion'
     | 'oportunidad'
-    | 'prioridad';
+    | 'prioridad'
+    | 'encuesta';
 
 type FeatureProps = {
     seccion_id: number;
@@ -392,6 +410,156 @@ function bucketPrioridad(p: FeatureProps) {
     );
 }
 
+// F10: modo "Encuestas" — desglose por pregunta+opción y sección, tal como lo
+// devuelve App\Actions\Encuestas\ResumirRespuestasEncuesta.
+type OpcionEncuestaResumen = { opcion: string; conteo: number; pct: number };
+type PreguntaEncuestaResumen = {
+    pregunta_id: number;
+    etiqueta: string;
+    total_respuestas: number;
+    opciones: OpcionEncuestaResumen[];
+};
+type ResultadoEncuestaAmbito = {
+    ambito_id: number;
+    preguntas: PreguntaEncuestaResumen[];
+};
+
+// % de una opción específica (gradiente): 5 cortes, mismo espíritu que
+// ESCALA_COMPETITIVIDAD pero sobre una fracción 0-1.
+const ESCALA_PCT_OPCION = [
+    { key: 'alta', label: '≥60%', color: '#0ea5e9', min: 0.6 },
+    { key: 'media_alta', label: '40–60%', color: '#16a34a', min: 0.4 },
+    { key: 'media', label: '20–40%', color: '#84cc16', min: 0.2 },
+    { key: 'baja', label: '5–20%', color: '#f59e0b', min: 0.05 },
+    { key: 'muy_baja', label: '<5%', color: '#ef4444', min: 0 },
+] as const;
+
+function bucketPctOpcion(valor: number) {
+    return (
+        ESCALA_PCT_OPCION.find((b) => valor >= b.min) ??
+        ESCALA_PCT_OPCION[ESCALA_PCT_OPCION.length - 1]
+    );
+}
+
+const encuestaSelId = ref<number | null>(null);
+const preguntaSelId = ref<number | null>(null);
+// null = "opción mayoritaria" (categórico); si no, el nombre de la opción a
+// ver en gradiente de %.
+const opcionVista = ref<string | null>(null);
+const encuestaResultados = ref<Map<number, PreguntaEncuestaResumen[]>>(
+    new Map(),
+);
+const cargandoEncuesta = ref(false);
+
+const encuestaActual = computed(
+    () =>
+        props.encuestasDisponibles.find((e) => e.id === encuestaSelId.value) ??
+        null,
+);
+const preguntaActual = computed(
+    () =>
+        encuestaActual.value?.preguntas.find(
+            (p) => p.id === preguntaSelId.value,
+        ) ?? null,
+);
+
+function preguntaDeSeccion(seccionId: number): PreguntaEncuestaResumen | null {
+    const preguntas = encuestaResultados.value.get(seccionId);
+
+    return (
+        preguntas?.find((p) => p.pregunta_id === preguntaSelId.value) ?? null
+    );
+}
+
+function colorDeOpcion(opcion: string): string {
+    const opciones = preguntaActual.value?.opciones ?? [];
+    const indice = opciones.indexOf(opcion);
+
+    return colorPorIndice(indice < 0 ? 0 : indice);
+}
+
+function bucketEncuesta(seccionId: number): {
+    key: string;
+    label: string;
+    color: string;
+} {
+    const pregunta = preguntaDeSeccion(seccionId);
+
+    if (!pregunta || pregunta.total_respuestas === 0) {
+        return SIN_DATOS;
+    }
+
+    if (opcionVista.value === null) {
+        // Ya viene ordenado por conteo descendente: la primera es la mayoritaria.
+        const mayoritaria = pregunta.opciones[0];
+
+        return {
+            key: mayoritaria.opcion,
+            label: mayoritaria.opcion,
+            color: colorDeOpcion(mayoritaria.opcion),
+        };
+    }
+
+    const opcion = pregunta.opciones.find((o) => o.opcion === opcionVista.value);
+
+    if (!opcion) {
+        return SIN_DATOS;
+    }
+
+    const bucket = bucketPctOpcion(opcion.pct);
+
+    return {
+        key: bucket.key,
+        label: `${opcionVista.value}: ${bucket.label}`,
+        color: bucket.color,
+    };
+}
+
+async function cargarEncuesta() {
+    if (encuestaSelId.value === null) {
+        encuestaResultados.value = new Map();
+        capa?.setStyle(estiloFeature);
+
+        return;
+    }
+
+    cargandoEncuesta.value = true;
+
+    const respuesta = await fetch(
+        encuestaResumenRoute.url(encuestaSelId.value, {
+            query: { ambito: 'seccion' },
+        }),
+    );
+    const datos = await respuesta.json();
+    const mapa = new Map<number, PreguntaEncuestaResumen[]>();
+
+    for (const r of (datos.resultados ?? []) as ResultadoEncuestaAmbito[]) {
+        mapa.set(r.ambito_id, r.preguntas);
+    }
+
+    encuestaResultados.value = mapa;
+    cargandoEncuesta.value = false;
+    capa?.setStyle(estiloFeature);
+}
+
+function cambiarEncuestaSel(id: string) {
+    encuestaSelId.value = id ? Number(id) : null;
+    preguntaSelId.value = encuestaActual.value?.preguntas[0]?.id ?? null;
+    opcionVista.value = null;
+    cargarEncuesta();
+}
+
+function cambiarPreguntaSel(id: string) {
+    preguntaSelId.value = id ? Number(id) : null;
+    opcionVista.value = null;
+    capa?.setStyle(estiloFeature);
+}
+
+function cambiarOpcionVista(opcion: string) {
+    opcionVista.value = opcion === '' ? null : opcion;
+    capa?.setStyle(estiloFeature);
+}
+
 const modo = ref<Modo>('cobertura');
 const seccionSel = ref<SeccionSel | null>(null);
 const busqueda = ref('');
@@ -428,6 +596,8 @@ function colorFeature(p: FeatureProps): string {
             return bucketOportunidad(p.nivel_oportunidad).color;
         case 'prioridad':
             return bucketPrioridad(p).color;
+        case 'encuesta':
+            return bucketEncuesta(p.seccion_id).color;
         default:
             return bucket(p.cobertura).color;
     }
@@ -517,6 +687,8 @@ function claveEstatus(p: FeatureProps): string | number {
             return bucketOportunidad(p.nivel_oportunidad).key;
         case 'prioridad':
             return bucketPrioridad(p).key;
+        case 'encuesta':
+            return bucketEncuesta(p.seccion_id).key;
         default:
             return bucket(p.cobertura).key;
     }
@@ -562,7 +734,7 @@ const leyenda = computed(() => {
     }
 
     const escalas: Record<
-        Exclude<Modo, 'tipo' | 'tipo_seccion' | 'competitividad'>,
+        Exclude<Modo, 'tipo' | 'tipo_seccion' | 'competitividad' | 'encuesta'>,
         readonly LeyendaItem[]
     > = {
         cobertura: ESCALA,
@@ -571,6 +743,42 @@ const leyenda = computed(() => {
         oportunidad: NIVELES_OPORTUNIDAD,
         prioridad: ESCALA_PRIORIDAD,
     };
+
+    if (modo.value === 'encuesta') {
+        // Categórico (opción mayoritaria): una entrada por opción del
+        // catálogo de la pregunta elegida. Gradiente (% de una opción): los
+        // cortes fijos de ESCALA_PCT_OPCION.
+        if (opcionVista.value === null) {
+            const opciones = preguntaActual.value?.opciones ?? [];
+            const items: LeyendaItemConCuenta[] = opciones.map((o) => ({
+                key: o,
+                label: o,
+                color: colorDeOpcion(o),
+                count: conteos.get(o) ?? 0,
+            }));
+            const sinDatos = conteos.get(SIN_DATOS.key) ?? 0;
+
+            if (sinDatos > 0) {
+                items.push({ ...SIN_DATOS, count: sinDatos });
+            }
+
+            return items;
+        }
+
+        const items: LeyendaItemConCuenta[] = ESCALA_PCT_OPCION.map((b) => ({
+            key: b.key,
+            label: b.label,
+            color: b.color,
+            count: conteos.get(b.key) ?? 0,
+        }));
+        const sinDatos = conteos.get(SIN_DATOS.key) ?? 0;
+
+        if (sinDatos > 0) {
+            items.push({ ...SIN_DATOS, count: sinDatos });
+        }
+
+        return items;
+    }
 
     if (modo.value === 'competitividad') {
         const escala: readonly { key: string; label: string; color: string }[] =
@@ -645,11 +853,18 @@ const modos = computed(() => {
         },
     ];
 
+    // F10: solo aparece si hay al menos una encuesta activa que colorear.
+    const encuestaModo: { key: Modo; label: string }[] =
+        props.encuestasDisponibles.length > 0
+            ? [{ key: 'encuesta', label: 'Encuestas' }]
+            : [];
+
     return [
         ...MODOS_BASE,
         ...opcionales
             .filter((o) => o.activo)
             .map(({ key, label }) => ({ key, label })),
+        ...encuestaModo,
     ];
 });
 
@@ -662,6 +877,7 @@ const TITULOS_LEYENDA: Record<Modo, string> = {
     tipo_seccion: 'Tipo de sección (α/β/γ)',
     oportunidad: 'Oportunidad de movilización',
     prioridad: 'Prioridad de esfuerzos',
+    encuesta: 'Encuestas',
 };
 
 const tituloLeyenda = computed(() => {
@@ -669,6 +885,10 @@ const tituloLeyenda = computed(() => {
         return partidoConfigurado.value
             ? 'Competitividad (mi partido)'
             : 'Competitividad 2024 (margen)';
+    }
+
+    if (modo.value === 'encuesta') {
+        return preguntaActual.value?.etiqueta ?? 'Encuestas';
     }
 
     return TITULOS_LEYENDA[modo.value];
@@ -1152,6 +1372,107 @@ onBeforeUnmount(() => {
                     />
                     Mostrar zonas personalizadas
                 </label>
+
+                <!-- F10: sub-selector dinámico Encuesta → Pregunta → opción.
+                     Selector anidado en el propio panel (en vez de un modal):
+                     mismo patrón visual que el resto de controles del panel,
+                     sin introducir una interacción nueva (abrir/cerrar
+                     diálogo) para lo que es, en esencia, más criterio de
+                     filtrado dentro del mismo modo. -->
+                <div
+                    v-if="nivel === 'seccion' && modo === 'encuesta'"
+                    class="flex flex-col gap-2 rounded-lg border bg-background p-3"
+                    dusk="mapa-selector-encuesta"
+                >
+                    <label class="flex flex-col gap-1">
+                        <span
+                            class="text-[0.7rem] font-medium text-muted-foreground uppercase"
+                            >Encuesta</span
+                        >
+                        <select
+                            :value="encuestaSelId ?? ''"
+                            class="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                            @change="
+                                cambiarEncuestaSel(
+                                    ($event.target as HTMLSelectElement).value,
+                                )
+                            "
+                        >
+                            <option value="" disabled>
+                                Elige una encuesta…
+                            </option>
+                            <option
+                                v-for="e in encuestasDisponibles"
+                                :key="e.id"
+                                :value="e.id"
+                            >
+                                {{ e.nombre }}
+                            </option>
+                        </select>
+                    </label>
+
+                    <label
+                        v-if="encuestaActual"
+                        class="flex flex-col gap-1"
+                    >
+                        <span
+                            class="text-[0.7rem] font-medium text-muted-foreground uppercase"
+                            >Pregunta</span
+                        >
+                        <select
+                            :value="preguntaSelId ?? ''"
+                            class="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                            @change="
+                                cambiarPreguntaSel(
+                                    ($event.target as HTMLSelectElement).value,
+                                )
+                            "
+                        >
+                            <option
+                                v-for="p in encuestaActual.preguntas"
+                                :key="p.id"
+                                :value="p.id"
+                            >
+                                {{ p.etiqueta }}
+                            </option>
+                        </select>
+                    </label>
+
+                    <label
+                        v-if="preguntaActual"
+                        class="flex flex-col gap-1"
+                    >
+                        <span
+                            class="text-[0.7rem] font-medium text-muted-foreground uppercase"
+                            >Ver</span
+                        >
+                        <select
+                            :value="opcionVista ?? ''"
+                            class="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                            @change="
+                                cambiarOpcionVista(
+                                    ($event.target as HTMLSelectElement).value,
+                                )
+                            "
+                        >
+                            <option value="">Opción mayoritaria</option>
+                            <option
+                                v-for="o in preguntaActual.opciones"
+                                :key="o"
+                                :value="o"
+                            >
+                                % de "{{ o }}"
+                            </option>
+                        </select>
+                    </label>
+
+                    <p
+                        v-if="cargandoEncuesta"
+                        class="text-xs text-muted-foreground"
+                    >
+                        Cargando resultados…
+                    </p>
+                </div>
 
                 <!-- Aviso: modo competitividad sin partido configurado -->
                 <p

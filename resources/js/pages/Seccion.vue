@@ -11,7 +11,12 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { fmt, formatoDiferenciaCompetitividad, pct } from '@/lib/formato';
+import {
+    colorPorIndice,
+    fmt,
+    formatoDiferenciaCompetitividad,
+    pct,
+} from '@/lib/formato';
 import { dashboard } from '@/routes';
 import { vigente as avisoVigente } from '@/routes/avisos';
 import { store as electoresStore } from '@/routes/electores';
@@ -87,6 +92,22 @@ type Desglose2024 = {
     bloques: BloqueVotos[];
 } | null;
 
+// F10: desglose de una encuesta por pregunta+opción, ya calculado por el
+// backend (App\Actions\Encuestas\ResumirEncuestasParaAmbito). Solo trae
+// encuestas activas con al menos una respuesta en esta sección.
+type OpcionEncuesta = { opcion: string; conteo: number; pct: number };
+type PreguntaEncuesta = {
+    pregunta_id: number;
+    etiqueta: string;
+    total_respuestas: number;
+    opciones: OpcionEncuesta[];
+};
+type EncuestaResumen = {
+    encuesta_id: number;
+    nombre: string;
+    preguntas: PreguntaEncuesta[];
+};
+
 type Demografia = {
     indice_oportunidad: number;
     nivel_oportunidad: string;
@@ -116,6 +137,7 @@ type Resumen = {
     electoral_2024: Electoral2024;
     desglose_2024: Desglose2024;
     demografia: Demografia;
+    encuestas: EncuestaResumen[];
 };
 
 type Aviso = { id: number; version: string; texto: string } | null;
@@ -752,6 +774,74 @@ async function guardar() {
                 {{ fmt(sumaOpciones(resumen.desglose_2024)) }} de
                 {{ fmt(resumen.desglose_2024.total_votos) }} votos.
             </p>
+        </section>
+
+        <!-- Encuestas (F10): una card por encuesta activa con respuestas en esta sección -->
+        <section
+            v-for="encuesta in resumen?.encuestas ?? []"
+            :key="encuesta.encuesta_id"
+            class="rounded-xl border border-sidebar-border/70 bg-card p-3 sm:p-4 dark:border-sidebar-border"
+        >
+            <h2 class="text-base font-semibold">
+                Encuesta: {{ encuesta.nombre }}
+            </h2>
+
+            <div class="mt-4 space-y-5">
+                <div
+                    v-for="pregunta in encuesta.preguntas"
+                    :key="pregunta.pregunta_id"
+                >
+                    <div class="flex items-center justify-between gap-2">
+                        <span class="text-sm font-medium">{{
+                            pregunta.etiqueta
+                        }}</span>
+                        <span
+                            class="shrink-0 text-xs text-muted-foreground tabular-nums"
+                        >
+                            {{ fmt(pregunta.total_respuestas) }} respuestas
+                        </span>
+                    </div>
+
+                    <div class="mt-2 space-y-1.5 pl-2 sm:pl-4">
+                        <div
+                            v-for="(opcion, i) in pregunta.opciones"
+                            :key="opcion.opcion"
+                        >
+                            <div class="flex items-center gap-2 text-xs">
+                                <span
+                                    class="size-2.5 shrink-0 rounded-sm"
+                                    :style="{
+                                        backgroundColor: colorPorIndice(i),
+                                    }"
+                                />
+                                <span class="min-w-0 flex-1 truncate">{{
+                                    opcion.opcion
+                                }}</span>
+                                <span class="shrink-0 font-medium tabular-nums">
+                                    {{ fmt(opcion.conteo) }}
+                                    <span
+                                        v-if="pregunta.total_respuestas"
+                                        class="text-muted-foreground"
+                                    >
+                                        ({{ pct(opcion.pct) }})
+                                    </span>
+                                </span>
+                            </div>
+                            <div
+                                class="mt-1 h-1.5 overflow-hidden rounded-full bg-muted"
+                            >
+                                <div
+                                    class="h-full rounded-full"
+                                    :style="{
+                                        width: `${opcion.pct * 100}%`,
+                                        backgroundColor: colorPorIndice(i),
+                                    }"
+                                />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </section>
 
         <!-- Perfil por edad -->

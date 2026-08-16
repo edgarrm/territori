@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Actions\Cobertura\AgregarCoberturaTerritorial;
+use App\Actions\Encuestas\ResumirEncuestasParaAmbito;
 use App\Actions\Estadisticas\AgregarEstadisticaTerritorial;
 use App\Actions\Zonas\ActualizarZona;
 use App\Actions\Zonas\CrearZona;
@@ -155,6 +156,9 @@ class ZonaController extends Controller
             'secciones_total' => $seccionIds->count(),
             'estadistica' => $estadistica,
             'cobertura' => $cobertura,
+            // F10: encuestas activas de ámbito zona con al menos una
+            // respuesta tabulada en esta zona.
+            'encuestas' => (new ResumirEncuestasParaAmbito)->handle('zona', $modelo->id),
         ]);
     }
 

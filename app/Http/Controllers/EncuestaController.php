@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Actions\Encuestas\ActualizarEncuesta;
 use App\Actions\Encuestas\CrearEncuesta;
+use App\Actions\Encuestas\ResumirRespuestasEncuesta;
 use App\Actions\Encuestas\SincronizarEncuesta;
 use App\Exceptions\ConexionGoogleInvalida;
 use App\Exceptions\ConexionGoogleNoEncontrada;
@@ -12,10 +13,12 @@ use App\Http\Requests\UpdateEncuestaRequest;
 use App\Models\Encuesta;
 use App\Models\EncuestaPregunta;
 use App\Models\Seccion;
+use App\Models\Zona;
 use App\Support\Encuestas\ResolverFuenteEncuesta;
 use App\Support\Tenancy\TenantContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 use RuntimeException;
@@ -120,6 +123,41 @@ class EncuestaController extends Controller
         } catch (RuntimeException $e) {
             return response()->json(['error' => $e->getMessage()], 422);
         }
+    }
+
+    /**
+     * Desglose de una encuesta por pregunta+opción y ámbito (F10): por cada
+     * `ambito_id` del universo (todas las secciones del municipio del
+     * tenant, o todas las zonas), conteo y `%` de cada opción — un ámbito sin
+     * respuestas aparece igual, en 0 (criterio 2 de la spec: distingue "no
+     * respondida" de "no existe"). Alimenta tanto el modo "Encuestas" del
+     * mapa como, filtrado a un solo ámbito, las fichas de sección/zona (ver
+     * ResumirEncuestasParaAmbito).
+     *
+     * Resolución manual (anti-binding): SubstituteBindings corre antes que
+     * ResolveTenant en el stack web.
+     */
+    public function resumen(Request $request, string $encuesta): JsonResponse
+    {
+        $modelo = Encuesta::query()->with('preguntas')->findOrFail($encuesta);
+        $tenant = TenantContext::get();
+
+        $ambitoTipo = in_array($request->query('ambito'), ['seccion', 'zona'], true)
+            ? (string) $request->query('ambito')
+            : $modelo->ambito_tipo;
+
+        $ambitoIds = $ambitoTipo === 'zona'
+            ? Zona::query()->orderBy('nombre')->pluck('id')
+            : Seccion::query()->where('municipio_id', $tenant?->municipio_id)->orderBy('numero')->pluck('id');
+
+        $resultados = (new ResumirRespuestasEncuesta)->handle($modelo, $ambitoTipo, $ambitoIds);
+
+        return response()->json([
+            'encuesta_id' => $modelo->id,
+            'nombre' => $modelo->nombre,
+            'ambito_tipo' => $ambitoTipo,
+            'resultados' => $resultados,
+        ]);
     }
 
     /**
