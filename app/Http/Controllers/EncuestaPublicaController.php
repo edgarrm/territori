@@ -10,6 +10,8 @@ use App\Models\Seccion;
 use App\Support\Tenancy\TenantContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Exists;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -64,7 +66,7 @@ class EncuestaPublicaController extends Controller
         TenantContext::set($encuesta->tenant);
 
         $validado = $request->validate([
-            'ambito_id' => ['required', 'integer'],
+            'ambito_id' => ['required', 'integer', $this->reglaAmbito($encuesta)],
             'respuestas' => ['required', 'array', 'min:1'],
             'respuestas.*' => ['required', 'string'],
         ]);
@@ -74,6 +76,19 @@ class EncuestaPublicaController extends Controller
         $tabular->handle($encuesta, $encuesta->ambito_tipo, (int) $validado['ambito_id'], $validado['respuestas']);
 
         return response()->json(['ok' => true], 201);
+    }
+
+    /**
+     * `ambito_id` llega sin validar de un cliente anónimo: confirma que
+     * referencia una sección/zona real y en el ámbito de este tenant antes de
+     * dejarla llegar a `TabularRespuesta` (si no, se tabulan ámbitos
+     * inventados o de otro tenant).
+     */
+    private function reglaAmbito(Encuesta $encuesta): Exists
+    {
+        return $encuesta->ambito_tipo === 'seccion'
+            ? Rule::exists('secciones', 'id')->where('municipio_id', $encuesta->tenant->municipio_id)
+            : Rule::exists('zonas', 'id')->where('tenant_id', $encuesta->tenant_id);
     }
 
     private function resolverPorToken(string $token): Encuesta

@@ -9,6 +9,7 @@ use App\Models\Membership;
 use App\Models\Seccion;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Models\Zona;
 use App\Support\Tenancy\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
@@ -162,6 +163,44 @@ class EncuestasTest extends TestCase
         $this->assertSame(0, EncuestaRespuestaAgregada::query()->count());
     }
 
+    // --- 4b. ambito_id inventado (autenticado, ambito_tipo=seccion): 422, nada tabulado ---
+    public function test_respuesta_autenticada_con_seccion_inventada_falla_validacion(): void
+    {
+        [$tenant, $user] = $this->setupCampana('brigadista');
+        [$encuesta, $p1] = $this->crearEncuestaConDosPreguntas($tenant);
+        $idInventado = (int) Seccion::query()->max('id') + 999;
+
+        $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->postJson("/api/encuestas/{$encuesta->id}/respuestas", [
+                'ambito_id' => $idInventado,
+                'respuestas' => [(string) $p1->id => 'Sí'],
+            ])->assertStatus(422);
+
+        TenantContext::set($tenant);
+        $this->assertSame(0, EncuestaRespuestaAgregada::query()->count());
+    }
+
+    // --- 4c. ambito_id de una zona de OTRO tenant (autenticado, ambito_tipo=zona): 422 ---
+    public function test_respuesta_autenticada_con_zona_de_otro_tenant_falla_validacion(): void
+    {
+        [$tenant, $user] = $this->setupCampana('brigadista');
+        [$encuesta, $p1] = $this->crearEncuestaConDosPreguntas($tenant, ['ambito_tipo' => 'zona']);
+
+        $otroTenant = Tenant::factory()->create();
+        TenantContext::set($otroTenant);
+        $zonaAjena = Zona::factory()->create();
+        TenantContext::set($tenant);
+
+        $this->actingAs($user)->withSession(['tenant_id' => $tenant->id])
+            ->postJson("/api/encuestas/{$encuesta->id}/respuestas", [
+                'ambito_id' => $zonaAjena->id,
+                'respuestas' => [(string) $p1->id => 'Sí'],
+            ])->assertStatus(422);
+
+        TenantContext::set($tenant);
+        $this->assertSame(0, EncuestaRespuestaAgregada::query()->count());
+    }
+
     // --- 5. token_publico único y no adivinable ---
     public function test_token_publico_se_genera_al_crear_con_modo_acceso_publico(): void
     {
@@ -273,6 +312,50 @@ class EncuestasTest extends TestCase
 
         $this->assertSame($tenant->id, $fila->tenant_id);
         $this->assertNotSame($otroTenant->id, $fila->tenant_id);
+    }
+
+    // --- 8b. ambito_id inventado (público, ambito_tipo=seccion): la ruta no es
+    // api/*, así que una ValidationException redirige con errores en sesión
+    // (mismo patrón que /brigadistas), no 422 JSON. Nada se tabula.
+    public function test_respuesta_publica_con_seccion_inventada_falla_validacion(): void
+    {
+        [$tenant] = $this->setupCampana('coordinador');
+        [$encuesta, $p1] = $this->crearEncuestaConDosPreguntas($tenant, [
+            'modo_acceso' => 'publico',
+            'token_publico' => Str::random(40),
+        ]);
+        $idInventado = (int) Seccion::query()->max('id') + 999;
+
+        $this->postJson("/e/{$encuesta->token_publico}/respuestas", [
+            'ambito_id' => $idInventado,
+            'respuestas' => [(string) $p1->id => 'Sí'],
+        ])->assertSessionHasErrors('ambito_id');
+
+        TenantContext::set($tenant);
+        $this->assertSame(0, EncuestaRespuestaAgregada::query()->count());
+    }
+
+    // --- 8c. ambito_id de una zona de OTRO tenant (público, ambito_tipo=zona) ---
+    public function test_respuesta_publica_con_zona_de_otro_tenant_falla_validacion(): void
+    {
+        [$tenant] = $this->setupCampana('coordinador');
+        [$encuesta, $p1] = $this->crearEncuestaConDosPreguntas($tenant, [
+            'ambito_tipo' => 'zona',
+            'modo_acceso' => 'publico',
+            'token_publico' => Str::random(40),
+        ]);
+
+        $otroTenant = Tenant::factory()->create();
+        TenantContext::set($otroTenant);
+        $zonaAjena = Zona::factory()->create();
+
+        $this->postJson("/e/{$encuesta->token_publico}/respuestas", [
+            'ambito_id' => $zonaAjena->id,
+            'respuestas' => [(string) $p1->id => 'Sí'],
+        ])->assertSessionHasErrors('ambito_id');
+
+        TenantContext::set($tenant);
+        $this->assertSame(0, EncuestaRespuestaAgregada::query()->count());
     }
 
     // --- 9. modo_acceso=brigadista (sin token) → 404 en cualquier token ---
